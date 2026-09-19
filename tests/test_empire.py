@@ -22,8 +22,10 @@ from empire import (  # noqa: E402
     ClipCandidate,
     OllamaViralAnalyzer,
     extract_json_items,
+    format_timecode,
     get_video_duration,
     parse_manual_clips,
+    parse_timecode,
     save_transcript,
     slice_clip,
     slugify,
@@ -339,6 +341,51 @@ class TestParseManualClips(unittest.TestCase):
         ])
         candidates = parse_manual_clips(raw)
         self.assertEqual([c.title for c in candidates], ["A", "B"])
+
+    def test_accepts_mmss_timecodes(self):
+        # Thinking in raw seconds for a 2-hour video is painful, so start/end
+        # accept "MM:SS" strings too, not just numeric seconds.
+        raw = json.dumps([{"start": "1:30", "end": "2:15", "title": "Cool moment"}])
+        candidates = parse_manual_clips(raw)
+        self.assertEqual(candidates[0].start, 90.0)
+        self.assertEqual(candidates[0].end, 135.0)
+
+    def test_accepts_hmmss_timecodes(self):
+        raw = json.dumps([{"start": "1:02:34", "end": "1:03:00", "title": "Cool moment"}])
+        candidates = parse_manual_clips(raw)
+        self.assertEqual(candidates[0].start, 3754.0)
+        self.assertEqual(candidates[0].end, 3780.0)
+
+
+class TestTimecodeConversion(unittest.TestCase):
+    def test_parse_plain_number(self):
+        self.assertEqual(parse_timecode(45.5), 45.5)
+        self.assertEqual(parse_timecode(45), 45.0)
+
+    def test_parse_numeric_string(self):
+        self.assertEqual(parse_timecode("45.5"), 45.5)
+
+    def test_parse_mmss(self):
+        self.assertEqual(parse_timecode("2:34"), 154.0)
+        self.assertEqual(parse_timecode("0:05"), 5.0)
+
+    def test_parse_hmmss(self):
+        self.assertEqual(parse_timecode("1:02:34"), 3754.0)
+
+    def test_parse_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            parse_timecode("1:02:34:56")
+
+    def test_format_mmss(self):
+        self.assertEqual(format_timecode(154), "2:34")
+        self.assertEqual(format_timecode(5), "0:05")
+
+    def test_format_hmmss(self):
+        self.assertEqual(format_timecode(3754), "1:02:34")
+
+    def test_round_trip(self):
+        for original in [5.0, 65.0, 154.0, 3754.0, 7260.0]:
+            self.assertEqual(parse_timecode(format_timecode(original)), original)
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not on PATH")

@@ -571,12 +571,45 @@ def get_video_duration(path: Path) -> Optional[float]:
         return None
 
 
+def parse_timecode(value) -> float:
+    """Converts a timestamp to seconds. Accepts a plain number (int/float, or
+    a numeric string like "125" or "12.5"), or "MM:SS"/"H:MM:SS" strings
+    (e.g. "2:34" or "1:02:34") - thinking in seconds for a multi-hour video
+    is painful, so Manual clip mode accepts whichever is easier to write."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if ":" not in text:
+        return float(text)
+    parts = text.split(":")
+    if len(parts) not in (2, 3):
+        raise ValueError(f"invalid timecode: {value!r}")
+    parts = [float(p) for p in parts]
+    seconds = 0.0
+    for part in parts:
+        seconds = seconds * 60 + part
+    return seconds
+
+
+def format_timecode(seconds: float) -> str:
+    """Formats seconds as M:SS or H:MM:SS for display - the inverse of
+    parse_timecode, used wherever the UI shows a clip's timing to a human."""
+    total = int(round(seconds))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
 def parse_manual_clips(raw: str) -> list[ClipCandidate]:
     """Parses a pasted JSON array of {start, end, title, hook} objects into
     ClipCandidate(s) for Manual clip mode - reuses extract_json_items so the
     same tolerant parsing (markdown fences, wrapper objects, trailing commas)
     applies here too, since this is meant to accept whatever a human (or
-    Claude, asked to pick clip times from a pasted transcript) hands back."""
+    Claude, asked to pick clip times from a pasted transcript) hands back.
+    start/end accept plain seconds or "MM:SS"/"H:MM:SS" strings - see
+    parse_timecode."""
     items = extract_json_items(raw)
     if not items:
         raise RuntimeError("Could not find any valid JSON in the pasted clips - check the format.")
@@ -586,8 +619,8 @@ def parse_manual_clips(raw: str) -> list[ClipCandidate]:
         if not isinstance(item, dict):
             continue
         try:
-            start = float(item["start"])
-            end = float(item["end"])
+            start = parse_timecode(item["start"])
+            end = parse_timecode(item["end"])
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(f"Clip item missing/invalid start or end: {item!r} ({exc})") from exc
         if end <= start:
@@ -697,13 +730,16 @@ def main():
         st.subheader(f"Found moments in {moments_result.video_path.name}")
         for candidate in moments_result.candidates:
             st.write(
-                f"**{candidate.title}** ({candidate.start:.1f}s - {candidate.end:.1f}s, "
+                f"**{candidate.title}** ({format_timecode(candidate.start)} - {format_timecode(candidate.end)}, "
                 f"{candidate.duration:.0f}s, score {candidate.score:.0f})"
             )
             st.caption(candidate.hook)
         moments_json = json.dumps(
             [
-                {"start": c.start, "end": c.end, "title": c.title, "hook": c.hook, "score": c.score}
+                {
+                    "start": format_timecode(c.start), "end": format_timecode(c.end),
+                    "title": c.title, "hook": c.hook, "score": c.score,
+                }
                 for c in moments_result.candidates
             ],
             indent=2,
@@ -729,8 +765,8 @@ def main():
         else:
             video_choice = st.selectbox("Source video", [p.name for p in downloaded_videos], key="manual_video_choice")
             manual_json = st.text_area(
-                "Paste clip JSON here",
-                value='[{"start": 12.0, "end": 45.0, "title": "Example clip", "hook": "..."}]',
+                "Paste clip JSON here (start/end can be seconds like 45.0 or MM:SS like \"0:45\")",
+                value='[{"start": "0:12", "end": "0:45", "title": "Example clip", "hook": "..."}]',
                 height=150,
                 key="manual_clips_json",
             )
