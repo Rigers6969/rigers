@@ -217,7 +217,9 @@ class BaseViralAnalyzer:
                 raw_response = self._call_model(prompt)
             except Exception as exc:
                 total_call_failures += 1
-                self.progress_cb(f"Chunk {i}/{n_chunks}: model call failed - {exc}")
+                self.progress_cb(
+                    f"Chunk {i}/{n_chunks}: model call failed - {type(exc).__name__}: {exc}"
+                )
                 continue
 
             items = extract_json_items(raw_response)
@@ -264,7 +266,14 @@ class BaseViralAnalyzer:
             )
 
         if not all_valid:
-            if total_raw_items == 0:
+            if total_call_failures == n_chunks:
+                self.progress_cb(
+                    f"FINAL: the model could not be reached/called successfully for any of the "
+                    f"{n_chunks} chunk(s) - this is an API/connection problem (bad API key, wrong "
+                    "model name, network issue, or an incompatible SDK version), not a JSON or "
+                    "duration problem. See the 'model call failed' line(s) above for the exact error."
+                )
+            elif total_raw_items == 0:
                 self.progress_cb(
                     "FINAL: zero parseable items across all chunks - this is a JSON "
                     "parsing/formatting problem (the model isn't returning valid JSON), not a "

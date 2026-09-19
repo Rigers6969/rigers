@@ -150,7 +150,25 @@ class TestAnalyzerDiagnostics(unittest.TestCase):
         analyzer = FailingAnalyzer(chunk_seconds=1000, progress_cb=logs.append)
         results = analyzer.analyze(SEGMENTS)
         self.assertEqual(results, [])
-        self.assertTrue(any("model call failed" in line for line in logs))
+        self.assertTrue(any("model call failed - ConnectionError: connection refused" in line for line in logs))
+
+    def test_all_chunks_failing_to_call_is_flagged_as_api_problem_not_json_problem(self):
+        # Regression test: when every chunk fails at the API-call level (bad key,
+        # wrong model, network issue), the FINAL summary must say so - it must not
+        # claim a "JSON parsing/formatting problem", since the model was never
+        # actually reached.
+        class AuthFailingAnalyzer(BaseViralAnalyzer):
+            def _call_model(self, prompt):
+                raise PermissionError("401 authentication_error: invalid x-api-key")
+
+        logs = []
+        analyzer = AuthFailingAnalyzer(chunk_seconds=1000, progress_cb=logs.append)
+        results = analyzer.analyze(SEGMENTS)
+        self.assertEqual(results, [])
+        final_lines = [line for line in logs if line.startswith("FINAL:")]
+        self.assertEqual(len(final_lines), 1)
+        self.assertIn("API/connection problem", final_lines[0])
+        self.assertNotIn("JSON parsing/formatting problem", final_lines[0])
 
 
 class TestSlugify(unittest.TestCase):
