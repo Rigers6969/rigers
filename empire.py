@@ -22,6 +22,8 @@ from typing import Callable, Optional
 
 import streamlit as st
 
+from json_utils import extract_json_items
+
 APP_DIR = Path(__file__).resolve().parent
 WHISPER_WORKER = APP_DIR / "_whisper_worker.py"
 OUTPUT_DIR = APP_DIR / "output_clips"
@@ -67,63 +69,6 @@ def slugify(text: str, max_len: int = 40) -> str:
     text = re.sub(r"[^\w\s-]", "", text or "").strip().lower()
     text = re.sub(r"[-\s]+", "-", text)
     return text[:max_len] or "clip"
-
-
-# --------------------------------------------------------------------------
-# Robust JSON extraction - the actual fix for "no valid viral moments"
-#
-# LLMs (local models especially) rarely return bare, perfectly-formed JSON.
-# Common real-world shapes this has to survive:
-#   - ```json ... ``` markdown fences around the array
-#   - prose before/after the JSON ("Here are the clips: [...]")
-#   - the array wrapped in an object, e.g. {"clips": [...]}
-#   - a single object instead of an array when there's only one match
-#   - trailing commas before a closing bracket/brace
-# --------------------------------------------------------------------------
-
-def extract_json_items(raw: str) -> Optional[list]:
-    """Best-effort extraction of a list of dicts from a noisy LLM response."""
-    if not raw or not raw.strip():
-        return None
-
-    text = raw.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```\s*$", "", text)
-
-    def to_list(data):
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            if "start" in data and "end" in data:
-                return [data]
-            for value in data.values():
-                if isinstance(value, list):
-                    return value
-        return None
-
-    try:
-        result = to_list(json.loads(text))
-        if result is not None:
-            return result
-    except json.JSONDecodeError:
-        pass
-
-    # Fall back to scanning for the outermost bracket/brace block, since the
-    # model may have wrapped valid JSON in explanatory prose.
-    for open_ch, close_ch in (("[", "]"), ("{", "}")):
-        start = text.find(open_ch)
-        end = text.rfind(close_ch)
-        if start == -1 or end == -1 or end <= start:
-            continue
-        candidate = text[start:end + 1]
-        for attempt in (candidate, re.sub(r",\s*([\]}])", r"\1", candidate)):
-            try:
-                result = to_list(json.loads(attempt))
-                if result is not None:
-                    return result
-            except json.JSONDecodeError:
-                continue
-    return None
 
 
 VIRAL_PROMPT_TEMPLATE = """You are a viral short-form video editor. Below is a transcript excerpt with timestamps in seconds. The timestamps are ABSOLUTE - measured from the start of the whole video, not from the start of this excerpt.
@@ -568,11 +513,18 @@ def main():
     # Read results from session_state (not a local var) so they survive the
     # rerun triggered by clicking a download button below.
     clips = st.session_state.get("wayne_clips") or []
-    for candidate, path in clips:
+    for idx, (candidate, path) in enumerate(clips):
         st.video(str(path))
         st.write(f"**{candidate.title}** - score {candidate.score:.0f} - {candidate.duration:.0f}s")
         with open(path, "rb") as f:
-            st.download_button(f"Download {path.name}", f.read(), file_name=path.name, key=str(path))
+            st.download_button(f"Download {path.name}", f.read(), file_name=path.name, key=f"dl_{idx}")
+
+    if clips:
+        st.info(
+            "Want to brand the channel or auto-publish these clips to YouTube/Instagram? "
+            "That's a separate app - run `streamlit run channel_agent.py` (reads clips from "
+            f"{OUTPUT_DIR.name}/)."
+        )
 
 
 if __name__ == "__main__":

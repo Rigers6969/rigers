@@ -60,6 +60,13 @@ class TestExtractJsonItems(unittest.TestCase):
         raw = '{"clips": [{"start": 1, "end": 2}]}'
         self.assertEqual(extract_json_items(raw), [{"start": 1, "end": 2}])
 
+    def test_multi_key_object_with_nested_list_is_not_unwrapped(self):
+        # Regression: a multi-field object (e.g. a brand kit with several
+        # scalar fields plus a "hashtags" list) must come back as the object
+        # itself, not have its unrelated nested list returned instead.
+        raw = json.dumps({"title": "x", "hook": "y", "tags": ["#a", "#b"]})
+        self.assertEqual(extract_json_items(raw), [{"title": "x", "hook": "y", "tags": ["#a", "#b"]}])
+
     def test_single_object_no_array(self):
         raw = '{"start": 1, "end": 2}'
         self.assertEqual(extract_json_items(raw), [{"start": 1, "end": 2}])
