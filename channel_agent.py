@@ -22,12 +22,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from branding import ClaudeBrandGenerator, OllamaBrandGenerator, save_brand_assets
+from branding import ClaudeBrandGenerator, OllamaBrandGenerator, prepare_content_for_prompt, save_brand_assets
 from publishing import post_to_instagram, upload_to_youtube
 
 APP_DIR = Path(__file__).resolve().parent
 BRANDING_OUTPUT_DIR = APP_DIR / "branding_output"
 CLIPS_DIR = APP_DIR / "output_clips"  # where empire.py saves finished clips
+TRANSCRIPTS_DIR = APP_DIR / "transcripts"  # where empire.py saves transcripts
 
 
 def main():
@@ -53,15 +54,45 @@ def main():
 
     with tab_brand:
         st.write(
-            "Generates a logo, YouTube banner, Instagram profile picture, channel "
-            "description, Instagram bio, and hashtags for a channel/account you've "
-            "already created manually."
+            "Generates a channel name (if you don't already have one), logo, YouTube "
+            "banner, Instagram profile picture, description, bio, and tags for a "
+            "channel/account you've already created manually."
         )
-        channel_name = st.text_input("Channel name", value="The Wayne Factory")
-        niche = st.text_area(
-            "Niche / description", value="Viral short-form clips cut from long-form YouTube videos."
+
+        source_mode = st.radio(
+            "Base the brand kit on",
+            ["Analyze real video transcripts", "Describe the niche manually"],
         )
-        if st.button("Generate brand kit", type="primary"):
+
+        content = ""
+        channel_name_hint = ""
+
+        if source_mode == "Analyze real video transcripts":
+            transcript_files = sorted(TRANSCRIPTS_DIR.glob("*.txt")) if TRANSCRIPTS_DIR.exists() else []
+            if not transcript_files:
+                st.warning(
+                    f"No transcripts found in {TRANSCRIPTS_DIR.name}/ yet. Run empire.py's pipeline on "
+                    "at least one video first - it saves the transcript there automatically."
+                )
+            else:
+                chosen = st.multiselect(
+                    "Videos to analyze", [p.name for p in transcript_files], default=[transcript_files[-1].name]
+                )
+                texts = [
+                    (TRANSCRIPTS_DIR / name).read_text(encoding="utf-8")
+                    for name in chosen
+                ]
+                content = prepare_content_for_prompt(texts)
+            channel_name_hint = st.text_input(
+                "Channel name (leave blank to let the AI suggest one from the content)", value=""
+            )
+        else:
+            channel_name_hint = st.text_input("Channel name", value="The Wayne Factory")
+            content = st.text_area(
+                "Niche / description", value="Viral short-form clips cut from long-form YouTube videos."
+            )
+
+        if st.button("Generate brand kit", type="primary", disabled=not content):
             try:
                 with st.spinner("Generating brand kit..."):
                     if engine == "Ollama (local)":
@@ -70,7 +101,7 @@ def main():
                         if not anthropic_key:
                             raise RuntimeError("Enter an Anthropic API key in the sidebar first.")
                         generator = ClaudeBrandGenerator(api_key=anthropic_key, model=model)
-                    brand = generator.generate(channel_name, niche)
+                    brand = generator.generate(content, channel_name=channel_name_hint or None)
                     asset_paths = save_brand_assets(brand, BRANDING_OUTPUT_DIR)
                 st.session_state["agent_brand"] = brand
                 st.session_state["agent_brand_assets"] = asset_paths
@@ -92,8 +123,9 @@ def main():
                 st.image(str(asset_paths["instagram_profile"]), caption="Instagram profile picture")
 
             st.text_area("YouTube description", value=brand.youtube_description, height=100, key="agent_yt_desc")
+            st.write("**YouTube tags:** " + ", ".join(brand.youtube_tags))
             st.text_area("Instagram bio", value=brand.instagram_bio, height=68, key="agent_ig_bio")
-            st.write(" ".join(brand.hashtags))
+            st.write("**Instagram hashtags:** " + " ".join(brand.instagram_hashtags))
 
             for label, asset_path in asset_paths.items():
                 with open(asset_path, "rb") as f:

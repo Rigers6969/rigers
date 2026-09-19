@@ -27,6 +27,7 @@ from json_utils import extract_json_items
 APP_DIR = Path(__file__).resolve().parent
 WHISPER_WORKER = APP_DIR / "_whisper_worker.py"
 OUTPUT_DIR = APP_DIR / "output_clips"
+TRANSCRIPTS_DIR = APP_DIR / "transcripts"
 
 DEFAULT_MIN_CLIP_SECONDS = 15
 DEFAULT_MAX_CLIP_SECONDS = 90
@@ -371,6 +372,19 @@ def transcribe_video(video_path: Path, model_size: str, progress_cb: ProgressCB)
         return data["segments"]
 
 
+def save_transcript(info: dict, segments: list[dict]) -> Path:
+    """Persists the full transcript text to TRANSCRIPTS_DIR so channel_agent.py
+    can analyze real video content when generating a brand kit - otherwise the
+    transcript only lives in a temp dir that's deleted when the pipeline ends."""
+    TRANSCRIPTS_DIR.mkdir(exist_ok=True)
+    title = info.get("title") or info.get("id") or "video"
+    video_id = info.get("id", "")
+    out_path = TRANSCRIPTS_DIR / f"{slugify(title)}_{video_id}.txt"
+    text = "\n".join(seg["text"].strip() for seg in segments if seg.get("text"))
+    out_path.write_text(text, encoding="utf-8")
+    return out_path
+
+
 # --------------------------------------------------------------------------
 # Slicing
 # --------------------------------------------------------------------------
@@ -427,6 +441,9 @@ def run_pipeline(
         progress_cb("Starting transcription (isolated subprocess)...")
         segments = transcribe_video(video_path, whisper_model_size, progress_cb)
         progress_cb(f"Transcription complete: {len(segments)} segment(s)")
+
+        transcript_path = save_transcript(info, segments)
+        progress_cb(f"Transcript saved: {transcript_path.name} (for Channel Agent's video analysis)")
 
         progress_cb(f"Starting analysis with {engine}...")
         if engine == "Ollama (local)":

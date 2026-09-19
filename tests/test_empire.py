@@ -15,10 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import empire  # noqa: E402
 from empire import (  # noqa: E402
     BaseViralAnalyzer,
     ClipCandidate,
     extract_json_items,
+    save_transcript,
     slice_clip,
     slugify,
 )
@@ -184,6 +186,33 @@ class TestSlugify(unittest.TestCase):
 
     def test_empty_falls_back(self):
         self.assertEqual(slugify(""), "clip")
+
+
+class TestSaveTranscript(unittest.TestCase):
+    def test_writes_joined_segment_text_to_transcripts_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            original_dir = empire.TRANSCRIPTS_DIR
+            empire.TRANSCRIPTS_DIR = Path(d)
+            try:
+                path = save_transcript({"title": "My Video!", "id": "abc123"}, SEGMENTS)
+                self.assertTrue(path.exists())
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("Welcome back to the channel.", text)
+                self.assertIn("Thanks for watching, see you next time.", text)
+                self.assertIn("abc123", path.name)
+            finally:
+                empire.TRANSCRIPTS_DIR = original_dir
+
+    def test_skips_empty_segment_text(self):
+        with tempfile.TemporaryDirectory() as d:
+            original_dir = empire.TRANSCRIPTS_DIR
+            empire.TRANSCRIPTS_DIR = Path(d)
+            try:
+                segments = [{"start": 0, "end": 1, "text": ""}, {"start": 1, "end": 2, "text": "real text"}]
+                path = save_transcript({"title": "x", "id": "y"}, segments)
+                self.assertEqual(path.read_text(encoding="utf-8"), "real text")
+            finally:
+                empire.TRANSCRIPTS_DIR = original_dir
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not on PATH")

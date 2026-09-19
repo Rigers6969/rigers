@@ -25,37 +25,62 @@ from json_utils import extract_json_items
 BRAND_SCHEMA = {
     "type": "object",
     "properties": {
+        "channel_name": {"type": "string"},
         "logo_text": {"type": "string"},
         "tagline": {"type": "string"},
         "primary_color": {"type": "string"},
         "secondary_color": {"type": "string"},
         "accent_color": {"type": "string"},
         "youtube_description": {"type": "string"},
+        "youtube_tags": {"type": "array", "items": {"type": "string"}},
         "instagram_bio": {"type": "string"},
-        "hashtags": {"type": "array", "items": {"type": "string"}},
+        "instagram_hashtags": {"type": "array", "items": {"type": "string"}},
     },
     "required": [
-        "logo_text", "tagline", "primary_color", "secondary_color", "accent_color",
-        "youtube_description", "instagram_bio", "hashtags",
+        "channel_name", "logo_text", "tagline", "primary_color", "secondary_color", "accent_color",
+        "youtube_description", "youtube_tags", "instagram_bio", "instagram_hashtags",
     ],
     "additionalProperties": False,
 }
 
-BRAND_PROMPT_TEMPLATE = """You are a brand designer. Design a simple, bold visual brand kit for a short-form video channel.
+BRAND_PROMPT_TEMPLATE = """You are a brand designer and YouTube/Instagram content strategist. Analyze the content below and design a complete brand kit for a short-form video channel built from it.
 
-Channel name: {channel_name}
-Niche/description: {niche}
+{name_instruction}
+
+Content to analyze:
+{content}
 
 Respond with ONLY a JSON object (no prose, no markdown fences) with exactly these fields:
+- "channel_name": {name_field_instruction}
 - "logo_text": 1 to 3 characters or a short word to display in a circular logo (e.g. initials)
-- "tagline": a punchy tagline, 6 words or fewer
+- "tagline": a punchy tagline, 6 words or fewer, reflecting the actual content's themes
 - "primary_color": a hex color code, e.g. "#1A1A2E"
 - "secondary_color": a hex color code that complements primary_color for a gradient
 - "accent_color": a hex color code for text/highlights that contrasts strongly against primary_color
-- "youtube_description": a 2-3 sentence YouTube channel description
+- "youtube_description": a 2-3 sentence YouTube channel description based on the content's actual themes
+- "youtube_tags": an array of 10 to 15 plain keyword tags (no # symbol) relevant to this content, for YouTube's video/channel tags field
 - "instagram_bio": an Instagram bio, 150 characters or fewer
-- "hashtags": an array of 5 to 10 relevant hashtags, each starting with #
+- "instagram_hashtags": an array of 5 to 10 relevant hashtags, each starting with #
 """
+
+MAX_CONTENT_CHARS_TOTAL = 12000
+
+
+def prepare_content_for_prompt(texts: list[str], max_total_chars: int = MAX_CONTENT_CHARS_TOTAL) -> str:
+    """Joins one or more transcript/description texts into a single prompt-sized
+    string, giving each an even share of the character budget so a brand kit
+    built from several videos isn't dominated by whichever came first."""
+    texts = [t for t in texts if t and t.strip()]
+    if not texts:
+        return ""
+    budget_per_text = max(max_total_chars // len(texts), 500)
+    parts = []
+    for text in texts:
+        text = text.strip()
+        if len(text) > budget_per_text:
+            text = text[:budget_per_text] + " [...truncated]"
+        parts.append(text)
+    return "\n\n---\n\n".join(parts)
 
 
 class BrandGenerationError(RuntimeError):
@@ -72,7 +97,8 @@ class BrandKit:
     accent_color: str
     youtube_description: str
     instagram_bio: str
-    hashtags: list[str] = field(default_factory=list)
+    youtube_tags: list[str] = field(default_factory=list)
+    instagram_hashtags: list[str] = field(default_factory=list)
 
 
 def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
@@ -94,8 +120,21 @@ class BaseBrandGenerator:
     def _call_model(self, prompt: str) -> str:
         raise NotImplementedError
 
-    def generate(self, channel_name: str, niche: str) -> BrandKit:
-        prompt = BRAND_PROMPT_TEMPLATE.format(channel_name=channel_name, niche=niche)
+    def generate(self, content: str, channel_name: Optional[str] = None) -> BrandKit:
+        """Analyzes `content` (a niche description, or real transcript text from
+        one or more videos - see prepare_content_for_prompt) and generates a full
+        brand kit. If `channel_name` is omitted, the model invents one from the
+        content's actual themes instead of requiring the caller to supply one."""
+        if channel_name:
+            name_instruction = f'The channel name is fixed: "{channel_name}". Do not change it.'
+            name_field_instruction = f'must be exactly "{channel_name}"'
+        else:
+            name_instruction = "No channel name has been chosen yet - invent one based on the content's actual themes."
+            name_field_instruction = "a catchy channel name you invent based on the content, 4 words or fewer"
+
+        prompt = BRAND_PROMPT_TEMPLATE.format(
+            name_instruction=name_instruction, name_field_instruction=name_field_instruction, content=content
+        )
         raw = self._call_model(prompt)
 
         items = extract_json_items(raw)
@@ -112,7 +151,7 @@ class BaseBrandGenerator:
             for color_key in ("primary_color", "secondary_color", "accent_color"):
                 _hex_to_rgb(data[color_key])
             return BrandKit(
-                channel_name=channel_name,
+                channel_name=channel_name or str(data["channel_name"])[:60],
                 logo_text=str(data["logo_text"])[:6],
                 tagline=str(data["tagline"])[:60],
                 primary_color=str(data["primary_color"]),
@@ -120,7 +159,8 @@ class BaseBrandGenerator:
                 accent_color=str(data["accent_color"]),
                 youtube_description=str(data["youtube_description"])[:1000],
                 instagram_bio=str(data["instagram_bio"])[:150],
-                hashtags=[str(h) for h in data.get("hashtags", [])][:15],
+                youtube_tags=[str(t) for t in data.get("youtube_tags", [])][:20],
+                instagram_hashtags=[str(h) for h in data.get("instagram_hashtags", [])][:15],
             )
         except (KeyError, ValueError) as exc:
             raise BrandGenerationError(f"Brand generator returned incomplete/invalid data: {exc}") from exc
