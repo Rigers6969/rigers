@@ -243,10 +243,22 @@ class BaseViralAnalyzer:
 
 
 class OllamaViralAnalyzer(BaseViralAnalyzer):
-    def __init__(self, model: str = "llama3", host: str = "http://localhost:11434", **kwargs):
+    def __init__(
+        self,
+        model: str = "llama3",
+        host: str = "http://localhost:11434",
+        request_timeout: float = 600,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.model = model
         self.host = host.rstrip("/")
+        # Local CPU inference time per chunk varies a lot with hardware and
+        # chunk size - a short fixed timeout (the old default was 180s) can
+        # abort a chunk that was simply still generating, not stuck. This is
+        # surfaced as an explicit setting rather than guessed once, since the
+        # right value depends on the user's machine.
+        self.request_timeout = request_timeout
 
     def _call_model(self, prompt: str) -> str:
         import requests
@@ -260,7 +272,7 @@ class OllamaViralAnalyzer(BaseViralAnalyzer):
                 "stream": False,
                 "options": {"temperature": 0.4},
             },
-            timeout=180,
+            timeout=self.request_timeout,
         )
         resp.raise_for_status()
         return resp.json().get("response", "")
@@ -444,6 +456,7 @@ def run_pipeline(
     max_dur: float,
     whisper_model_size: str,
     progress_cb: ProgressCB,
+    ollama_timeout: float = 600,
 ) -> list[tuple[ClipCandidate, Path]]:
     with tempfile.TemporaryDirectory(prefix="wayne_factory_") as tmpdir:
         tmp = Path(tmpdir)
@@ -463,7 +476,8 @@ def run_pipeline(
         progress_cb(f"Starting analysis with {engine}...")
         if engine == "Ollama (local)":
             analyzer: BaseViralAnalyzer = OllamaViralAnalyzer(
-                model=model, host=ollama_host, min_duration=min_dur, max_duration=max_dur, progress_cb=progress_cb
+                model=model, host=ollama_host, request_timeout=ollama_timeout,
+                min_duration=min_dur, max_duration=max_dur, progress_cb=progress_cb
             )
         else:
             analyzer = ClaudeViralAnalyzer(
@@ -509,8 +523,14 @@ def main():
         if engine == "Ollama (local)":
             model = st.selectbox("Ollama model", ["llama3", "phi3"])
             ollama_host = st.text_input("Ollama host", value=os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
+            ollama_timeout = st.number_input(
+                "Ollama request timeout (seconds)", min_value=30, max_value=1800, value=600, step=30,
+                help="Local CPU inference speed varies a lot by hardware and chunk size. "
+                     "Raise this if you see 'ReadTimeout' errors in the log.",
+            )
             anthropic_key = ""
         else:
+            ollama_timeout = 600
             model = st.selectbox("Claude model", ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"])
             anthropic_key = st.text_input(
                 "Anthropic API key", type="password", value=os.environ.get("ANTHROPIC_API_KEY", "")
@@ -539,7 +559,8 @@ def main():
             try:
                 with st.spinner("Running pipeline..."):
                     clips = run_pipeline(
-                        url, engine, model, ollama_host, anthropic_key, min_dur, max_dur, whisper_model_size, log
+                        url, engine, model, ollama_host, anthropic_key, min_dur, max_dur, whisper_model_size, log,
+                        ollama_timeout=ollama_timeout,
                     )
                 st.session_state["wayne_clips"] = clips
                 st.success(f"Done! {len(clips)} clip(s) generated.")

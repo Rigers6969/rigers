@@ -167,9 +167,13 @@ class BaseBrandGenerator:
 
 
 class OllamaBrandGenerator(BaseBrandGenerator):
-    def __init__(self, model: str = "llama3", host: str = "http://localhost:11434"):
+    def __init__(self, model: str = "llama3", host: str = "http://localhost:11434", request_timeout: float = 600):
         self.model = model
         self.host = host.rstrip("/")
+        # See OllamaViralAnalyzer's request_timeout in empire.py: local CPU
+        # inference time varies a lot by hardware, so a short fixed timeout
+        # can abort a call that's still legitimately generating.
+        self.request_timeout = request_timeout
 
     def _call_model(self, prompt: str) -> str:
         import requests
@@ -183,7 +187,7 @@ class OllamaBrandGenerator(BaseBrandGenerator):
                 "stream": False,
                 "options": {"temperature": 0.6},
             },
-            timeout=120,
+            timeout=self.request_timeout,
         )
         resp.raise_for_status()
         return resp.json().get("response", "")

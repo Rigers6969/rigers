@@ -20,6 +20,7 @@ import empire  # noqa: E402
 from empire import (  # noqa: E402
     BaseViralAnalyzer,
     ClipCandidate,
+    OllamaViralAnalyzer,
     extract_json_items,
     save_transcript,
     slice_clip,
@@ -86,6 +87,28 @@ class TestExtractJsonItems(unittest.TestCase):
 
     def test_empty_string_returns_none(self):
         self.assertIsNone(extract_json_items(""))
+
+
+class TestOllamaTimeout(unittest.TestCase):
+    def test_default_timeout_is_generous_not_the_old_180s(self):
+        # Regression: a user hit "ReadTimeout ... (read timeout=180)" on a
+        # chunk that was still legitimately generating, not stuck - local CPU
+        # inference speed varies a lot by hardware/chunk size, so 180s was too
+        # tight a default. Assert the default actually changed, not just that
+        # the parameter exists (a no-op refactor would still pass a weaker check).
+        analyzer = OllamaViralAnalyzer()
+        self.assertGreaterEqual(analyzer.request_timeout, 600)
+
+    def test_custom_timeout_is_passed_to_the_http_call(self):
+        import unittest.mock as mock
+
+        analyzer = OllamaViralAnalyzer(request_timeout=42)
+        with mock.patch("requests.post") as mock_post:
+            mock_post.return_value.json.return_value = {"response": "[]"}
+            mock_post.return_value.raise_for_status.return_value = None
+            analyzer._call_model("some prompt")
+        _, kwargs = mock_post.call_args
+        self.assertEqual(kwargs["timeout"], 42)
 
 
 class TestClipCandidateValidation(unittest.TestCase):
