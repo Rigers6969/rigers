@@ -22,6 +22,8 @@ from empire import (  # noqa: E402
     ClipCandidate,
     OllamaViralAnalyzer,
     extract_json_items,
+    get_video_duration,
+    parse_manual_clips,
     save_transcript,
     slice_clip,
     slugify,
@@ -227,6 +229,21 @@ class TestSaveTranscript(unittest.TestCase):
             finally:
                 empire.TRANSCRIPTS_DIR = original_dir
 
+    def test_includes_timestamps_so_manual_clip_times_can_be_picked(self):
+        # Manual clip mode (and a human/Claude reading the file) needs to know
+        # what time range each line covers - plain joined text without
+        # timestamps can't support picking clip start/end times at all.
+        with tempfile.TemporaryDirectory() as d:
+            original_dir = empire.TRANSCRIPTS_DIR
+            empire.TRANSCRIPTS_DIR = Path(d)
+            try:
+                path = save_transcript({"title": "My Video", "id": "abc123"}, SEGMENTS)
+                text = path.read_text(encoding="utf-8")
+                self.assertIn("[0.0-5.0] Welcome back to the channel.", text)
+                self.assertIn("[90.0-95.0] Thanks for watching, see you next time.", text)
+            finally:
+                empire.TRANSCRIPTS_DIR = original_dir
+
     def test_skips_empty_segment_text(self):
         with tempfile.TemporaryDirectory() as d:
             original_dir = empire.TRANSCRIPTS_DIR
@@ -234,7 +251,7 @@ class TestSaveTranscript(unittest.TestCase):
             try:
                 segments = [{"start": 0, "end": 1, "text": ""}, {"start": 1, "end": 2, "text": "real text"}]
                 path = save_transcript({"title": "x", "id": "y"}, segments)
-                self.assertEqual(path.read_text(encoding="utf-8"), "real text")
+                self.assertEqual(path.read_text(encoding="utf-8"), "[1.0-2.0] real text")
             finally:
                 empire.TRANSCRIPTS_DIR = original_dir
 
@@ -283,6 +300,65 @@ class TestTranscribeVideoStderrDeadlock(unittest.TestCase):
                 self.assertEqual(result.get("segments"), [{"start": 0.0, "end": 1.0, "text": "hello"}])
             finally:
                 empire.WHISPER_WORKER = original_worker
+
+
+class TestParseManualClips(unittest.TestCase):
+    def test_valid_json_array(self):
+        raw = json.dumps([{"start": 12.0, "end": 45.0, "title": "Cool moment", "hook": "watch this"}])
+        candidates = parse_manual_clips(raw)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].start, 12.0)
+        self.assertEqual(candidates[0].end, 45.0)
+        self.assertEqual(candidates[0].title, "Cool moment")
+
+    def test_markdown_fenced_json_still_parses(self):
+        raw = '```json\n[{"start": 1, "end": 5}]\n```'
+        candidates = parse_manual_clips(raw)
+        self.assertEqual(len(candidates), 1)
+
+    def test_missing_title_falls_back_to_generated_name(self):
+        candidates = parse_manual_clips(json.dumps([{"start": 10, "end": 20}]))
+        self.assertEqual(candidates[0].title, "clip_10s")
+
+    def test_end_before_start_raises(self):
+        with self.assertRaises(RuntimeError):
+            parse_manual_clips(json.dumps([{"start": 50, "end": 40}]))
+
+    def test_missing_start_raises(self):
+        with self.assertRaises(RuntimeError):
+            parse_manual_clips(json.dumps([{"end": 40}]))
+
+    def test_garbage_raises(self):
+        with self.assertRaises(RuntimeError):
+            parse_manual_clips("not json at all")
+
+    def test_multiple_clips(self):
+        raw = json.dumps([
+            {"start": 0, "end": 10, "title": "A"},
+            {"start": 20, "end": 30, "title": "B"},
+        ])
+        candidates = parse_manual_clips(raw)
+        self.assertEqual([c.title for c in candidates], ["A", "B"])
+
+
+@unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not on PATH")
+class TestGetVideoDuration(unittest.TestCase):
+    def test_returns_duration_of_real_video(self):
+        with tempfile.TemporaryDirectory() as d:
+            source = Path(d) / "source.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=30:duration=3",
+                    "-c:v", "libx264", str(source),
+                ],
+                check=True, capture_output=True,
+            )
+            duration = get_video_duration(source)
+            self.assertIsNotNone(duration)
+            self.assertAlmostEqual(duration, 3.0, delta=0.2)
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(get_video_duration(Path("/nonexistent/video.mp4")))
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not on PATH")

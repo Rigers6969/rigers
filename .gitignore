@@ -1,4 +1,8 @@
 __pycache__/
 *.pyc
 output_clips/
+downloads/
+transcripts/
+branding_output/
+assets/
 .venv/

@@ -29,6 +29,7 @@ APP_DIR = Path(__file__).resolve().parent
 WHISPER_WORKER = APP_DIR / "_whisper_worker.py"
 OUTPUT_DIR = APP_DIR / "output_clips"
 TRANSCRIPTS_DIR = APP_DIR / "transcripts"
+DOWNLOADS_DIR = APP_DIR / "downloads"
 
 DEFAULT_MIN_CLIP_SECONDS = 15
 DEFAULT_MAX_CLIP_SECONDS = 90
@@ -400,15 +401,22 @@ def transcribe_video(video_path: Path, model_size: str, progress_cb: ProgressCB)
 
 
 def save_transcript(info: dict, segments: list[dict]) -> Path:
-    """Persists the full transcript text to TRANSCRIPTS_DIR so channel_agent.py
-    can analyze real video content when generating a brand kit - otherwise the
-    transcript only lives in a temp dir that's deleted when the pipeline ends."""
+    """Persists the full transcript to TRANSCRIPTS_DIR, with absolute
+    timestamps on each line, so channel_agent.py can analyze real video
+    content for branding AND so a human (or Claude, pasted the file's
+    contents) can pick manual clip start/end times when the AI analysis
+    stage doesn't produce usable results - otherwise the transcript only
+    lived in a temp dir deleted when the pipeline ended, and without
+    timestamps there'd be no way to know what time range any line covers."""
     TRANSCRIPTS_DIR.mkdir(exist_ok=True)
     title = info.get("title") or info.get("id") or "video"
     video_id = info.get("id", "")
     out_path = TRANSCRIPTS_DIR / f"{slugify(title)}_{video_id}.txt"
-    text = "\n".join(seg["text"].strip() for seg in segments if seg.get("text"))
-    out_path.write_text(text, encoding="utf-8")
+    lines = [
+        f"[{seg['start']:.1f}-{seg['end']:.1f}] {seg['text'].strip()}"
+        for seg in segments if seg.get("text")
+    ]
+    out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
 
 
@@ -446,6 +454,73 @@ def slice_clip(source_path: Path, candidate: ClipCandidate, output_path: Path, v
 # Pipeline orchestration
 # --------------------------------------------------------------------------
 
+@dataclass
+class AnalysisResult:
+    video_path: Path
+    video_duration: Optional[float]
+    transcript_path: Path
+    candidates: list[ClipCandidate]
+
+
+def analyze_video(
+    url: str,
+    engine: str,
+    model: str,
+    ollama_host: str,
+    anthropic_key: str,
+    min_dur: float,
+    max_dur: float,
+    whisper_model_size: str,
+    progress_cb: ProgressCB,
+    ollama_timeout: float = 600,
+) -> AnalysisResult:
+    """Download, transcribe, and find candidate viral moments - the shared
+    front half of the pipeline, stopping short of slicing. Split out from
+    run_pipeline() so the UI can offer "just find the moments, I'll cut
+    myself" as an alternative to auto-slicing with ffmpeg."""
+    # Downloads go to a persistent folder, not a temp dir that gets wiped on
+    # exit - if analysis fails (AI/API problems, timeouts, etc.), the video
+    # stays on disk so it doesn't have to be re-downloaded to retry analysis
+    # or to slice clips manually (see parse_manual_clips / the Manual clip
+    # mode UI section below).
+    progress_cb("Starting download...")
+    video_path, info = download_video(url, DOWNLOADS_DIR, progress_cb)
+    video_duration = info.get("duration")
+    progress_cb(f"Downloaded: {video_path.name} ({video_duration or '?'}s)")
+
+    progress_cb("Starting transcription (isolated subprocess)...")
+    segments = transcribe_video(video_path, whisper_model_size, progress_cb)
+    progress_cb(f"Transcription complete: {len(segments)} segment(s)")
+
+    transcript_path = save_transcript(info, segments)
+    progress_cb(
+        f"Transcript saved: {transcript_path.name} (with timestamps - usable for Channel Agent's "
+        "video analysis, or for picking manual clip times if AI analysis below fails)"
+    )
+
+    progress_cb(f"Starting analysis with {engine}...")
+    if engine == "Ollama (local)":
+        analyzer: BaseViralAnalyzer = OllamaViralAnalyzer(
+            model=model, host=ollama_host, request_timeout=ollama_timeout,
+            min_duration=min_dur, max_duration=max_dur, progress_cb=progress_cb
+        )
+    else:
+        analyzer = ClaudeViralAnalyzer(
+            api_key=anthropic_key, model=model, min_duration=min_dur, max_duration=max_dur, progress_cb=progress_cb
+        )
+    candidates = analyzer.analyze(segments)
+
+    if not candidates:
+        raise RuntimeError(
+            "The AI found no valid viral moments in this transcript. "
+            "See the diagnostic log above for the specific cause. The downloaded video and "
+            f"timestamped transcript are still saved ({video_path.name}, {transcript_path.name}) - "
+            "use Manual clip mode below to slice clips without re-running analysis."
+        )
+
+    return AnalysisResult(video_path, video_duration, transcript_path, candidates)
+
+
 def run_pipeline(
     url: str,
     engine: str,
@@ -458,49 +533,76 @@ def run_pipeline(
     progress_cb: ProgressCB,
     ollama_timeout: float = 600,
 ) -> list[tuple[ClipCandidate, Path]]:
-    with tempfile.TemporaryDirectory(prefix="wayne_factory_") as tmpdir:
-        tmp = Path(tmpdir)
+    result = analyze_video(
+        url, engine, model, ollama_host, anthropic_key, min_dur, max_dur,
+        whisper_model_size, progress_cb, ollama_timeout,
+    )
+    return slice_candidates(result.video_path, result.candidates, result.video_duration, progress_cb)
 
-        progress_cb("Starting download...")
-        video_path, info = download_video(url, tmp, progress_cb)
-        video_duration = info.get("duration")
-        progress_cb(f"Downloaded: {video_path.name} ({video_duration or '?'}s)")
 
-        progress_cb("Starting transcription (isolated subprocess)...")
-        segments = transcribe_video(video_path, whisper_model_size, progress_cb)
-        progress_cb(f"Transcription complete: {len(segments)} segment(s)")
+def slice_candidates(
+    video_path: Path,
+    candidates: list[ClipCandidate],
+    video_duration: Optional[float],
+    progress_cb: ProgressCB,
+) -> list[tuple[ClipCandidate, Path]]:
+    progress_cb(f"Slicing {len(candidates)} clip(s)...")
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    results: list[tuple[ClipCandidate, Path]] = []
+    for idx, candidate in enumerate(candidates, start=1):
+        out_path = OUTPUT_DIR / f"clip_{idx:02d}_{slugify(candidate.title)}.mp4"
+        slice_clip(video_path, candidate, out_path, video_duration)
+        results.append((candidate, out_path))
+        progress_cb(f"Clip {idx}/{len(candidates)} sliced: {out_path.name}")
 
-        transcript_path = save_transcript(info, segments)
-        progress_cb(f"Transcript saved: {transcript_path.name} (for Channel Agent's video analysis)")
+    return results
 
-        progress_cb(f"Starting analysis with {engine}...")
-        if engine == "Ollama (local)":
-            analyzer: BaseViralAnalyzer = OllamaViralAnalyzer(
-                model=model, host=ollama_host, request_timeout=ollama_timeout,
-                min_duration=min_dur, max_duration=max_dur, progress_cb=progress_cb
-            )
-        else:
-            analyzer = ClaudeViralAnalyzer(
-                api_key=anthropic_key, model=model, min_duration=min_dur, max_duration=max_dur, progress_cb=progress_cb
-            )
-        candidates = analyzer.analyze(segments)
 
-        if not candidates:
-            raise RuntimeError(
-                "The AI found no valid viral moments in this transcript. "
-                "See the diagnostic log above for the specific cause."
-            )
+def get_video_duration(path: Path) -> Optional[float]:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return float(result.stdout.strip())
+    except ValueError:
+        return None
 
-        progress_cb(f"Slicing {len(candidates)} clip(s)...")
-        OUTPUT_DIR.mkdir(exist_ok=True)
-        results: list[tuple[ClipCandidate, Path]] = []
-        for idx, candidate in enumerate(candidates, start=1):
-            out_path = OUTPUT_DIR / f"clip_{idx:02d}_{slugify(candidate.title)}.mp4"
-            slice_clip(video_path, candidate, out_path, video_duration)
-            results.append((candidate, out_path))
-            progress_cb(f"Clip {idx}/{len(candidates)} sliced: {out_path.name}")
 
-        return results
+def parse_manual_clips(raw: str) -> list[ClipCandidate]:
+    """Parses a pasted JSON array of {start, end, title, hook} objects into
+    ClipCandidate(s) for Manual clip mode - reuses extract_json_items so the
+    same tolerant parsing (markdown fences, wrapper objects, trailing commas)
+    applies here too, since this is meant to accept whatever a human (or
+    Claude, asked to pick clip times from a pasted transcript) hands back."""
+    items = extract_json_items(raw)
+    if not items:
+        raise RuntimeError("Could not find any valid JSON in the pasted clips - check the format.")
+
+    candidates: list[ClipCandidate] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            start = float(item["start"])
+            end = float(item["end"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(f"Clip item missing/invalid start or end: {item!r} ({exc})") from exc
+        if end <= start:
+            raise RuntimeError(f"Clip has end ({end}) <= start ({start}): {item!r}")
+        candidates.append(ClipCandidate(
+            start=start,
+            end=end,
+            title=str(item.get("title", "")) or f"clip_{start:.0f}s",
+            hook=str(item.get("hook", "")),
+            score=float(item.get("score", 0) or 0),
+        ))
+
+    if not candidates:
+        raise RuntimeError("No valid clip objects found in the pasted JSON.")
+    return candidates
 
 
 # --------------------------------------------------------------------------
@@ -542,6 +644,15 @@ def main():
         st.subheader("Clip length")
         min_dur, max_dur = st.slider("Duration range (seconds)", 5, 180, (DEFAULT_MIN_CLIP_SECONDS, DEFAULT_MAX_CLIP_SECONDS))
 
+        st.subheader("Output")
+        output_mode = st.radio(
+            "What should the AI do?",
+            ["Auto-cut clips (ffmpeg)", "Just find moments (I'll cut myself)"],
+            help="The second option skips ffmpeg entirely - it finds candidate moments and shows you "
+                 "their start/end times and hook text so you can cut them yourself (in Premiere, "
+                 "Manual clip mode below, or anywhere else).",
+        )
+
     url = st.text_input("YouTube URL")
     run_clicked = st.button("Run pipeline", type="primary", disabled=not url)
 
@@ -555,6 +666,17 @@ def main():
     if run_clicked:
         if engine == "Claude API" and not anthropic_key:
             st.error("Enter an Anthropic API key to use the Claude engine.")
+        elif output_mode == "Just find moments (I'll cut myself)":
+            try:
+                with st.spinner("Finding moments..."):
+                    result = analyze_video(
+                        url, engine, model, ollama_host, anthropic_key, min_dur, max_dur, whisper_model_size, log,
+                        ollama_timeout=ollama_timeout,
+                    )
+                st.session_state["wayne_moments"] = result
+                st.success(f"Found {len(result.candidates)} moment(s). Source video: {result.video_path.name}")
+            except Exception as exc:
+                st.error(str(exc))
         else:
             try:
                 with st.spinner("Running pipeline..."):
@@ -565,8 +687,70 @@ def main():
                 st.session_state["wayne_clips"] = clips
                 st.success(f"Done! {len(clips)} clip(s) generated.")
             except Exception as exc:
-                st.session_state["wayne_clips"] = []
+                # Don't clobber wayne_clips on failure - a failed re-run
+                # shouldn't wipe out clips already sliced (auto or manual)
+                # from an earlier successful run in this session.
                 st.error(str(exc))
+
+    moments_result: Optional[AnalysisResult] = st.session_state.get("wayne_moments")
+    if moments_result:
+        st.subheader(f"Found moments in {moments_result.video_path.name}")
+        for candidate in moments_result.candidates:
+            st.write(
+                f"**{candidate.title}** ({candidate.start:.1f}s - {candidate.end:.1f}s, "
+                f"{candidate.duration:.0f}s, score {candidate.score:.0f})"
+            )
+            st.caption(candidate.hook)
+        moments_json = json.dumps(
+            [
+                {"start": c.start, "end": c.end, "title": c.title, "hook": c.hook, "score": c.score}
+                for c in moments_result.candidates
+            ],
+            indent=2,
+        )
+        st.text_area(
+            "Copy this into Manual clip mode below to cut some or all of these (edit it first if "
+            "you only want a subset, or want to nudge the times)",
+            value=moments_json, height=200, key="moments_json_display",
+        )
+
+    with st.expander("Manual clip mode (paste clip times yourself, skip AI analysis)"):
+        st.caption(
+            "If AI analysis keeps failing: open the saved transcript from transcripts/ "
+            "(it has timestamps on every line), paste its contents to Claude and ask it to "
+            "pick clip start/end times, then paste the JSON array it gives you back here."
+        )
+        downloaded_videos = sorted(DOWNLOADS_DIR.glob("*.mp4")) if DOWNLOADS_DIR.exists() else []
+        if not downloaded_videos:
+            st.info(
+                f"No downloaded videos in {DOWNLOADS_DIR.name}/ yet - run the pipeline above at "
+                "least once. The video is kept even if the analysis step fails."
+            )
+        else:
+            video_choice = st.selectbox("Source video", [p.name for p in downloaded_videos], key="manual_video_choice")
+            manual_json = st.text_area(
+                "Paste clip JSON here",
+                value='[{"start": 12.0, "end": 45.0, "title": "Example clip", "hook": "..."}]',
+                height=150,
+                key="manual_clips_json",
+            )
+            if st.button("Slice these clips", key="manual_slice_button"):
+                try:
+                    source_path = DOWNLOADS_DIR / video_choice
+                    video_duration = get_video_duration(source_path)
+                    manual_candidates = parse_manual_clips(manual_json)
+                    OUTPUT_DIR.mkdir(exist_ok=True)
+                    existing = st.session_state.get("wayne_clips") or []
+                    new_results: list[tuple[ClipCandidate, Path]] = []
+                    for offset, candidate in enumerate(manual_candidates):
+                        idx = len(existing) + len(new_results) + 1
+                        out_path = OUTPUT_DIR / f"clip_{idx:02d}_{slugify(candidate.title)}.mp4"
+                        slice_clip(source_path, candidate, out_path, video_duration)
+                        new_results.append((candidate, out_path))
+                    st.session_state["wayne_clips"] = existing + new_results
+                    st.success(f"Sliced {len(new_results)} manual clip(s).")
+                except Exception as exc:
+                    st.error(str(exc))
 
     # Read results from session_state (not a local var) so they survive the
     # rerun triggered by clicking a download button below.
