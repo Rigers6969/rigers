@@ -358,16 +358,30 @@ def transcribe_video(video_path: Path, model_size: str, progress_cb: ProgressCB)
     with tempfile.TemporaryDirectory(prefix="wayne_whisper_") as d:
         out_json = Path(d) / "transcript.json"
         cmd = [sys.executable, str(WHISPER_WORKER), str(video_path), model_size, str(out_json)]
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+        # stderr is merged into stdout (not a separate PIPE) so there's only one
+        # pipe to drain. With two separate pipes, the child can fill the OS's
+        # stderr buffer (a library warning flood - onnxruntime/ctranslate2/
+        # huggingface_hub are all noisy) while we're only reading stdout in the
+        # loop below; once that buffer fills, the child blocks on its next
+        # write to stderr and the whole subprocess hangs indefinitely, since
+        # nothing drains it until after proc.wait() - which never returns.
+        # That's a silent deadlock, not slow computation, and it explains a
+        # "small" Whisper model on a short video taking hours on CPU.
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        )
         assert proc.stdout is not None
+        output_lines: list[str] = []
         for line in proc.stdout:
             line = line.strip()
             if line:
+                output_lines.append(line)
                 progress_cb(f"[whisper] {line}")
+        proc.stdout.close()
         proc.wait()
         if proc.returncode != 0:
-            stderr = proc.stderr.read() if proc.stderr else ""
-            raise RuntimeError(f"Whisper subprocess failed (exit {proc.returncode}):\n{stderr[-2000:]}")
+            tail = "\n".join(output_lines[-100:])
+            raise RuntimeError(f"Whisper subprocess failed (exit {proc.returncode}):\n{tail}")
         with open(out_json, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data["segments"]

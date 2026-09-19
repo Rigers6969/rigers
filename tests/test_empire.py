@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -213,6 +214,52 @@ class TestSaveTranscript(unittest.TestCase):
                 self.assertEqual(path.read_text(encoding="utf-8"), "real text")
             finally:
                 empire.TRANSCRIPTS_DIR = original_dir
+
+
+class TestTranscribeVideoStderrDeadlock(unittest.TestCase):
+    def test_heavy_stderr_output_does_not_hang(self):
+        # Regression test for a real deadlock: transcribe_video used to open
+        # stdout and stderr as two separate pipes but only drain stdout in its
+        # read loop. If the child writes enough to stderr (noisy library
+        # warnings, which faster-whisper's dependencies produce plenty of) to
+        # fill the OS pipe buffer before stdout closes, the child blocks on
+        # its next stderr write and the whole subprocess hangs forever - this
+        # is exactly what a user reported as "whisper running for 2 hours at
+        # 80%" on a short video with a small model, which should take minutes.
+        # A fake worker script that floods stderr past any reasonable pipe
+        # buffer size reproduces the exact condition that triggered it.
+        with tempfile.TemporaryDirectory() as d:
+            fake_worker = Path(d) / "fake_worker.py"
+            fake_worker.write_text(
+                "import sys, json\n"
+                "out_path = sys.argv[3]\n"
+                "for i in range(20000):\n"
+                "    print('warning: noisy dependency output line %d' % i, file=sys.stderr)\n"
+                "print('PROGRESS 1.0/1.0 (100%)', flush=True)\n"
+                "with open(out_path, 'w') as f:\n"
+                "    json.dump({'language': 'en', 'duration': 1.0, "
+                "'segments': [{'start': 0.0, 'end': 1.0, 'text': 'hello'}]}, f)\n"
+            )
+            original_worker = empire.WHISPER_WORKER
+            empire.WHISPER_WORKER = fake_worker
+            result = {}
+            error = {}
+
+            def run():
+                try:
+                    result["segments"] = empire.transcribe_video(Path("fake_video.mp4"), "base", lambda msg: None)
+                except Exception as exc:  # pragma: no cover - surfaced via assertion below
+                    error["exc"] = exc
+
+            try:
+                thread = threading.Thread(target=run, daemon=True)
+                thread.start()
+                thread.join(timeout=15)
+                self.assertFalse(thread.is_alive(), "transcribe_video hung - the stderr-pipe deadlock has regressed")
+                self.assertNotIn("exc", error, f"transcribe_video raised: {error.get('exc')}")
+                self.assertEqual(result.get("segments"), [{"start": 0.0, "end": 1.0, "text": "hello"}])
+            finally:
+                empire.WHISPER_WORKER = original_worker
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not on PATH")
