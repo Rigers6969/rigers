@@ -82,14 +82,29 @@ def _clock_html(element_id: str, timezone: str) -> str:
     """
 
 
-def render_clock_widget(timezone: str = DEFAULT_TIMEZONE, label: str = DEFAULT_CLOCK_LABEL, height: int = 70):
-    """A small persistent live clock - use in the sidebar so the time is
-    visible everywhere in the app, not just on the splash screen."""
+def render_clock_widget(timezone: str = DEFAULT_TIMEZONE, label: str = DEFAULT_CLOCK_LABEL, height: int = 110):
+    """A large, animated, persistent live clock - use in the sidebar so the
+    time is impossible to miss anywhere in the app, not just on the splash
+    screen."""
     components.html(
         f"""
-        <div style="text-align:center; padding:8px; background:#000; border-radius:6px; border:1px solid #F2C230;">
-            <div id="wf-sidebar-clock" style="font-family:monospace; font-size:20px; color:#F2C230; letter-spacing:2px;"></div>
-            <div style="font-size:11px; color:#888; margin-top:2px;">{label} time</div>
+        <style>
+        @keyframes wf-pulse-border {{
+            0%, 100% {{ box-shadow: 0 0 8px 2px rgba(242,194,48,0.4); border-color: #F2C230; }}
+            50% {{ box-shadow: 0 0 22px 6px rgba(242,194,48,0.9); border-color: #FFE9A8; }}
+        }}
+        #wf-clock-box {{
+            text-align:center; padding:14px 8px; background:#000; border-radius:10px;
+            border:2px solid #F2C230; animation: wf-pulse-border 2s ease-in-out infinite;
+        }}
+        #wf-sidebar-clock {{
+            font-family:'Courier New', monospace; font-size:38px; font-weight:bold;
+            color:#F2C230; letter-spacing:3px;
+        }}
+        </style>
+        <div id="wf-clock-box">
+            <div id="wf-sidebar-clock"></div>
+            <div style="font-size:12px; color:#999; margin-top:4px;">{label} time</div>
         </div>
         {_clock_html("wf-sidebar-clock", timezone)}
         """,
@@ -102,12 +117,35 @@ def render_splash_banner(app_name: str, timezone: str = DEFAULT_TIMEZONE, clock_
     computed from the current time in `timezone`, plus a live clock."""
     components.html(
         f"""
+        <style>
+        @keyframes wf-bat-glow {{
+            0%, 100% {{ text-shadow: 0 0 30px #F2C230, 0 0 60px #F2C230; transform: scale(1); }}
+            50% {{ text-shadow: 0 0 50px #FFE9A8, 0 0 100px #F2C230; transform: scale(1.08); }}
+        }}
+        @keyframes wf-fade-in {{
+            from {{ opacity: 0; transform: translateY(-10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+        @keyframes wf-clock-pulse {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.6; }}
+        }}
+        #wf-bat {{ font-size:90px; display:inline-block; animation: wf-bat-glow 2.5s ease-in-out infinite; }}
+        #wf-greeting {{
+            font-size:40px; font-weight:bold; color:#F2C230; margin-top:8px; letter-spacing:1px;
+            animation: wf-fade-in 1s ease-out;
+        }}
+        #wf-clock {{
+            font-size:44px; color:#fff; margin-top:14px; letter-spacing:4px; font-family:'Courier New', monospace;
+            font-weight:bold; animation: wf-clock-pulse 2s ease-in-out infinite;
+        }}
+        </style>
         <div style="background:#000; text-align:center; padding:36px 16px; border-radius:10px;
                     margin-bottom:16px; box-shadow: 0 0 40px rgba(242,194,48,0.15) inset;">
-            <div style="font-size:90px; text-shadow: 0 0 30px #F2C230, 0 0 60px #F2C230;">&#129415;</div>
-            <div id="wf-greeting" style="font-size:32px; font-weight:bold; color:#F2C230; margin-top:4px; letter-spacing:1px;"></div>
-            <div id="wf-clock" style="font-size:26px; color:#fff; margin-top:10px; letter-spacing:3px; font-family:monospace;"></div>
-            <div style="font-size:13px; color:#888; margin-top:2px;">{clock_label} time</div>
+            <div id="wf-bat">&#129415;</div>
+            <div id="wf-greeting"></div>
+            <div id="wf-clock"></div>
+            <div style="font-size:14px; color:#888; margin-top:4px;">{clock_label} time</div>
         </div>
         <script>
         function wf_tick() {{
@@ -128,7 +166,7 @@ def render_splash_banner(app_name: str, timezone: str = DEFAULT_TIMEZONE, clock_
         setInterval(wf_tick, 1000);
         </script>
         """,
-        height=230,
+        height=340,
     )
 
 
