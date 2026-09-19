@@ -22,6 +22,7 @@ from typing import Callable, Optional
 
 import streamlit as st
 
+import ui_theme
 from json_utils import extract_json_items
 
 APP_DIR = Path(__file__).resolve().parent
@@ -480,10 +481,15 @@ def run_pipeline(
 
 def main():
     st.set_page_config(page_title="The Wayne Factory", page_icon=":bat:", layout="wide")
+
+    if not ui_theme.show_splash_gate(app_name="Batman"):
+        return
+
     st.title("The Wayne Factory")
     st.caption("Turn long YouTube videos into short vertical clips for TikTok/Reels/Shorts.")
 
     with st.sidebar:
+        ui_theme.render_clock_widget()
         st.header("Settings")
         engine = st.radio("Analysis engine", ["Ollama (local)", "Claude API"])
         if engine == "Ollama (local)":

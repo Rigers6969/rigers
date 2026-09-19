@@ -22,6 +22,7 @@ from pathlib import Path
 
 import streamlit as st
 
+import ui_theme
 from branding import ClaudeBrandGenerator, OllamaBrandGenerator, prepare_content_for_prompt, save_brand_assets
 from publishing import post_to_instagram, upload_to_youtube
 
@@ -33,10 +34,15 @@ TRANSCRIPTS_DIR = APP_DIR / "transcripts"  # where empire.py saves transcripts
 
 def main():
     st.set_page_config(page_title="Channel Agent", page_icon=":art:", layout="wide")
+
+    if not ui_theme.show_splash_gate(app_name="Batman"):
+        return
+
     st.title("Channel Agent")
     st.caption("Branding + publishing companion for The Wayne Factory. Runs as its own app.")
 
     with st.sidebar:
+        ui_theme.render_clock_widget()
         st.header("Settings")
         engine = st.radio("Engine", ["Ollama (local)", "Claude API"])
         if engine == "Ollama (local)":
