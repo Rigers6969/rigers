@@ -12,7 +12,9 @@ the plain black background - nothing else needs to change.
 from __future__ import annotations
 
 import base64
+import random
 from pathlib import Path
+from typing import Optional
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -193,3 +195,101 @@ def show_splash_gate(
             st.session_state[session_key] = True
             st.rerun()
     return False
+
+
+def render_bat_swarm_background(count: int = 8):
+    """Ambient full-page animation: bat emoji drifting across the viewport
+    forever, at random heights/speeds/sizes so it doesn't look mechanical.
+
+    Injected via st.markdown (unsafe_allow_html), NOT components.html - a
+    components.html block renders in its own iframe, and `position: fixed`
+    inside an iframe is scoped to that iframe's box, not the real page
+    viewport, so it can't cover the whole app. st.markdown injects straight
+    into the page's own DOM, where a fixed position genuinely spans the
+    full browser window. The tradeoff is this must be pure CSS - Streamlit
+    strips <script> tags from st.markdown, so there is no JS here, only a
+    CSS @keyframes animation.
+    """
+    bats = []
+    for _ in range(count):
+        top = random.uniform(4, 92)
+        duration = random.uniform(18, 34)
+        delay = random.uniform(0, 30)
+        size = random.uniform(16, 30)
+        opacity = random.uniform(0.06, 0.18)
+        bats.append(
+            f'<div class="wf-bat-drift" style="top:{top:.1f}vh; font-size:{size:.0f}px; '
+            f'opacity:{opacity:.2f}; animation-duration:{duration:.1f}s; '
+            f'animation-delay:-{delay:.1f}s;">&#129415;</div>'
+        )
+    st.markdown(
+        f"""
+        <style>
+        @keyframes wf-drift {{
+            from {{ transform: translateX(-10vw); }}
+            to {{ transform: translateX(110vw); }}
+        }}
+        .wf-bat-drift {{
+            position: fixed;
+            left: 0;
+            pointer-events: none;
+            z-index: 0;
+            animation-name: wf-drift;
+            animation-timing-function: linear;
+            animation-iteration-count: infinite;
+        }}
+        </style>
+        {''.join(bats)}
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_stat_card(label: str, value: Optional[int], icon: str = "", note: str = "", height: int = 150):
+    """A stat card with the number animating from 0 up to `value` on load
+    (ease-out cubic over 1.5s). `value=None` renders "Hidden" instead (e.g.
+    a YouTube channel that has subscriber count hidden - a valid state, not
+    missing data)."""
+    if value is None:
+        components.html(
+            f"""
+            <div style="background:#000; border:1px solid #F2C230; border-radius:10px; padding:18px;
+                        text-align:center; box-shadow: 0 0 18px rgba(242,194,48,0.15);">
+                <div style="font-size:28px;">{icon}</div>
+                <div style="font-size:26px; font-weight:bold; color:#888;">Hidden</div>
+                <div style="font-size:13px; color:#ccc; margin-top:4px;">{label}</div>
+                <div style="font-size:11px; color:#888; margin-top:2px;">{note}</div>
+            </div>
+            """,
+            height=height,
+        )
+        return
+
+    components.html(
+        f"""
+        <div style="background:#000; border:1px solid #F2C230; border-radius:10px; padding:18px;
+                    text-align:center; box-shadow: 0 0 18px rgba(242,194,48,0.15);">
+            <div style="font-size:28px;">{icon}</div>
+            <div id="wf-stat-value" style="font-size:34px; font-weight:bold; color:#F2C230;
+                        font-family:'Courier New',monospace;">0</div>
+            <div style="font-size:13px; color:#ccc; margin-top:4px;">{label}</div>
+            <div style="font-size:11px; color:#888; margin-top:2px;">{note}</div>
+        </div>
+        <script>
+        (function() {{
+            const target = {int(value)};
+            const el = document.getElementById("wf-stat-value");
+            const duration = 1500;
+            const start = performance.now();
+            function ease(t) {{ return 1 - Math.pow(1 - t, 3); }}
+            function tick(now) {{
+                const progress = Math.min((now - start) / duration, 1);
+                el.innerText = Math.floor(ease(progress) * target).toLocaleString();
+                if (progress < 1) {{ requestAnimationFrame(tick); }}
+            }}
+            requestAnimationFrame(tick);
+        }})();
+        </script>
+        """,
+        height=height,
+    )
