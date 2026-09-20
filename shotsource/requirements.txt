@@ -1,0 +1,7 @@
+requests
+PyYAML
+opencv-python-headless
+numpy
+Pillow
+ImageHash
+sentence-transformers
