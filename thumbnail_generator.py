@@ -228,10 +228,12 @@ def generate_thumbnail(
         draw, headline.upper(), max_text_width, headline_max_height, headline_start_size, headline_min_size
     )
 
-    subtext_max_height = int(height * 0.14)
-    subtext_font, subtext_lines = _fit_text(
-        draw, subtext, max_text_width, subtext_max_height, subtext_start_size, subtext_min_size
-    )
+    has_subtext = bool(subtext and subtext.strip())
+    if has_subtext:
+        subtext_max_height = int(height * 0.14)
+        subtext_font, subtext_lines = _fit_text(
+            draw, subtext, max_text_width, subtext_max_height, subtext_start_size, subtext_min_size
+        )
 
     center_x = width // 2
     gap = int(height * 0.025)
@@ -240,18 +242,22 @@ def generate_thumbnail(
     headline_line_height = int((hb[3] - hb[1]) * 1.25)
     headline_block_height = headline_line_height * len(headline_lines)
 
-    sb = subtext_font.getbbox("Ag")
-    subtext_line_height = int((sb[3] - sb[1]) * 1.25)
-    subtext_block_height = subtext_line_height * len(subtext_lines)
+    if has_subtext:
+        sb = subtext_font.getbbox("Ag")
+        subtext_line_height = int((sb[3] - sb[1]) * 1.25)
+        subtext_block_height = subtext_line_height * len(subtext_lines)
+        total_block_height = headline_block_height + gap + subtext_block_height
+    else:
+        total_block_height = headline_block_height
 
-    total_block_height = headline_block_height + gap + subtext_block_height
     block_center_y = int(height * 0.52)
     headline_center_y = block_center_y - total_block_height // 2 + headline_block_height // 2
 
     _draw_centered_multiline(draw, headline_lines, headline_font, center_x, headline_center_y, WHITE)
 
-    subtext_center_y = headline_center_y + headline_block_height // 2 + gap + subtext_block_height // 2
-    _draw_centered_multiline(draw, subtext_lines, subtext_font, center_x, subtext_center_y, WHITE)
+    if has_subtext:
+        subtext_center_y = headline_center_y + headline_block_height // 2 + gap + subtext_block_height // 2
+        _draw_centered_multiline(draw, subtext_lines, subtext_font, center_x, subtext_center_y, WHITE)
 
     label_font_size = int(width * 0.022)
     label_font = _load_font(label_font_size)
@@ -268,7 +274,7 @@ def generate_thumbnail(
 def main():
     parser = argparse.ArgumentParser(description="Generate Paper Trail Instagram thumbnails.")
     parser.add_argument("--headline", required=True, help="Big bold headline text.")
-    parser.add_argument("--subtext", required=True, help="Smaller line underneath the headline.")
+    parser.add_argument("--subtext", default="", help="Optional smaller line underneath the headline.")
     parser.add_argument(
         "--photo",
         default=None,
