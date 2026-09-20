@@ -311,56 +311,71 @@ def main():
 
     with st.sidebar:
         ui_theme.render_clock_widget()
-        st.header("Script settings")
-        engine = st.radio("Script engine", ["Ollama (local)", "Claude API"])
-        if engine == "Ollama (local)":
-            model = st.selectbox("Ollama model", ["llama3", "phi3"])
-            ollama_host = st.text_input("Ollama host", value="http://localhost:11434")
-            anthropic_key = ""
-        else:
-            model = st.selectbox("Claude model", ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"])
-            anthropic_key = st.text_input("Anthropic API key", type="password", value="")
-            ollama_host = ""
-
         st.header("Voice settings")
         voice_label = st.selectbox("Narrator voice", list(UK_MALE_VOICES.keys()))
         voice_id = UK_MALE_VOICES[voice_label]
 
-    topic = st.text_input(
-        "Psychology topic", value="Cognitive biases and how they quietly shape everyday decisions"
-    )
-    target_words = st.number_input(
-        "Target word count",
-        min_value=MIN_TARGET_WORDS,
-        max_value=MAX_TARGET_WORDS,
-        value=DEFAULT_TARGET_WORDS,
-        step=500,
-        help="~10,000 words narrates to roughly an hour of audio at a natural speaking pace.",
+    script_source = st.radio(
+        "Script source", ["Paste my own script", "Generate one with AI"], horizontal=True
     )
 
-    if st.button("Generate script", type="primary", disabled=not topic.strip()):
-        try:
-            if engine == "Ollama (local)":
-                writer = OllamaScriptWriter(model=model, host=ollama_host)
-            else:
-                if not anthropic_key:
-                    raise ScriptGenerationError("Enter an Anthropic API key in the sidebar first.")
-                writer = ClaudeScriptWriter(api_key=anthropic_key, model=model)
-
-            status = st.empty()
-            script = writer.generate_script(
-                topic, target_words=int(target_words), progress=lambda msg: status.info(msg)
-            )
-            status.empty()
-            st.session_state["voiceover_script"] = script
+    if script_source == "Paste my own script":
+        pasted = st.text_area(
+            "Paste your script here", height=300, key="voiceover_pasted_script",
+            placeholder="Paste the full script text you want narrated...",
+        )
+        if st.button("Use this script", type="primary", disabled=not pasted.strip()):
+            st.session_state["voiceover_script"] = pasted.strip()
             st.session_state.pop("voiceover_audio_path", None)
-        except Exception as exc:
-            st.error(str(exc))
+        topic = "voiceover"
+    else:
+        with st.sidebar:
+            st.header("Script settings")
+            engine = st.radio("Script engine", ["Ollama (local)", "Claude API"])
+            if engine == "Ollama (local)":
+                model = st.selectbox("Ollama model", ["llama3", "phi3"])
+                ollama_host = st.text_input("Ollama host", value="http://localhost:11434")
+                anthropic_key = ""
+            else:
+                model = st.selectbox("Claude model", ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"])
+                anthropic_key = st.text_input("Anthropic API key", type="password", value="")
+                ollama_host = ""
+
+        topic = st.text_input(
+            "Psychology topic", value="Cognitive biases and how they quietly shape everyday decisions"
+        )
+        target_words = st.number_input(
+            "Target word count",
+            min_value=MIN_TARGET_WORDS,
+            max_value=MAX_TARGET_WORDS,
+            value=DEFAULT_TARGET_WORDS,
+            step=500,
+            help="~10,000 words narrates to roughly an hour of audio at a natural speaking pace.",
+        )
+
+        if st.button("Generate script", type="primary", disabled=not topic.strip()):
+            try:
+                if engine == "Ollama (local)":
+                    writer = OllamaScriptWriter(model=model, host=ollama_host)
+                else:
+                    if not anthropic_key:
+                        raise ScriptGenerationError("Enter an Anthropic API key in the sidebar first.")
+                    writer = ClaudeScriptWriter(api_key=anthropic_key, model=model)
+
+                status = st.empty()
+                script = writer.generate_script(
+                    topic, target_words=int(target_words), progress=lambda msg: status.info(msg)
+                )
+                status.empty()
+                st.session_state["voiceover_script"] = script
+                st.session_state.pop("voiceover_audio_path", None)
+            except Exception as exc:
+                st.error(str(exc))
 
     script = st.session_state.get("voiceover_script")
     if script:
         st.subheader(f"Script ({_word_count(script):,} words)")
-        st.text_area("Generated script", value=script, height=300, key="voiceover_script_display")
+        st.text_area("Script to narrate", value=script, height=300, key="voiceover_script_display")
 
         if st.button("Generate voiceover", type="primary"):
             try:
