@@ -24,6 +24,8 @@ from .sources.base import BaseSource
 from .sources.loc import LocSource
 from .sources.openverse import OpenverseSource
 from .sources.pexels import PexelsSource
+from .sources.pixabay import PixabaySource
+from .sources.unsplash import UnsplashSource
 from .sources.wikimedia import WikimediaSource
 
 logger = logging.getLogger("shotsource")
@@ -34,6 +36,14 @@ SOURCE_CLASSES = {
     "loc": LocSource,
     "archive_org": ArchiveOrgSource,
     "pexels": PexelsSource,
+    "pixabay": PixabaySource,
+    "unsplash": UnsplashSource,
+}
+
+_DEFAULT_API_KEY_ENV = {
+    "pexels": "PEXELS_API_KEY",
+    "pixabay": "PIXABAY_API_KEY",
+    "unsplash": "UNSPLASH_ACCESS_KEY",
 }
 
 
@@ -71,7 +81,8 @@ def build_sources(config: Config, cache: DiskCache) -> Dict[str, BaseSource]:
             continue
         rate_limiter = RateLimiter(src_config.requests_per_minute)
         http = CachedSession(cache, rate_limiter, config.http.user_agent, config.http.timeout_seconds)
-        kwargs = {"api_key_env": src_config.api_key_env or "PEXELS_API_KEY"} if name == "pexels" else {}
+        default_env = _DEFAULT_API_KEY_ENV.get(name)
+        kwargs = {"api_key_env": src_config.api_key_env or default_env} if default_env else {}
         sources[name] = cls(http, src_config.max_results_per_shot, **kwargs)
     return sources
 

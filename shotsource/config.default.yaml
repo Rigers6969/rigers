@@ -39,6 +39,20 @@ sources:
     # Get a free key at https://www.pexels.com/api/ - without it this
     # source is silently skipped.
     api_key_env: "PEXELS_API_KEY"
+  pixabay:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+    # Get a free key at https://pixabay.com/api/docs/ - without it this
+    # source is silently skipped.
+    api_key_env: "PIXABAY_API_KEY"
+  unsplash:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+    # Get a free "Access Key" at https://unsplash.com/developers - without
+    # it this source is silently skipped.
+    api_key_env: "UNSPLASH_ACCESS_KEY"
 
 quality:
   hard_reject:

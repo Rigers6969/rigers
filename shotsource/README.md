@@ -11,14 +11,18 @@ pip install -r shotsource/requirements.txt
 `sentence-transformers` (used for caption-to-shot-description similarity)
 pulls in `torch` and is the heaviest dependency - everything else is light.
 
-To use Pexels, set an API key (free at https://www.pexels.com/api/):
+Pexels, Pixabay, and Unsplash each need a free API key - set whichever you
+have:
 
 ```bash
-export PEXELS_API_KEY=your-key-here
+export PEXELS_API_KEY=your-key-here        # https://www.pexels.com/api/
+export PIXABAY_API_KEY=your-key-here        # https://pixabay.com/api/docs/
+export UNSPLASH_ACCESS_KEY=your-key-here    # https://unsplash.com/developers
 ```
 
-The other four sources (Openverse, Wikimedia Commons, Library of Congress,
-archive.org) need no key.
+Any of the three left unset is silently skipped - no error, it just
+contributes no candidates. The other four sources (Openverse, Wikimedia
+Commons, Library of Congress, archive.org) need no key at all.
 
 ## Run
 

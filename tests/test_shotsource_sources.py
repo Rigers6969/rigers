@@ -11,6 +11,8 @@ from shotsource.sources.archive_org import ArchiveOrgSource  # noqa: E402
 from shotsource.sources.loc import LocSource  # noqa: E402
 from shotsource.sources.openverse import OpenverseSource  # noqa: E402
 from shotsource.sources.pexels import PexelsSource  # noqa: E402
+from shotsource.sources.pixabay import PixabaySource  # noqa: E402
+from shotsource.sources.unsplash import UnsplashSource  # noqa: E402
 from shotsource.sources.wikimedia import WikimediaSource  # noqa: E402
 
 
@@ -193,6 +195,78 @@ class TestPexelsSource(unittest.TestCase):
             self.assertIn("Jane Photographer", candidates[0].attribution)
         finally:
             os.environ.pop("PEXELS_API_KEY", None)
+
+
+class TestPixabaySource(unittest.TestCase):
+    def test_returns_empty_without_api_key(self):
+        import os
+
+        os.environ.pop("PIXABAY_API_KEY", None)
+        http = FakeHttp({})
+        source = PixabaySource(http, max_results=10)
+        self.assertEqual(source.search("query"), [])
+        self.assertEqual(http.requested, [])
+
+    def test_parses_hits_with_api_key(self):
+        import os
+
+        from shotsource.sources.pixabay import API_URL
+
+        os.environ["PIXABAY_API_KEY"] = "test-key"
+        try:
+            response = {"hits": [{
+                "id": 42,
+                "tags": "cafeteria, 1970s, students",
+                "largeImageURL": "https://pixabay.com/large.jpg",
+                "pageURL": "https://pixabay.com/photos/42/",
+                "user": "SomePhotographer",
+                "imageWidth": 4500,
+                "imageHeight": 3000,
+            }]}
+            http = FakeHttp({API_URL: response})
+            source = PixabaySource(http, max_results=10)
+            candidates = source.search("cafeteria")
+            self.assertEqual(len(candidates), 1)
+            self.assertEqual(candidates[0].license, "Pixabay License")
+            self.assertIn("SomePhotographer", candidates[0].attribution)
+        finally:
+            os.environ.pop("PIXABAY_API_KEY", None)
+
+
+class TestUnsplashSource(unittest.TestCase):
+    def test_returns_empty_without_api_key(self):
+        import os
+
+        os.environ.pop("UNSPLASH_ACCESS_KEY", None)
+        http = FakeHttp({})
+        source = UnsplashSource(http, max_results=10)
+        self.assertEqual(source.search("query"), [])
+        self.assertEqual(http.requested, [])
+
+    def test_parses_results_with_api_key(self):
+        import os
+
+        from shotsource.sources.unsplash import API_URL
+
+        os.environ["UNSPLASH_ACCESS_KEY"] = "test-key"
+        try:
+            response = {"results": [{
+                "id": "abc123",
+                "alt_description": "crowded dinner table candlelight",
+                "urls": {"full": "https://images.unsplash.com/full.jpg"},
+                "links": {"html": "https://unsplash.com/photos/abc123"},
+                "user": {"name": "Jane Doe", "links": {"html": "https://unsplash.com/@janedoe"}},
+                "width": 6000,
+                "height": 4000,
+            }]}
+            http = FakeHttp({API_URL: response})
+            source = UnsplashSource(http, max_results=10)
+            candidates = source.search("dinner table")
+            self.assertEqual(len(candidates), 1)
+            self.assertIn("Jane Doe", candidates[0].attribution)
+            self.assertEqual(candidates[0].license, "Unsplash License")
+        finally:
+            os.environ.pop("UNSPLASH_ACCESS_KEY", None)
 
 
 if __name__ == "__main__":

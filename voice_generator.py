@@ -297,18 +297,11 @@ def synthesize_speech(
 # Streamlit UI
 # --------------------------------------------------------------------------
 
-def main():
-    st.set_page_config(page_title="Psychology Voiceover Generator", page_icon=":studio_microphone:", layout="wide")
-
-    if not ui_theme.show_splash_gate(app_name="Batman"):
-        return
-
-    st.title("Psychology Voiceover Generator")
-    st.caption(
-        "Writes a long-form psychology script and narrates it in a British male voice. "
-        "Runs as its own app, same pattern as channel_agent.py."
-    )
-
+def render_voiceover_tab():
+    """Renders the full voiceover UI (sidebar settings + main content).
+    Factored out of main() so studio.py can embed this as one tab without
+    duplicating the logic - main() below is just this plus the standalone
+    page chrome (page config, splash gate, title)."""
     with st.sidebar:
         ui_theme.render_clock_widget()
         st.header("Voice settings")
@@ -395,6 +388,21 @@ def main():
             st.audio(audio_path)
             with open(audio_path, "rb") as f:
                 st.download_button("Download voiceover (.mp3)", f.read(), file_name=Path(audio_path).name)
+
+
+def main():
+    st.set_page_config(page_title="Psychology Voiceover Generator", page_icon=":studio_microphone:", layout="wide")
+
+    if not ui_theme.show_splash_gate(app_name="Batman"):
+        return
+
+    st.title("Psychology Voiceover Generator")
+    st.caption(
+        "Writes a long-form psychology script and narrates it in a British male voice. "
+        "Runs as its own app, same pattern as channel_agent.py."
+    )
+
+    render_voiceover_tab()
 
 
 if __name__ == "__main__":

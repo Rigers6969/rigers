@@ -18,6 +18,10 @@ class TestLoadConfig(unittest.TestCase):
         self.assertEqual(config.quality.hard_reject.aspect_ratio_max, 2.4)
         self.assertIn("openverse", config.sources)
         self.assertTrue(config.sources["openverse"].enabled)
+        self.assertIn("pixabay", config.sources)
+        self.assertIn("unsplash", config.sources)
+        self.assertEqual(config.sources["pixabay"].api_key_env, "PIXABAY_API_KEY")
+        self.assertEqual(config.sources["unsplash"].api_key_env, "UNSPLASH_ACCESS_KEY")
 
     def test_override_changes_only_specified_values(self):
         with tempfile.TemporaryDirectory() as tmp:
