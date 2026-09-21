@@ -99,6 +99,12 @@ def api_stats():
 
     try:
         config = load_config()
+        # TEMPORARY DEBUG - remove once the "API key not valid" mismatch
+        # between direct browser/curl tests and this app is resolved.
+        key = config["YOUTUBE_API_KEY"]
+        print(f"[DEBUG] CONFIG_PATH={CONFIG_PATH} exists={CONFIG_PATH.exists()}", flush=True)
+        print(f"[DEBUG] YOUTUBE_CHANNEL_ID={config['YOUTUBE_CHANNEL_ID']!r}", flush=True)
+        print(f"[DEBUG] YOUTUBE_API_KEY len={len(key)} repr={key!r}", flush=True)
     except Exception as exc:
         # Whatever goes wrong reading/parsing config.json, the frontend must
         # still get back valid JSON - an uncaught exception here previously
