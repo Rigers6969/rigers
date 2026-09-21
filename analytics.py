@@ -26,6 +26,21 @@ class StatsFetchError(RuntimeError):
     pass
 
 
+def _parse_json_or_raise_status(resp: requests.Response) -> dict:
+    """Both YouTube and the Graph API return a descriptive JSON error body
+    (e.g. "API key not valid", "API_KEY_HTTP_REFERRER_BLOCKED") even on a
+    4xx status - calling resp.raise_for_status() before reading that body
+    throws requests' own generic "400 Client Error: Bad Request for url:
+    ..." instead, discarding the one piece of information that actually
+    explains what's wrong. Try the JSON body first; only fall back to the
+    generic HTTP error if the response isn't JSON at all."""
+    try:
+        return resp.json()
+    except ValueError:
+        resp.raise_for_status()
+        raise StatsFetchError(f"Unexpected non-JSON response (status {resp.status_code}): {resp.text[:300]}")
+
+
 def fetch_youtube_stats(channel_id: str, api_key: str) -> dict:
     """Returns {subscriber_count, view_count, video_count, subscriber_count_hidden,
     channel_title}. subscriber_count is None if the channel owner has hidden it -
@@ -35,8 +50,7 @@ def fetch_youtube_stats(channel_id: str, api_key: str) -> dict:
         params={"part": "statistics,snippet", "id": channel_id, "key": api_key},
         timeout=15,
     )
-    resp.raise_for_status()
-    data = resp.json()
+    data = _parse_json_or_raise_status(resp)
 
     if "error" in data:
         raise StatsFetchError(f"YouTube API error: {data['error'].get('message', data['error'])}")
@@ -62,8 +76,7 @@ def fetch_instagram_stats(ig_user_id: str, access_token: str) -> dict:
         params={"fields": "username,followers_count,media_count", "access_token": access_token},
         timeout=15,
     )
-    resp.raise_for_status()
-    data = resp.json()
+    data = _parse_json_or_raise_status(resp)
 
     if "error" in data:
         raise StatsFetchError(f"Instagram API error: {data['error'].get('message', data['error'])}")

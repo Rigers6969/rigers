@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import requests
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from analytics import StatsFetchError, fetch_instagram_stats, fetch_youtube_stats  # noqa: E402
@@ -74,6 +76,28 @@ class TestFetchYoutubeStats(unittest.TestCase):
             fetch_youtube_stats("UC123", "bad-key")
         self.assertIn("API key not valid", str(ctx.exception))
 
+    @patch("analytics.requests.get")
+    def test_detailed_error_preferred_over_generic_http_error(self, mock_get):
+        # Regression: fetch_youtube_stats used to call resp.raise_for_status()
+        # before reading the JSON body, so a 400 with a perfectly descriptive
+        # Google error message got replaced by requests' generic "400 Client
+        # Error: Bad Request for url: ..." - exactly what a user reported
+        # seeing, which told them nothing about the actual cause.
+        response = MagicMock()
+        response.status_code = 400
+        response.json.return_value = {
+            "error": {"message": "API key not valid. Please pass a valid API key."}
+        }
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "400 Client Error: Bad Request for url: ..."
+        )
+        mock_get.return_value = response
+
+        with self.assertRaises(StatsFetchError) as ctx:
+            fetch_youtube_stats("UC123", "bad-key")
+        self.assertIn("API key not valid", str(ctx.exception))
+        self.assertNotIn("400 Client Error", str(ctx.exception))
+
 
 class TestFetchInstagramStats(unittest.TestCase):
     @patch("analytics.requests.get")
@@ -99,6 +123,22 @@ class TestFetchInstagramStats(unittest.TestCase):
         with self.assertRaises(StatsFetchError) as ctx:
             fetch_instagram_stats("178414000", "bad-token")
         self.assertIn("Invalid OAuth access token", str(ctx.exception))
+
+    @patch("analytics.requests.get")
+    def test_non_json_response_falls_back_to_http_error(self, mock_get):
+        # A response that isn't JSON at all (e.g. an HTML error page from a
+        # proxy) has no error detail to extract - this should still surface
+        # something useful instead of crashing on response.json().
+        response = MagicMock()
+        response.status_code = 502
+        response.json.side_effect = ValueError("not JSON")
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "502 Server Error: Bad Gateway for url: ..."
+        )
+        mock_get.return_value = response
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            fetch_instagram_stats("178414000", "bad-token")
 
 
 if __name__ == "__main__":
