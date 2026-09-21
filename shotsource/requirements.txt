@@ -1,5 +1,6 @@
 requests
 PyYAML
+python-dotenv
 opencv-python-headless
 numpy
 Pillow

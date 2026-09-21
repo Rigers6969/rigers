@@ -17,6 +17,8 @@ involves. This app automates everything after that point.
 """
 from __future__ import annotations
 
+import env_config  # noqa: F401  (loads .env before any os.environ.get default below)
+
 import os
 from pathlib import Path
 

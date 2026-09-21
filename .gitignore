@@ -8,3 +8,4 @@ assets/
 .venv/
 .shotsource_cache/
 shot_media_output/
+.env

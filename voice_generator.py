@@ -14,7 +14,10 @@ ffmpeg, since a script this long has to be synthesized in chunks.
 """
 from __future__ import annotations
 
+import env_config  # noqa: F401  (loads .env before any os.environ.get default below)
+
 import asyncio
+import os
 import re
 import subprocess
 import tempfile
@@ -327,11 +330,13 @@ def render_voiceover_tab():
             engine = st.radio("Script engine", ["Ollama (local)", "Claude API"])
             if engine == "Ollama (local)":
                 model = st.selectbox("Ollama model", ["llama3", "phi3"])
-                ollama_host = st.text_input("Ollama host", value="http://localhost:11434")
+                ollama_host = st.text_input("Ollama host", value=os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
                 anthropic_key = ""
             else:
                 model = st.selectbox("Claude model", ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5"])
-                anthropic_key = st.text_input("Anthropic API key", type="password", value="")
+                anthropic_key = st.text_input(
+                    "Anthropic API key", type="password", value=os.environ.get("ANTHROPIC_API_KEY", "")
+                )
                 ollama_host = ""
 
         topic = st.text_input(

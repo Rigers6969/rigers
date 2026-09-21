@@ -12,6 +12,8 @@ one sitting.
 """
 from __future__ import annotations
 
+import env_config  # noqa: F401  (loads .env before any os.environ.get default below)
+
 import streamlit as st
 
 import ui_theme
