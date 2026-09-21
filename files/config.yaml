@@ -1,0 +1,14 @@
+paths:
+  cache: .cache/media        # shared across all videos — never redownload
+
+media:
+  candidates_per_shot: 20    # how many to examine
+  keep_per_shot: 5           # how many survive; more options = slower edit
+  min_width: 1920
+  ratio_range: [1.2, 2.4]
+  min_sharpness: 300         # tune this first — watch the reject log
+  license_type: "commercial,modification"
+  delay_seconds: 0.5
+
+transcribe:
+  model: small               # tiny/base/small/medium — small is the sweet spot
