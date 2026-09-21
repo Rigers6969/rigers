@@ -5,4 +5,5 @@ downloads/
 transcripts/
 branding_output/
 assets/
+config.json
 .venv/

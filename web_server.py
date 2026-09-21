@@ -12,13 +12,22 @@ Run with:
     python web_server.py
 Then open http://localhost:5000
 
-Configure credentials via environment variables (see analytics.py's
-docstring for exactly how to obtain each one):
-    YOUTUBE_CHANNEL_ID, YOUTUBE_API_KEY
-    IG_USER_ID, IG_ACCESS_TOKEN
+Configure credentials by copying config.example.json to config.json and
+filling in your values (see analytics.py's docstring for exactly how to
+obtain each one). Edit config.json in a plain text editor (Notepad is
+fine) - this is deliberately simpler than environment variables, which
+have to be retyped every terminal session and are easy to paste
+incorrectly (a partial paste is silently accepted as a short, wrong
+value - there's no error until the API rejects it). config.json is
+gitignored, so your real credentials never get committed.
+
+Environment variables (YOUTUBE_CHANNEL_ID, YOUTUBE_API_KEY, IG_USER_ID,
+IG_ACCESS_TOKEN) still work too, as a fallback for anything not set in
+config.json - useful for a real deployment, not needed for local use.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -28,8 +37,33 @@ from analytics import StatsFetchError, fetch_instagram_stats, fetch_youtube_stat
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
+CONFIG_PATH = APP_DIR / "config.json"
 
 app = Flask(__name__, static_folder=None)
+
+
+def load_config() -> dict:
+    """Reads credentials from config.json if present, falling back to
+    environment variables for any key it doesn't set. Values are stripped
+    of surrounding whitespace - a trailing newline from a copy-paste into
+    a text file is a common, silent source of "invalid" credentials."""
+    file_config: dict = {}
+    if CONFIG_PATH.exists():
+        try:
+            file_config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"config.json is not valid JSON: {exc}") from exc
+
+    def get(key: str) -> str:
+        value = file_config.get(key) or os.environ.get(key, "")
+        return value.strip() if isinstance(value, str) else value
+
+    return {
+        "YOUTUBE_CHANNEL_ID": get("YOUTUBE_CHANNEL_ID"),
+        "YOUTUBE_API_KEY": get("YOUTUBE_API_KEY"),
+        "IG_USER_ID": get("IG_USER_ID"),
+        "IG_ACCESS_TOKEN": get("IG_ACCESS_TOKEN"),
+    }
 
 
 @app.route("/")
@@ -46,25 +80,29 @@ def static_files(filename):
 def api_stats():
     result: dict = {"youtube": None, "instagram": None, "errors": []}
 
-    channel_id = os.environ.get("YOUTUBE_CHANNEL_ID")
-    api_key = os.environ.get("YOUTUBE_API_KEY")
-    if channel_id and api_key:
+    try:
+        config = load_config()
+    except RuntimeError as exc:
+        result["errors"].append(str(exc))
+        return jsonify(result)
+
+    if config["YOUTUBE_CHANNEL_ID"] and config["YOUTUBE_API_KEY"]:
         try:
-            result["youtube"] = fetch_youtube_stats(channel_id, api_key)
+            result["youtube"] = fetch_youtube_stats(config["YOUTUBE_CHANNEL_ID"], config["YOUTUBE_API_KEY"])
         except Exception as exc:
             result["errors"].append(f"YouTube: {exc}")
     else:
-        result["errors"].append("YouTube not configured: set YOUTUBE_CHANNEL_ID and YOUTUBE_API_KEY")
+        result["errors"].append(
+            "YouTube not configured: set YOUTUBE_CHANNEL_ID and YOUTUBE_API_KEY in config.json"
+        )
 
-    ig_user_id = os.environ.get("IG_USER_ID")
-    ig_token = os.environ.get("IG_ACCESS_TOKEN")
-    if ig_user_id and ig_token:
+    if config["IG_USER_ID"] and config["IG_ACCESS_TOKEN"]:
         try:
-            result["instagram"] = fetch_instagram_stats(ig_user_id, ig_token)
+            result["instagram"] = fetch_instagram_stats(config["IG_USER_ID"], config["IG_ACCESS_TOKEN"])
         except Exception as exc:
             result["errors"].append(f"Instagram: {exc}")
     else:
-        result["errors"].append("Instagram not configured: set IG_USER_ID and IG_ACCESS_TOKEN")
+        result["errors"].append("Instagram not configured: set IG_USER_ID and IG_ACCESS_TOKEN in config.json")
 
     return jsonify(result)
 

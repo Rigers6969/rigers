@@ -1,7 +1,9 @@
 """Tests for web_server.py's /api/stats endpoint using Flask's test client.
 Mocks analytics.py's fetch functions - no real credentials or network
 needed. Also confirms the static frontend files are actually served."""
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +17,14 @@ from analytics import StatsFetchError  # noqa: E402
 class TestApiStats(unittest.TestCase):
     def setUp(self):
         self.client = web_server.app.test_client()
+        # Isolate these tests from any real config.json that might exist on
+        # disk (e.g. one a developer created locally) - they test the
+        # env-var fallback path specifically.
+        self._original_config_path = web_server.CONFIG_PATH
+        web_server.CONFIG_PATH = Path("/nonexistent/config.json")
+
+    def tearDown(self):
+        web_server.CONFIG_PATH = self._original_config_path
 
     @patch.dict("os.environ", {}, clear=True)
     def test_no_credentials_configured(self):
@@ -55,6 +65,74 @@ class TestApiStats(unittest.TestCase):
         data = resp.get_json()
         self.assertEqual(data["instagram"]["followers_count"], 200)
         self.assertIsNone(data["youtube"])
+
+
+class TestLoadConfig(unittest.TestCase):
+    def setUp(self):
+        self._original_config_path = web_server.CONFIG_PATH
+
+    def tearDown(self):
+        web_server.CONFIG_PATH = self._original_config_path
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_reads_values_from_config_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path = Path(d) / "config.json"
+            config_path.write_text(json.dumps({
+                "YOUTUBE_CHANNEL_ID": "UC123",
+                "YOUTUBE_API_KEY": "key123",
+                "IG_USER_ID": "17841",
+                "IG_ACCESS_TOKEN": "tok123",
+            }))
+            web_server.CONFIG_PATH = config_path
+
+            config = web_server.load_config()
+
+            self.assertEqual(config["YOUTUBE_CHANNEL_ID"], "UC123")
+            self.assertEqual(config["YOUTUBE_API_KEY"], "key123")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_strips_whitespace_from_file_values(self):
+        # A trailing newline/space from copy-pasting into the file is a
+        # common, silent source of "invalid credentials" - it must not
+        # survive into the value actually sent to the API.
+        with tempfile.TemporaryDirectory() as d:
+            config_path = Path(d) / "config.json"
+            config_path.write_text(json.dumps({"YOUTUBE_API_KEY": "  key123\n"}))
+            web_server.CONFIG_PATH = config_path
+
+            config = web_server.load_config()
+
+            self.assertEqual(config["YOUTUBE_API_KEY"], "key123")
+
+    @patch.dict("os.environ", {"YOUTUBE_CHANNEL_ID": "UCfromenv"}, clear=True)
+    def test_falls_back_to_env_var_when_missing_from_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path = Path(d) / "config.json"
+            config_path.write_text(json.dumps({"YOUTUBE_API_KEY": "key123"}))
+            web_server.CONFIG_PATH = config_path
+
+            config = web_server.load_config()
+
+            self.assertEqual(config["YOUTUBE_CHANNEL_ID"], "UCfromenv")
+            self.assertEqual(config["YOUTUBE_API_KEY"], "key123")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_missing_file_falls_back_entirely_to_env(self):
+        web_server.CONFIG_PATH = Path("/nonexistent/config.json")
+        config = web_server.load_config()
+        self.assertEqual(config["YOUTUBE_CHANNEL_ID"], "")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_invalid_json_raises_clear_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path = Path(d) / "config.json"
+            config_path.write_text("{not valid json")
+            web_server.CONFIG_PATH = config_path
+
+            with self.assertRaises(RuntimeError) as ctx:
+                web_server.load_config()
+            self.assertIn("not valid JSON", str(ctx.exception))
 
 
 class TestStaticFrontend(unittest.TestCase):
