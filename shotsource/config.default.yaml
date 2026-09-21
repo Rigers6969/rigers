@@ -1,0 +1,96 @@
+# Default configuration for shotsource. Copy this file, edit the copy, and
+# pass it with --config to override any of these values - anything you
+# don't override falls back to what's here.
+
+# Where the per-shot folders and manifest.csv are written.
+output_dir: "./shot_media_output"
+
+# Where cached API responses and downloaded images are kept, so re-running
+# the tool while tuning thresholds below doesn't re-hit the source APIs or
+# re-download the same files.
+cache_dir: "./.shotsource_cache"
+cache_ttl_hours: 168 # 1 week - how long a cached *API search* response is trusted
+
+# How many of the best-scoring survivors to keep per shot.
+top_n_per_shot: 5
+
+sources:
+  openverse:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+  wikimedia:
+    enabled: true
+    requests_per_minute: 30
+    max_results_per_shot: 30
+  loc:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+  archive_org:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 20
+  pexels:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+    # Name of the environment variable holding your Pexels API key.
+    # Get a free key at https://www.pexels.com/api/ - without it this
+    # source is silently skipped.
+    api_key_env: "PEXELS_API_KEY"
+  pixabay:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+    # Get a free key at https://pixabay.com/api/docs/ - without it this
+    # source is silently skipped.
+    api_key_env: "PIXABAY_API_KEY"
+  unsplash:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+    # Get a free "Access Key" at https://unsplash.com/developers - without
+    # it this source is silently skipped.
+    api_key_env: "UNSPLASH_ACCESS_KEY"
+
+quality:
+  hard_reject:
+    min_width_px: 1920
+    aspect_ratio_min: 1.2
+    aspect_ratio_max: 2.4
+    # Perceptual-hash Hamming distance at or below which two images in the
+    # same shot are treated as duplicates (0 = identical, ~5 = near-dupe).
+    dedup_hamming_threshold: 5
+    # Case-insensitive substrings in a candidate's title/caption that mark
+    # it as a stock-watermarked preview.
+    watermark_keywords:
+      - shutterstock
+      - getty
+      - istock
+      - alamy
+      - watermark
+      - "123rf"
+      - dreamstime
+    # Image-based watermark heuristic (Canny edge density in the likely
+    # watermark bands vs. the image average). This is a heuristic, not a
+    # trained detector - raise it if it's flagging clean photos, lower it
+    # if visibly watermarked stock previews are slipping through.
+    watermark_edge_density_multiplier: 2.5
+
+  scoring:
+    weights:
+      resolution: 0.3
+      sharpness: 0.3
+      caption_similarity: 0.4
+    # Width (px) that scores a full 1.0 on resolution; linear below that.
+    resolution_reference_width_px: 3840
+    # Laplacian variance that scores a full 1.0 on sharpness; linear below
+    # that. Tune this against a few known-sharp vs. known-blurry images.
+    sharpness_reference_variance: 800.0
+    # Any sentence-transformers model name.
+    embedding_model: "all-MiniLM-L6-v2"
+
+http:
+  user_agent: "shotsource-cli/1.0 (open media finder for a shot list; contact: set-your-email-here)"
+  timeout_seconds: 30
