@@ -50,9 +50,26 @@ def load_config() -> dict:
     file_config: dict = {}
     if CONFIG_PATH.exists():
         try:
-            file_config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            # utf-8-sig (not plain utf-8) strips a byte-order-mark if
+            # present without erroring - Windows tools like PowerShell's
+            # Set-Content or Notepad can write one, and plain utf-8 decoding
+            # would raise UnicodeDecodeError on it (an exception type the
+            # caller wasn't catching, which surfaced as an opaque HTML 500
+            # error page instead of a JSON response - exactly what a user
+            # hit). It's a no-op for a file that has no BOM.
+            raw_text = CONFIG_PATH.read_text(encoding="utf-8-sig")
+        except (UnicodeDecodeError, OSError) as exc:
+            raise RuntimeError(f"config.json could not be read: {exc}") from exc
+        try:
+            file_config = json.loads(raw_text)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"config.json is not valid JSON: {exc}") from exc
+        if not isinstance(file_config, dict):
+            raise RuntimeError(
+                "config.json must contain a JSON object like "
+                '{"YOUTUBE_CHANNEL_ID": "...", ...} - '
+                f"got a {type(file_config).__name__} instead"
+            )
 
     def get(key: str) -> str:
         value = file_config.get(key) or os.environ.get(key, "")
@@ -82,7 +99,12 @@ def api_stats():
 
     try:
         config = load_config()
-    except RuntimeError as exc:
+    except Exception as exc:
+        # Whatever goes wrong reading/parsing config.json, the frontend must
+        # still get back valid JSON - an uncaught exception here previously
+        # fell through to Flask's default HTML error page, which broke the
+        # page's fetch() call with a confusing "Unexpected token '<'" parse
+        # error instead of showing the actual problem.
         result["errors"].append(str(exc))
         return jsonify(result)
 

@@ -35,6 +35,20 @@ class TestApiStats(unittest.TestCase):
         self.assertTrue(any("YouTube not configured" in e for e in data["errors"]))
         self.assertTrue(any("Instagram not configured" in e for e in data["errors"]))
 
+    def test_unexpected_config_error_still_returns_json_not_html(self):
+        # Regression: api_stats() used to only catch RuntimeError around
+        # load_config(), so any other exception type (e.g. a real-world
+        # UnicodeDecodeError from a BOM'd config.json) fell through
+        # uncaught and Flask returned its default HTML error page. The
+        # frontend's fetch() then failed with a confusing
+        # "Unexpected token '<'" JSON-parse error instead of a real message.
+        with patch("web_server.load_config", side_effect=ValueError("boom")):
+            resp = self.client.get("/api/stats")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content_type, "application/json")
+        data = resp.get_json()
+        self.assertTrue(any("boom" in e for e in data["errors"]))
+
     @patch.dict("os.environ", {"YOUTUBE_CHANNEL_ID": "UC123", "YOUTUBE_API_KEY": "key"}, clear=True)
     @patch("web_server.fetch_youtube_stats")
     def test_youtube_success(self, mock_fetch):
@@ -133,6 +147,36 @@ class TestLoadConfig(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 web_server.load_config()
             self.assertIn("not valid JSON", str(ctx.exception))
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_utf8_bom_does_not_break_parsing(self):
+        # Regression: a user's config.json (written via PowerShell's
+        # Set-Content, a common source of this on Windows) had a byte-order
+        # mark. Plain utf-8 decoding raises UnicodeDecodeError on that,
+        # which wasn't being caught - it fell through as an unhandled
+        # exception, and Flask returned its default HTML error page instead
+        # of JSON, breaking the frontend's fetch() with a confusing
+        # "Unexpected token '<'" parse error instead of a real message.
+        with tempfile.TemporaryDirectory() as d:
+            config_path = Path(d) / "config.json"
+            content = json.dumps({"YOUTUBE_CHANNEL_ID": "UC123", "YOUTUBE_API_KEY": "key123"})
+            config_path.write_bytes(b"\xef\xbb\xbf" + content.encode("utf-8"))  # UTF-8 BOM prefix
+            web_server.CONFIG_PATH = config_path
+
+            config = web_server.load_config()
+
+            self.assertEqual(config["YOUTUBE_CHANNEL_ID"], "UC123")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_non_object_json_raises_clear_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_path = Path(d) / "config.json"
+            config_path.write_text("[1, 2, 3]")
+            web_server.CONFIG_PATH = config_path
+
+            with self.assertRaises(RuntimeError) as ctx:
+                web_server.load_config()
+            self.assertIn("JSON object", str(ctx.exception))
 
 
 class TestStaticFrontend(unittest.TestCase):
