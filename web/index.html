@@ -2,68 +2,172 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Wayne Factory</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="bat-canvas"></canvas>
+  <canvas id="ember-canvas"></canvas>
 
-  <section id="splash">
-    <div class="splash-card">
-      <div class="bat-glow">&#129415;</div>
-      <h1 id="greeting"></h1>
-      <div id="splash-clock" class="clock"></div>
-      <div class="clock-label">Tirana time</div>
-      <button id="enter-btn">Enter</button>
+  <section id="gate">
+    <div class="gate-glow"></div>
+    <div class="gate-content">
+      <div class="eyebrow" id="gate-eyebrow">Gotham City &middot; Tirana Time</div>
+      <h1 id="gate-greeting">Good Evening, <em>Bruce</em>.</h1>
+      <div class="gate-clock" id="gate-clock">--:--:--</div>
+      <button id="enter-btn" class="btn-primary">Enter</button>
     </div>
   </section>
 
-  <main id="main" class="hidden">
-    <header>
-      <h1>The Wayne Factory</h1>
-      <div id="header-clock" class="clock small"></div>
-    </header>
+  <div id="site" class="hidden">
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="#channels">Channels</a>
+        <a href="#principles">How It Works</a>
+      </div>
+      <div class="nav-right">
+        <div id="header-clock" class="nav-clock"></div>
+        <button id="refresh-btn" class="nav-cta">Refresh</button>
+      </div>
+    </nav>
+  </header>
 
-    <p class="subtitle">Live stats for your YouTube channel and Instagram account.</p>
-    <div id="errors"></div>
-
-    <div class="stat-grid">
-      <div class="stat-card" id="card-subscribers">
-        <div class="stat-icon">&#128101;</div>
-        <div class="stat-value" data-target="0">0</div>
-        <div class="stat-label">YouTube Subscribers</div>
-        <div class="stat-note"></div>
-      </div>
-      <div class="stat-card" id="card-views">
-        <div class="stat-icon">&#128065;</div>
-        <div class="stat-value" data-target="0">0</div>
-        <div class="stat-label">Total Views</div>
-        <div class="stat-note"></div>
-      </div>
-      <div class="stat-card" id="card-videos">
-        <div class="stat-icon">&#127916;</div>
-        <div class="stat-value" data-target="0">0</div>
-        <div class="stat-label">Videos</div>
-        <div class="stat-note"></div>
-      </div>
-      <div class="stat-card" id="card-followers">
-        <div class="stat-icon">&#10084;&#65039;</div>
-        <div class="stat-value" data-target="0">0</div>
-        <div class="stat-label">Instagram Followers</div>
-        <div class="stat-note"></div>
-      </div>
-      <div class="stat-card" id="card-posts">
-        <div class="stat-icon">&#128248;</div>
-        <div class="stat-value" data-target="0">0</div>
-        <div class="stat-label">Instagram Posts</div>
-        <div class="stat-note"></div>
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="wrap">
+      <div class="hero-content">
+        <div class="eyebrow" id="eyebrow">Gotham City &middot; Tirana Time</div>
+        <h1 id="greeting">Good Evening, <em>Bruce</em>.</h1>
+        <p>Real-time performance across your YouTube channel and Instagram account, pulled straight from the source and updated on demand &mdash; no vanity metrics, no delay.</p>
+        <div class="hero-actions">
+          <a href="#channels" class="btn-primary">View Live Stats</a>
+          <button id="hero-refresh-btn" class="btn-ghost">Refresh Now</button>
+        </div>
       </div>
     </div>
+    <div class="hero-stats">
+      <div class="stat"><b id="corner-clock">--:--:--</b><span>Local Time, Tirana</span></div>
+      <div class="stat"><b><span class="live-dot"></span>Live</b><span>Data Source: Real APIs</span></div>
+    </div>
+  </section>
 
-    <button id="refresh-btn">Refresh stats</button>
-  </main>
+  <section class="ticker">
+    <div class="wrap">
+      <div class="ticker-item">
+        <span class="label">Subscribers</span>
+        <span class="val" id="ticker-subs">&mdash;</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">Total Views</span>
+        <span class="val" id="ticker-views">&mdash;</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">IG Followers</span>
+        <span class="val" id="ticker-followers">&mdash;</span>
+      </div>
+      <div class="ticker-item">
+        <span class="label">Last Updated</span>
+        <span class="val" id="ticker-updated">&mdash;</span>
+      </div>
+    </div>
+  </section>
+
+  <div id="errors" class="wrap"></div>
+
+  <section class="divisions" id="channels">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="section-label">Live Performance</span>
+        <h2>Two channels, one dashboard.</h2>
+        <p>Every number below is fetched fresh from the YouTube Data API and Instagram Graph API &mdash; nothing cached, nothing estimated.</p>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="div-grid">
+        <div class="div-card stat-card" id="card-subscribers">
+          <div class="div-num">01 &mdash; YouTube</div>
+          <h3 class="stat-value" data-target="0">0</h3>
+          <p class="div-label">Subscribers</p>
+          <p class="stat-note"></p>
+        </div>
+        <div class="div-card stat-card" id="card-views">
+          <div class="div-num">02 &mdash; YouTube</div>
+          <h3 class="stat-value" data-target="0">0</h3>
+          <p class="div-label">Total Views</p>
+          <p class="stat-note"></p>
+        </div>
+        <div class="div-card stat-card" id="card-videos">
+          <div class="div-num">03 &mdash; YouTube</div>
+          <h3 class="stat-value" data-target="0">0</h3>
+          <p class="div-label">Videos Published</p>
+          <p class="stat-note"></p>
+        </div>
+        <div class="div-card stat-card" id="card-followers">
+          <div class="div-num">04 &mdash; Instagram</div>
+          <h3 class="stat-value" data-target="0">0</h3>
+          <p class="div-label">Followers</p>
+          <p class="stat-note"></p>
+        </div>
+        <div class="div-card stat-card" id="card-posts">
+          <div class="div-num">05 &mdash; Instagram</div>
+          <h3 class="stat-value" data-target="0">0</h3>
+          <p class="div-label">Posts</p>
+          <p class="stat-note"></p>
+        </div>
+        <div class="div-card">
+          <div class="div-num">06 &mdash; Status</div>
+          <h3 class="stat-value" id="status-tile">Live</h3>
+          <p class="div-label">Connection status</p>
+          <p class="stat-note" id="status-note"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="divisions" id="principles">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="section-label">Principles</span>
+        <h2>How this works.</h2>
+      </div>
+      <div class="pillars">
+        <div class="pillar">
+          <h4>Server-side credentials</h4>
+          <p>Your API keys and tokens never reach the browser &mdash; this page only ever talks to its own backend, which holds the real secrets.</p>
+        </div>
+        <div class="pillar">
+          <h4>No cached numbers</h4>
+          <p>Every load calls the YouTube and Instagram APIs directly. What you see is what those platforms report right now.</p>
+        </div>
+        <div class="pillar">
+          <h4>Fails loud, not silent</h4>
+          <p>If a credential is missing or a call fails, you get the exact error here &mdash; not a blank card pretending everything's fine.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot-bottom">
+        <span>The Wayne Factory &middot; live channel analytics</span>
+        <span>Gotham City &middot; UTC via Europe/Tirane</span>
+      </div>
+    </div>
+  </footer>
+  </div>
 
   <script src="script.js"></script>
 </body>

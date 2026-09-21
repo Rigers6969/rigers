@@ -1,20 +1,15 @@
 // ---------------------------------------------------------------------
-// Canvas bat swarm - a real boid flocking simulation (cohesion, separation,
-// alignment), not just CSS drift. This needs the real page canvas, which
-// is exactly why this is a plain HTML/CSS/JS site instead of embedding it
-// inside a Streamlit component (those render in a sandboxed iframe that
-// can't be sized to the whole page reliably and adds real overhead for
-// something this animation-heavy).
+// Ember particle drift - a light ambient background animation (fixed
+// full-page canvas, so it needs the real DOM rather than a sandboxed
+// Streamlit component). Deliberately not a literal bat animation this
+// time - just slow-drifting gold embers behind the grid texture.
 // ---------------------------------------------------------------------
 
-const canvas = document.getElementById("bat-canvas");
+const canvas = document.getElementById("ember-canvas");
 const ctx = canvas.getContext("2d");
 
-let bats = [];
-const BAT_COUNT = 22;
-const NEIGHBOR_RADIUS = 90;
-const SEPARATION_RADIUS = 28;
-const MAX_SPEED = 1.6;
+let embers = [];
+const EMBER_COUNT = 46;
 
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -23,102 +18,46 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-function initBats() {
-  bats = [];
-  for (let i = 0; i < BAT_COUNT; i++) {
-    bats.push({
+function initEmbers() {
+  embers = [];
+  for (let i = 0; i < EMBER_COUNT; i++) {
+    embers.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * MAX_SPEED,
-      vy: (Math.random() - 0.5) * MAX_SPEED,
-      size: 14 + Math.random() * 12,
-      flapPhase: Math.random() * Math.PI * 2,
-      flapSpeed: 4 + Math.random() * 3,
+      r: 0.6 + Math.random() * 1.8,
+      speed: 0.15 + Math.random() * 0.35,
+      sway: Math.random() * Math.PI * 2,
+      swaySpeed: 0.2 + Math.random() * 0.4,
+      alpha: 0.15 + Math.random() * 0.35,
     });
   }
 }
-initBats();
+initEmbers();
 
-function limitSpeed(bat) {
-  const speed = Math.hypot(bat.vx, bat.vy);
-  if (speed > MAX_SPEED) {
-    bat.vx = (bat.vx / speed) * MAX_SPEED;
-    bat.vy = (bat.vy / speed) * MAX_SPEED;
+function stepEmbers(time) {
+  for (const e of embers) {
+    e.y -= e.speed;
+    e.x += Math.sin(time * 0.0005 * e.swaySpeed + e.sway) * 0.3;
+    if (e.y < -10) {
+      e.y = canvas.height + 10;
+      e.x = Math.random() * canvas.width;
+    }
   }
 }
 
-function stepFlock() {
-  for (const bat of bats) {
-    let cohesionX = 0, cohesionY = 0, cohesionCount = 0;
-    let alignX = 0, alignY = 0;
-    let separateX = 0, separateY = 0;
-
-    for (const other of bats) {
-      if (other === bat) continue;
-      const dx = other.x - bat.x;
-      const dy = other.y - bat.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < NEIGHBOR_RADIUS) {
-        cohesionX += other.x;
-        cohesionY += other.y;
-        cohesionCount++;
-        alignX += other.vx;
-        alignY += other.vy;
-      }
-      if (dist < SEPARATION_RADIUS && dist > 0) {
-        separateX -= dx / dist;
-        separateY -= dy / dist;
-      }
-    }
-
-    if (cohesionCount > 0) {
-      cohesionX = cohesionX / cohesionCount - bat.x;
-      cohesionY = cohesionY / cohesionCount - bat.y;
-      bat.vx += cohesionX * 0.0006;
-      bat.vy += cohesionY * 0.0006;
-      bat.vx += (alignX / cohesionCount - bat.vx) * 0.02;
-      bat.vy += (alignY / cohesionCount - bat.vy) * 0.02;
-    }
-    bat.vx += separateX * 0.03;
-    bat.vy += separateY * 0.03;
-
-    // Gentle wander so the flock doesn't freeze into a static formation.
-    bat.vx += (Math.random() - 0.5) * 0.04;
-    bat.vy += (Math.random() - 0.5) * 0.04;
-
-    limitSpeed(bat);
-    bat.x += bat.vx;
-    bat.y += bat.vy;
-
-    // Wrap around edges.
-    if (bat.x < -30) bat.x = canvas.width + 30;
-    if (bat.x > canvas.width + 30) bat.x = -30;
-    if (bat.y < -30) bat.y = canvas.height + 30;
-    if (bat.y > canvas.height + 30) bat.y = -30;
-  }
-}
-
-function drawBats(time) {
+function drawEmbers() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const bat of bats) {
-    const angle = Math.atan2(bat.vy, bat.vx);
-    const flap = 1 + 0.25 * Math.sin(time * 0.001 * bat.flapSpeed + bat.flapPhase);
-    ctx.save();
-    ctx.translate(bat.x, bat.y);
-    ctx.rotate(angle);
-    ctx.scale(1, flap);
-    ctx.globalAlpha = 0.35;
-    ctx.font = `${bat.size}px sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("\u{1F987}", 0, 0);
-    ctx.restore();
+  for (const e of embers) {
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(201, 162, 75, ${e.alpha})`;
+    ctx.fill();
   }
 }
 
 function animate(time) {
-  stepFlock();
-  drawBats(time);
+  stepEmbers(time);
+  drawEmbers();
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
@@ -135,19 +74,26 @@ function tickClock() {
   const timeStr = new Intl.DateTimeFormat("en-GB", {
     timeZone: TIMEZONE, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
   }).format(now);
+  const dateStr = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIMEZONE, weekday: "long", day: "numeric", month: "long",
+  }).format(now);
   const hour = parseInt(
     new Intl.DateTimeFormat("en-GB", { timeZone: TIMEZONE, hour: "numeric", hour12: false }).format(now),
     10
   );
 
   let greeting;
-  if (hour < 5) greeting = `Good Night, ${APP_NAME}`;
-  else if (hour < 12) greeting = `Good Morning, ${APP_NAME}`;
-  else if (hour < 18) greeting = `Good Afternoon, ${APP_NAME}`;
-  else greeting = `Good Evening, ${APP_NAME}`;
+  if (hour < 5) greeting = "Good Night";
+  else if (hour < 12) greeting = "Good Morning";
+  else if (hour < 18) greeting = "Good Afternoon";
+  else greeting = "Good Evening";
 
-  document.getElementById("greeting").innerText = greeting;
-  document.getElementById("splash-clock").innerText = timeStr;
+  document.getElementById("greeting").innerHTML = `${greeting}, <em>${APP_NAME}</em>.`;
+  document.getElementById("eyebrow").innerText = `Gotham City · ${dateStr}`;
+  document.getElementById("gate-greeting").innerHTML = `${greeting}, <em>${APP_NAME}</em>.`;
+  document.getElementById("gate-eyebrow").innerText = `Gotham City · ${dateStr}`;
+  document.getElementById("gate-clock").innerText = timeStr;
+  document.getElementById("corner-clock").innerText = timeStr;
   const headerClock = document.getElementById("header-clock");
   if (headerClock) headerClock.innerText = timeStr;
 }
@@ -155,13 +101,15 @@ tickClock();
 setInterval(tickClock, 1000);
 
 // ---------------------------------------------------------------------
-// Splash gate
+// Entry gate - shows the time-aware greeting full-screen first, then
+// reveals the dashboard. Stats are fetched in the background while the
+// gate is up, so real numbers are already animating in the moment it's
+// dismissed instead of the user waiting on a spinner.
 // ---------------------------------------------------------------------
 
 document.getElementById("enter-btn").addEventListener("click", () => {
-  document.getElementById("splash").classList.add("hidden");
-  document.getElementById("main").classList.remove("hidden");
-  loadStats();
+  document.getElementById("gate").classList.add("gate-hidden");
+  document.getElementById("site").classList.remove("hidden");
 });
 
 // ---------------------------------------------------------------------
@@ -194,6 +142,15 @@ function setCard(cardId, value, note) {
   }
 }
 
+function setTicker(elId, value) {
+  const el = document.getElementById(elId);
+  if (value === null || value === undefined) {
+    el.innerText = "—";
+  } else {
+    animateValue(el, value);
+  }
+}
+
 async function loadStats() {
   const errorsEl = document.getElementById("errors");
   errorsEl.innerHTML = "";
@@ -209,16 +166,38 @@ async function loadStats() {
       );
       setCard("card-views", data.youtube.view_count, "");
       setCard("card-videos", data.youtube.video_count, "");
+      setTicker("ticker-subs", data.youtube.subscriber_count_hidden ? null : data.youtube.subscriber_count);
+      setTicker("ticker-views", data.youtube.view_count);
     }
     if (data.instagram) {
       setCard("card-followers", data.instagram.followers_count, `@${data.instagram.username}`);
       setCard("card-posts", data.instagram.media_count, "");
+      setTicker("ticker-followers", data.instagram.followers_count);
     }
+
+    document.getElementById("ticker-updated").innerText = new Intl.DateTimeFormat("en-GB", {
+      timeZone: TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false,
+    }).format(new Date());
+
     for (const err of data.errors || []) {
       const div = document.createElement("div");
       div.className = "error-line";
       div.innerText = err;
       errorsEl.appendChild(div);
+    }
+
+    const statusTile = document.getElementById("status-tile");
+    const statusNote = document.getElementById("status-note");
+    const connected = [data.youtube ? "YouTube" : null, data.instagram ? "Instagram" : null].filter(Boolean);
+    if (connected.length === 0) {
+      statusTile.innerText = "Not configured";
+      statusNote.innerText = "add credentials to config.json";
+    } else if ((data.errors || []).length > 0) {
+      statusTile.innerText = "Partial";
+      statusNote.innerText = `${connected.join(" + ")} connected`;
+    } else {
+      statusTile.innerText = "Live";
+      statusNote.innerText = `${connected.join(" + ")} connected`;
     }
   } catch (exc) {
     const div = document.createElement("div");
@@ -229,3 +208,5 @@ async function loadStats() {
 }
 
 document.getElementById("refresh-btn").addEventListener("click", loadStats);
+document.getElementById("hero-refresh-btn").addEventListener("click", loadStats);
+loadStats();
