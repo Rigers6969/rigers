@@ -23,8 +23,6 @@ from typing import Callable, Optional
 
 import streamlit as st
 
-from shotsource.streamlit_ui import render_media_finder_tab
-
 APP_DIR = Path(__file__).resolve().parent
 VOICEOVER_OUTPUT_DIR = APP_DIR / "voiceover_output"
 
@@ -386,6 +384,12 @@ def render_voiceover_tab():
 
 
 def main():
+    # Imported here rather than at module level so anything that only needs
+    # this file's script-writer/TTS classes (e.g. the web dashboard's studio
+    # API) doesn't have to pull in shotsource's heavier dependencies
+    # (opencv, sentence-transformers) just to import this module.
+    from shotsource.streamlit_ui import render_media_finder_tab
+
     st.set_page_config(page_title="Content Studio", page_icon=":clapper:", layout="wide")
 
     st.title("Content Studio")
