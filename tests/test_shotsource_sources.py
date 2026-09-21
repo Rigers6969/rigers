@@ -1,6 +1,5 @@
 """Tests for each source's JSON-parsing logic, using canned API responses
-instead of real network calls - same pattern as tests/test_branding.py's
-ScriptedBrandGenerator."""
+instead of real network calls."""
 import sys
 import unittest
 from pathlib import Path

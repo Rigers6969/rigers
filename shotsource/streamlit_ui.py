@@ -1,6 +1,6 @@
-"""Streamlit UI for the media finder, factored out of any single app so it
-can be embedded as a tab inside studio.py (the combined dashboard) without
-shot_media_cli.py (the plain CLI) needing streamlit at all.
+"""Streamlit UI for the media finder, embedded as a tab inside studio.py
+(the combined dashboard). Kept separate from pipeline.py so the plain CLI
+(python -m shotsource.cli) doesn't need streamlit installed at all.
 """
 from __future__ import annotations
 

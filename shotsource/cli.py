@@ -1,4 +1,4 @@
-"""Command-line entry point: `python shot_media_cli.py run shots.json [...]`"""
+"""Command-line entry point: `python -m shotsource.cli run shots.json [...]`"""
 from __future__ import annotations
 
 import argparse

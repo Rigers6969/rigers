@@ -26,8 +26,19 @@ Commons, Library of Congress, archive.org) need no key at all.
 
 ## Run
 
+There's no separate CLI - use the **Media Finder** tab in `studio.py`:
+
 ```bash
-python shot_media_cli.py run shotsource/example_shots.json --output ./shot_media_output
+streamlit run studio.py --server.port 8505
+```
+
+Paste your shot list (one description per line) into the text box and
+click "Find media". If you're scripting this instead, call the pipeline
+directly:
+
+```python
+from shotsource.pipeline import run_pipeline
+run_pipeline("shotsource/example_shots.json", output_dir_override="./shot_media_output")
 ```
 
 Shot list input is either:
@@ -41,15 +52,11 @@ Output:
 
 ## Config
 
-Copy `shotsource/config.default.yaml`, edit the copy, and pass it with `--config`:
-
-```bash
-python shot_media_cli.py run shots.json --config my_config.yaml
-```
-
-Only the keys you include override the packaged defaults; everything else
-keeps its default. See the comments in `config.default.yaml` for what each
-threshold and weight does.
+Copy `shotsource/config.default.yaml`, edit the copy, and pass its path in
+the Media Finder tab's "Config YAML" field (or as `config_path` to
+`run_pipeline`). Only the keys you include override the packaged
+defaults; everything else keeps its default. See the comments in
+`config.default.yaml` for what each threshold and weight does.
 
 ## How scoring works
 

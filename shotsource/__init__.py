@@ -6,8 +6,9 @@ back through a quality filter (resolution, sharpness, caption match, hard
 rejects for size/aspect-ratio/watermarks/duplicates), and writes the top N
 survivors per shot to disk plus a CSV manifest with licensing info.
 
-Entry point: shotsource.cli.main() (also runnable as
-`python shot_media_cli.py run <shots file>` from the repo root).
+Used via the Media Finder tab in studio.py (studio.py imports
+shotsource.streamlit_ui.render_media_finder_tab). It's also runnable as a
+plain CLI: `python -m shotsource.cli run <shots file>`.
 """
 from pathlib import Path
 
