@@ -34,12 +34,14 @@ from pathlib import Path
 from flask import Flask, jsonify, send_from_directory
 
 from analytics import StatsFetchError, fetch_instagram_stats, fetch_youtube_stats
+from video_api import bp as video_bp
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
 CONFIG_PATH = APP_DIR / "config.json"
 
 app = Flask(__name__, static_folder=None)
+app.register_blueprint(video_bp)
 
 
 def load_config() -> dict:
@@ -130,4 +132,6 @@ def api_stats():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    # threaded=True so a slow pipeline run (media search, whisper transcription)
+    # doesn't block the stats dashboard from loading in another tab.
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Pipeline &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/videos.html">Videos</a>
+      </div>
+      <div class="nav-right">
+        <div id="header-clock" class="nav-clock"></div>
+      </div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">Production</span>
+      <h1>Video Pipeline</h1>
+      <p>Script &rarr; stock media &rarr; voiceover timing &rarr; edit plan &rarr; metadata. Each stage reads and writes one <code>project.json</code>, so anything here can also be run from the terminal in <code>files/</code>.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="panel">
+      <h3>New Project</h3>
+      <div class="form-row">
+        <input id="new-slug" placeholder="slug (e.g. cults)" autocomplete="off">
+        <input id="new-channel" placeholder="Channel name" autocomplete="off">
+        <input id="new-title" placeholder="Video title" autocomplete="off">
+        <button id="create-btn" class="btn-primary">Create</button>
+      </div>
+      <div id="create-error" class="error-line hidden"></div>
+    </div>
+
+    <div id="project-list" class="videos-grid"></div>
+
+    <div id="detail" class="panel hidden">
+      <div class="detail-head">
+        <h3 id="detail-title"></h3>
+        <span id="detail-channel" class="detail-channel"></span>
+      </div>
+
+      <div id="stage-row" class="stage-row"></div>
+
+      <div class="detail-cols">
+        <div class="detail-col">
+          <h4>Script <span class="hint">(numbered <code>*italic*</code> lines become shots)</span></h4>
+          <textarea id="script-editor" rows="12" spellcheck="false"></textarea>
+          <button id="save-script-btn" class="btn-ghost">Save Script</button>
+          <span id="script-save-status" class="save-status"></span>
+        </div>
+
+        <div class="detail-col">
+          <h4>Voiceover</h4>
+          <p class="hint">Record yourself reading the script, then upload it here as <code>vo.wav</code>.</p>
+          <input type="file" id="audio-file" accept="audio/*">
+          <button id="upload-audio-btn" class="btn-ghost">Upload Voiceover</button>
+          <span id="audio-status" class="save-status"></span>
+
+          <h4 style="margin-top:28px;">Run Pipeline</h4>
+          <button id="run-all-btn" class="btn-primary">Run All Remaining Stages</button>
+          <pre id="run-log" class="run-log"></pre>
+        </div>
+      </div>
+
+      <div id="results" class="results"></div>
+    </div>
+  </section>
+
+  <script src="videos.js"></script>
+</body>
+</html>
