@@ -17,3 +17,8 @@ files/.cache/
 client_secret.json
 token.json
 token_analytics.json
+
+# forex_bot runtime files
+forex_bot/state.json
+forex_bot/journal.csv
+forex_bot/STOP

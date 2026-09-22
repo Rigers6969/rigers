@@ -10,3 +10,6 @@ google-auth-httplib2
 flask
 edge-tts
 python-dotenv
+pandas
+numpy
+scikit-learn
