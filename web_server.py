@@ -33,7 +33,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, send_from_directory
 
-from analytics import StatsFetchError, fetch_instagram_stats, fetch_youtube_stats
+from analytics import StatsFetchError, fetch_instagram_stats, fetch_youtube_revenue, fetch_youtube_stats
 from video_api import bp as video_bp
 from studio_api import bp as studio_bp
 
@@ -131,6 +131,25 @@ def api_stats():
         result["errors"].append("Instagram not configured: set IG_USER_ID and IG_ACCESS_TOKEN in config.json")
 
     return jsonify(result)
+
+
+REVENUE_GOAL = 10000.0
+
+
+@app.route("/api/revenue")
+def api_revenue():
+    try:
+        data = fetch_youtube_revenue()
+        return jsonify({
+            "goal": REVENUE_GOAL,
+            "current": data["total_revenue"],
+            "currency": data.get("currency", "USD"),
+            "note": data.get("note"),
+        })
+    except StatsFetchError as exc:
+        # Not connected yet (no token_analytics.json) - $0 is the honest
+        # number until the one-time login in youtube_auth_setup.py is done.
+        return jsonify({"goal": REVENUE_GOAL, "current": 0.0, "currency": "USD", "note": str(exc)})
 
 
 if __name__ == "__main__":

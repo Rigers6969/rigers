@@ -110,6 +110,36 @@ nav{
 .nav-cta:hover{ background:var(--gold); color:#0a0c10; }
 @media (max-width:860px){ .navlinks{ display:none; } }
 
+/* goal banner */
+.goal-banner{
+  position:relative; z-index:1; padding-top:120px; padding-bottom:36px;
+  background:linear-gradient(180deg, #0c0e13 0%, #0a0c10 100%);
+  border-bottom:1px solid var(--border);
+  text-align:center;
+}
+.goal-banner .section-label{ display:block; margin-bottom:14px; }
+.goal-numbers{
+  display:flex; align-items:baseline; justify-content:center; gap:14px; flex-wrap:wrap;
+  margin-bottom:22px;
+}
+.goal-current{
+  font-family:'Playfair Display', serif; font-weight:700; font-size:clamp(40px,7vw,64px);
+  color:var(--gold);
+}
+.goal-sep{ font-size:15px; color:var(--text-dim); letter-spacing:1px; text-transform:uppercase; }
+.goal-target{ font-family:'Playfair Display', serif; font-size:22px; color:var(--text-dim); }
+.goal-bar-track{
+  max-width:640px; margin:0 auto; height:10px; border-radius:6px;
+  background:var(--panel); border:1px solid var(--border); overflow:hidden;
+}
+.goal-bar-fill{
+  height:100%; width:0%; border-radius:6px;
+  background:linear-gradient(90deg, #8a6a26, var(--gold));
+  box-shadow:0 0 16px rgba(201,162,75,0.5);
+  transition:width 1.4s cubic-bezier(.22,1,.36,1);
+}
+.goal-note{ margin-top:14px; font-size:12.5px; color:var(--text-dim); max-width:520px; margin-left:auto; margin-right:auto; }
+
 /* hero */
 .hero{
   position:relative; min-height:100vh; display:flex; align-items:center;

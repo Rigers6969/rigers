@@ -210,3 +210,32 @@ async function loadStats() {
 document.getElementById("refresh-btn").addEventListener("click", loadStats);
 document.getElementById("hero-refresh-btn").addEventListener("click", loadStats);
 loadStats();
+
+// ---------------------------------------------------------------------
+// Revenue goal bar - real lifetime YouTube ad revenue vs. a $10,000 goal
+// (see analytics.py's fetch_youtube_revenue / youtube_auth_setup.py).
+// This is the first thing shown once the dashboard loads, per request.
+// ---------------------------------------------------------------------
+
+async function loadRevenue() {
+  try {
+    const resp = await fetch("/api/revenue");
+    const data = await resp.json();
+
+    const goal = data.goal || 10000;
+    const current = data.current || 0;
+    const pct = Math.max(0, Math.min(100, (current / goal) * 100));
+
+    document.getElementById("goal-target").innerText = Math.round(goal).toLocaleString();
+    animateValue(document.getElementById("goal-current"), Math.round(current));
+    document.getElementById("goal-bar-fill").style.width = pct + "%";
+
+    const noteEl = document.getElementById("goal-note");
+    noteEl.innerText = data.note || "";
+  } catch (exc) {
+    document.getElementById("goal-note").innerText = "Could not reach the backend: " + exc;
+  }
+}
+loadRevenue();
+document.getElementById("refresh-btn").addEventListener("click", loadRevenue);
+document.getElementById("hero-refresh-btn").addEventListener("click", loadRevenue);

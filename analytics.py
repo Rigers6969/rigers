@@ -13,13 +13,31 @@ Instagram (Graph API - requires a Business/Creator account linked to a
 Facebook Page, same setup as publishing.py's post_to_instagram):
     Reuse the same access token and Instagram Business Account ID you
     already set up there.
+
+YouTube ad revenue (Analytics API, OAuth required - a plain API key
+cannot read this, only public statistics):
+    1. In the same Google Cloud project, enable the "YouTube Analytics API".
+    2. Create an OAuth 2.0 Client ID of type "Desktop app" (Credentials >
+       Create Credentials > OAuth client ID), download it as
+       client_secret.json in this folder.
+    3. Run `python youtube_auth_setup.py` once - it opens your browser to
+       log in and approve access, then saves token_analytics.json so every
+       later read is automatic (no browser, no re-login).
+    Revenue is only ever non-zero once the channel is accepted into the
+    YouTube Partner Program (1,000 subscribers + 4,000 public watch hours,
+    or the Shorts equivalent) - before that this correctly returns $0,
+    which is the real number, not a placeholder.
 """
 from __future__ import annotations
+
+from datetime import date
+from pathlib import Path
 
 import requests
 
 YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 GRAPH_API_VERSION = "v21.0"
+REVENUE_SCOPES = ["https://www.googleapis.com/auth/yt-analytics-monetary.readonly"]
 
 
 class StatsFetchError(RuntimeError):
@@ -86,3 +104,54 @@ def fetch_instagram_stats(ig_user_id: str, access_token: str) -> dict:
         "followers_count": int(data.get("followers_count", 0)),
         "media_count": int(data.get("media_count", 0)),
     }
+
+
+def fetch_youtube_revenue(
+    client_secret_path: str = "client_secret.json", token_path: str = "token_analytics.json"
+) -> dict:
+    """Returns {total_revenue, currency} of lifetime estimated YouTube ad
+    revenue for the logged-in channel, via the YouTube Analytics API's
+    monetary scope. Requires a one-time login - see this module's
+    docstring or run `python youtube_auth_setup.py`."""
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    token_file = Path(token_path)
+    if not token_file.exists():
+        raise StatsFetchError(
+            f"YouTube revenue isn't connected yet - run `python youtube_auth_setup.py` once to log in "
+            f"(needs {client_secret_path} from Google Cloud Console; see analytics.py's docstring)."
+        )
+
+    creds = Credentials.from_authorized_user_file(str(token_file), REVENUE_SCOPES)
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            token_file.write_text(creds.to_json())
+        else:
+            raise StatsFetchError(
+                "Your saved YouTube login has expired or been revoked - run `python youtube_auth_setup.py` again."
+            )
+
+    yt_analytics = build("youtubeAnalytics", "v2", credentials=creds)
+    try:
+        response = (
+            yt_analytics.reports()
+            .query(
+                ids="channel==MINE",
+                startDate="2005-02-01",  # YouTube's own founding date - covers the channel's whole lifetime
+                endDate=date.today().isoformat(),
+                metrics="estimatedRevenue",
+            )
+            .execute()
+        )
+    except Exception as exc:
+        # A channel that isn't in the Partner Program yet (or has zero
+        # revenue) is a normal, expected state, not a real error - report
+        # it as $0 with a note rather than failing the whole dashboard.
+        return {"total_revenue": 0.0, "currency": "USD", "note": f"No revenue data available yet ({exc})"}
+
+    rows = response.get("rows") or []
+    total = rows[0][0] if rows and rows[0] else 0.0
+    return {"total_revenue": float(total), "currency": response.get("currency", "USD")}

@@ -13,3 +13,6 @@ shot_media_output/
 voiceover_output/
 files/videos/
 files/.cache/
+client_secret.json
+token.json
+token_analytics.json
