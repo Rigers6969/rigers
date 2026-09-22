@@ -150,12 +150,24 @@ def produce_video(
     writer,
     voice: str = "en-GB-RyanNeural",
     target_words: int = 1500,
+    style_slug: Optional[str] = None,
     progress: Optional[ProgressCB] = None,
 ) -> dict:
     """Runs the whole chain and writes everything to content/<slug>/.
-    Returns a summary dict the API layer can hand back to the frontend."""
+    Returns a summary dict the API layer can hand back to the frontend.
+
+    style_slug, if given, names a profile saved under content/_styles/ by
+    style_analyzer.py - its measured pacing (from a real reference video)
+    is used for the final assembly step instead of a flat, uniform cut
+    rhythm."""
     if voice not in UK_MALE_VOICES.values():
         voice = "en-GB-RyanNeural"
+
+    style = None
+    if style_slug:
+        style_path = CONTENT_ROOT / "_styles" / f"{style_slug}.json"
+        if style_path.exists():
+            style = json.loads(style_path.read_text(encoding="utf-8"))
 
     def report(msg: str) -> None:
         if progress:
@@ -205,7 +217,7 @@ def produce_video(
         try:
             from video_assembler import AssemblyError, assemble_video
 
-            assemble_video(video_dir, progress=lambda m: report(f"Video: {m}"))
+            assemble_video(video_dir, progress=lambda m: report(f"Video: {m}"), style=style)
         except Exception as exc:
             # Script/voiceover/metadata are still real, useful output even if
             # assembly fails (e.g. ffmpeg missing) - don't fail the whole run.

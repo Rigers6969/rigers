@@ -30,6 +30,7 @@ def produce():
     channel = str(data.get("channel", "")).strip() or "Paper Trail"
     voice = str(data.get("voice", "en-GB-RyanNeural"))
     target_words = int(data.get("target_words", 1500))
+    style_slug = (str(data.get("style_slug", "")).strip() or None)
 
     if not topic:
         return jsonify({"error": "topic is required."}), 400
@@ -43,7 +44,7 @@ def produce():
 
         return produce_video(
             topic, channel, writer, voice=voice, target_words=target_words,
-            progress=lambda m: set_progress(job_id, m),
+            style_slug=style_slug, progress=lambda m: set_progress(job_id, m),
         )
 
     job_id = start_job(task)
@@ -149,12 +150,60 @@ def assemble(slug):
     if video_dir is None or not video_dir.exists():
         return jsonify({"error": f"No such video: {slug}"}), 404
 
+    data = request.get_json(silent=True) or {}
+    style_slug = (str(data.get("style_slug", "")).strip() or None)
+    style = None
+    if style_slug:
+        style_path = CONTENT_ROOT / "_styles" / f"{style_slug}.json"
+        if style_path.exists():
+            style = json.loads(style_path.read_text(encoding="utf-8"))
+
     def task(job_id):
         from jobs import set_progress
         from video_assembler import assemble_video
 
-        assemble_video(video_dir, progress=lambda m: set_progress(job_id, m))
+        assemble_video(video_dir, progress=lambda m: set_progress(job_id, m), style=style)
         return {"video_url": f"/api/auto/videos/{slug}/video"}
+
+    job_id = start_job(task)
+    return jsonify({"job_id": job_id}), 202
+
+
+@bp.route("/api/style/profiles")
+def list_style_profiles():
+    styles_dir = CONTENT_ROOT / "_styles"
+    if not styles_dir.exists():
+        return jsonify({"profiles": []})
+    profiles = []
+    for path in sorted(styles_dir.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        profiles.append({
+            "slug": data.get("slug", path.stem),
+            "source_title": data.get("source_title", path.stem),
+            "avg_shot_seconds": data.get("avg_shot_seconds"),
+        })
+    return jsonify({"profiles": profiles})
+
+
+@bp.route("/api/style/analyze", methods=["POST"])
+def analyze_style():
+    data = request.get_json(silent=True) or {}
+    url = str(data.get("url", "")).strip()
+    api_key = str(data.get("anthropic_key", "")).strip()
+
+    if not url:
+        return jsonify({"error": "url is required."}), 400
+    if not api_key:
+        return jsonify({"error": "anthropic_key is required (used once, for the vision analysis step)."}), 400
+
+    def task(job_id):
+        from jobs import set_progress
+        from style_analyzer import build_style_profile
+
+        return build_style_profile(url, api_key, progress=lambda m: set_progress(job_id, m))
 
     job_id = start_job(task)
     return jsonify({"job_id": job_id}), 202

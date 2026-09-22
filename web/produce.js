@@ -54,6 +54,60 @@ async function loadVoices() {
 loadVoices();
 
 // ---------------------------------------------------------------------
+// Style profiles
+// ---------------------------------------------------------------------
+async function loadStyleProfiles() {
+  const resp = await fetch("/api/style/profiles");
+  const data = await resp.json();
+  const select = document.getElementById("style-select");
+  const current = select.value;
+  select.innerHTML = '<option value="">No style profile (default even pacing)</option>' +
+    (data.profiles || []).map((p) =>
+      `<option value="${p.slug}">${escapeHtml(p.source_title)} (~${p.avg_shot_seconds}s/shot)</option>`
+    ).join("");
+  select.value = current;
+}
+loadStyleProfiles();
+
+document.getElementById("analyze-style-btn").addEventListener("click", async () => {
+  const url = document.getElementById("style-url").value.trim();
+  const anthropic_key = document.getElementById("style-key").value.trim();
+  const progressEl = document.getElementById("style-progress");
+  const btn = document.getElementById("analyze-style-btn");
+
+  if (!url) { progressEl.innerText = "Paste a video URL first."; return; }
+  if (!anthropic_key) { progressEl.innerText = "An Anthropic API key is needed for this step."; return; }
+
+  btn.disabled = true;
+  progressEl.innerText = "Starting...";
+
+  const resp = await fetch("/api/style/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, anthropic_key }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    progressEl.innerText = data.error || "Failed to start.";
+    btn.disabled = false;
+    return;
+  }
+
+  pollJob(data.job_id, {
+    onProgress: (msg) => { progressEl.innerText = msg; },
+    onDone: (profile) => {
+      progressEl.innerText = `Done - measured ~${profile.avg_shot_seconds}s per shot from "${profile.source_title}".`;
+      btn.disabled = false;
+      loadStyleProfiles();
+    },
+    onError: (err) => {
+      progressEl.innerText = "Error: " + err;
+      btn.disabled = false;
+    },
+  });
+});
+
+// ---------------------------------------------------------------------
 // Produce
 // ---------------------------------------------------------------------
 document.getElementById("produce-btn").addEventListener("click", async () => {
@@ -64,6 +118,7 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
   const voice = document.getElementById("voice-select").value;
   const ollama_host = document.getElementById("ollama-host").value.trim();
   const anthropic_key = document.getElementById("anthropic-key").value.trim();
+  const style_slug = document.getElementById("style-select").value;
 
   const progressEl = document.getElementById("produce-progress");
   const resultEl = document.getElementById("produce-result");
@@ -78,7 +133,7 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
   const resp = await fetch("/api/auto/produce", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, channel, engine, target_words, voice, ollama_host, anthropic_key }),
+    body: JSON.stringify({ topic, channel, engine, target_words, voice, ollama_host, anthropic_key, style_slug }),
   });
   const data = await resp.json();
   if (!resp.ok) {

@@ -117,10 +117,33 @@ def _make_ken_burns_segment(image_path: Path, duration: float, out_path: Path, r
     )
 
 
-def assemble_video(video_dir: Path, progress: Optional[ProgressCB] = None) -> Path:
+def _dynamic_durations(n: int, avg_seconds: float, short_range: tuple[float, float]) -> list[float]:
+    """Varies segment length around avg_seconds instead of a flat identical
+    duration per segment - a repeating short/long/medium pattern that
+    mimics the mixed quick-cut/held-shot rhythm a style profile measured,
+    rather than every segment being exactly the same length."""
+    lo, hi = short_range
+    lo, hi = max(MIN_SHOT_SECONDS, lo), max(MIN_SHOT_SECONDS, hi)
+    multipliers = [0.6, 1.3, 0.9, 1.1, 0.7]
+    raw = [max(lo, min(hi, avg_seconds * multipliers[i % len(multipliers)])) for i in range(n)]
+    # Rescale so the segments still sum to n * avg_seconds exactly (the
+    # caller uses that as the target total), preserving the relative shape.
+    scale = (n * avg_seconds) / sum(raw)
+    return [d * scale for d in raw]
+
+
+def assemble_video(
+    video_dir: Path, progress: Optional[ProgressCB] = None, style: Optional[dict] = None
+) -> Path:
     """Builds video_dir/final.mp4 from video_dir/voiceover.mp3 and the best
     image per shot in video_dir/media/manifest.csv. Raises AssemblyError
-    with a clear reason if either input is missing or ffmpeg fails."""
+    with a clear reason if either input is missing or ffmpeg fails.
+
+    `style` is an optional profile from style_analyzer.py (measured pacing
+    from a reference video) - when given, segment durations vary around
+    its avg_shot_seconds instead of every shot getting an identical flat
+    share of the runtime, and its avg_shot_seconds substitutes for
+    MAX_SHOT_SECONDS as the per-image cap."""
     def report(msg: str) -> None:
         if progress:
             progress(msg)
@@ -143,17 +166,28 @@ def assemble_video(video_dir: Path, progress: Optional[ProgressCB] = None) -> Pa
     n_found = len(shots)
     natural_per_image = total_duration / n_found
 
-    if natural_per_image <= MAX_SHOT_SECONDS:
-        # Enough images that each can just get its natural, even share of
-        # the runtime - the common case with decent media coverage.
-        segments = [(image_path, natural_per_image, False) for _, image_path in shots]
+    max_shot_seconds = MAX_SHOT_SECONDS
+    if style and style.get("avg_shot_seconds"):
+        # A reference style's pacing is a target cap, not a hard rule - it
+        # only kicks in when it's actually tighter than our own default.
+        max_shot_seconds = min(MAX_SHOT_SECONDS, style["avg_shot_seconds"] * 1.5)
+
+    if natural_per_image <= max_shot_seconds:
+        if style and style.get("avg_shot_seconds"):
+            short_range = tuple(style.get("shot_length_range") or (max_shot_seconds * 0.5, max_shot_seconds * 1.3))
+            durations = _dynamic_durations(n_found, natural_per_image, short_range)
+            segments = [(image_path, durations[i], False) for i, (_, image_path) in enumerate(shots)]
+        else:
+            # Enough images that each can just get its natural, even share
+            # of the runtime - the common case with decent media coverage.
+            segments = [(image_path, natural_per_image, False) for _, image_path in shots]
     else:
         # Too few images for the runtime (e.g. 1 image for a 12-minute
         # video) - holding one static photo for minutes looks broken, so
         # cap every segment at MAX_SHOT_SECONDS and cycle through the
         # images that were found, alternating zoom-in/zoom-out on repeats
         # so it doesn't look like the exact same clip pasted back to back.
-        n_segments = max(n_found, math.ceil(total_duration / MAX_SHOT_SECONDS))
+        n_segments = max(n_found, math.ceil(total_duration / max_shot_seconds))
         seg_duration = total_duration / n_segments
         report(
             f"Only {n_found} image(s) found for a {total_duration:.0f}s video - "
