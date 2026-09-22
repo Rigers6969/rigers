@@ -27,10 +27,25 @@ CONTENT_ROOT = APP_DIR / "content"
 
 ProgressCB = Callable[[str], None]
 
-SHOTLIST_PROMPT = """You are a video editor. Read this narration script and produce a shot list of visual B-roll descriptions suitable for stock photo/video search, roughly one every 20-25 seconds of spoken narration (assume ~150 spoken words per minute).
+SHOTLIST_PROMPT = """You are a video editor picking stock photos for a documentary. Read this narration script and produce a shot list - one entry roughly every 20-25 seconds of spoken narration (assume ~150 spoken words per minute).
 
 Script:
 {script}
+
+Each entry must describe something a camera could literally photograph - a physical object, place, person's generic appearance, action, or setting. Stock photo libraries are searched with these exact words, so an entry that isn't a concrete visual scene will return zero results.
+
+NEVER write:
+- Abstract ideas or analysis ("lack of transparency", "investors ignore red flags", "regulatory failure")
+- Named real people ("Markus Braun and Oliver Bussmann") - stock libraries won't have them; describe their generic role instead
+- Narrative summary or cause-and-effect statements ("meteoric rise fuels investor confidence")
+
+ALWAYS write concrete, literally-photographable scenes, e.g.:
+- "stack of financial documents on a desk"
+- "empty corporate boardroom with glass walls"
+- "businessman signing paperwork close up"
+- "German flag outside a modern office building"
+- "stock market ticker screen with red numbers"
+- "auditor reviewing spreadsheets with a magnifying glass"
 
 Respond with ONLY a JSON array of short visual descriptions (strings), each 4-10 words, in the same order the script flows. No other text, no markdown fences.
 """
