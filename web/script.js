@@ -67,7 +67,7 @@ requestAnimationFrame(animate);
 // ---------------------------------------------------------------------
 
 const TIMEZONE = "Europe/Tirane";
-const APP_NAME = "Bruce";
+const APP_NAME = "Rigers";
 
 function tickClock() {
   const now = new Date();
