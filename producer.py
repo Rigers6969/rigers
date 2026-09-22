@@ -196,14 +196,16 @@ def produce_video(
     audio_path = video_dir / "voiceover.mp3"
     synthesize_speech(script, voice, audio_path, progress=lambda m: report(f"Voiceover: {m}"))
 
-    report("Searching stock media for every shot - this can take a while...")
+    report(f"Searching stock media for {len(shots)} shot(s) - this can take a while...")
     from shotsource.pipeline import run_pipeline
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
         f.write("\n".join(shots))
         shots_path = f.name
     try:
-        manifest_path = run_pipeline(shots_path, output_dir_override=str(media_dir))
+        manifest_path = run_pipeline(
+            shots_path, output_dir_override=str(media_dir), progress=lambda m: report(f"Media: {m}")
+        )
     finally:
         Path(shots_path).unlink(missing_ok=True)
 

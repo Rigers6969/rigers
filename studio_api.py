@@ -137,8 +137,10 @@ def find_media():
             f.write(shots_text)
             shots_path = f.name
         try:
-            set_progress(job_id, "Querying sources and quality-filtering results - this can take a while...")
-            manifest_path = run_pipeline(shots_path, output_dir_override=str(MEDIA_OUTPUT_DIR))
+            manifest_path = run_pipeline(
+                shots_path, output_dir_override=str(MEDIA_OUTPUT_DIR),
+                progress=lambda m: set_progress(job_id, m),
+            )
         finally:
             Path(shots_path).unlink(missing_ok=True)
 

@@ -10,7 +10,7 @@ import logging
 import re
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from .cache import CachedSession, DiskCache, RateLimiter
 from .config import Config, load_config
@@ -200,7 +200,21 @@ def run_shot(
     return rows
 
 
-def run_pipeline(shots_path: str, config_path: Optional[str] = None, output_dir_override: Optional[str] = None) -> Path:
+def run_pipeline(
+    shots_path: str,
+    config_path: Optional[str] = None,
+    output_dir_override: Optional[str] = None,
+    progress: Optional[Callable[[str], None]] = None,
+) -> Path:
+    """progress, if given, is called once per shot (not per source/candidate -
+    that would be too chatty) so a caller running this as a long background
+    job can show real movement instead of one static "searching..." message
+    for the whole run, which otherwise looks identical whether it's working
+    normally or actually stuck."""
+    def report(msg: str) -> None:
+        if progress:
+            progress(msg)
+
     config = load_config(config_path)
     output_dir = Path(output_dir_override or config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -215,11 +229,13 @@ def run_pipeline(shots_path: str, config_path: Optional[str] = None, output_dir_
 
     all_rows: List[dict] = []
     with RejectionLog(output_dir / "rejections.csv") as reject_log:
-        for shot in shots:
+        for i, shot in enumerate(shots, start=1):
+            report(f"Shot {i}/{len(shots)}: searching for \"{shot.description[:60]}\"...")
             logger.info("Processing shot %s: %s", shot.id, shot.description)
             rows = run_shot(shot, sources, similarity, config, output_dir, reject_log)
             all_rows.extend(rows)
             logger.info("  -> kept %d (of up to %d) for %s", len(rows), config.top_n_per_shot, shot.id)
+            report(f"Shot {i}/{len(shots)}: kept {len(rows)} of up to {config.top_n_per_shot}.")
 
     manifest_path = output_dir / "manifest.csv"
     write_manifest(manifest_path, all_rows)
