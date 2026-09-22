@@ -22,7 +22,7 @@ function escapeHtml(s) {
 // ---------------------------------------------------------------------
 function pollJob(jobId, { onProgress, onDone, onError }) {
   const interval = setInterval(async () => {
-    const resp = await fetch(`/api/studio/jobs/${jobId}`);
+    const resp = await fetch(`/api/jobs/${jobId}`);
     if (!resp.ok) {
       clearInterval(interval);
       onError("Lost track of the job.");

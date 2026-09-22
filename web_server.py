@@ -36,6 +36,8 @@ from flask import Flask, jsonify, send_from_directory
 from analytics import StatsFetchError, fetch_instagram_stats, fetch_youtube_revenue, fetch_youtube_stats
 from video_api import bp as video_bp
 from studio_api import bp as studio_bp
+from auto_api import bp as auto_bp
+from jobs import bp as jobs_bp
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -44,6 +46,8 @@ CONFIG_PATH = APP_DIR / "config.json"
 app = Flask(__name__, static_folder=None)
 app.register_blueprint(video_bp)
 app.register_blueprint(studio_bp)
+app.register_blueprint(auto_bp)
+app.register_blueprint(jobs_bp)
 
 
 def load_config() -> dict:

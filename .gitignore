@@ -11,6 +11,7 @@ config.json
 .shotsource_cache/
 shot_media_output/
 voiceover_output/
+content/
 files/videos/
 files/.cache/
 client_secret.json

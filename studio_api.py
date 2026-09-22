@@ -1,27 +1,21 @@
 """Flask blueprint wrapping studio.py's voiceover generator and the
 shotsource media finder for the web dashboard.
 
-Script generation, voice synthesis, and media search can all take minutes
-(long scripts are many sequential LLM calls; media search hits up to seven
-APIs and downloads/scores every candidate). A single HTTP request can't
-sit open that long reliably, so every real operation here runs in a
-background thread under a job id, and the frontend polls
-GET /api/studio/jobs/<id> until it's done - the same shape a real job
-queue would have, just in-memory since this is a single-user local tool.
+Script generation, voice synthesis, and media search can all take minutes,
+so every real operation here runs as a background job (see jobs.py) and
+the frontend polls GET /api/jobs/<id> until it's done.
 """
 from __future__ import annotations
 
 import csv
-import re
 import tempfile
-import threading
-import uuid
 from pathlib import Path
 from typing import Optional
 
 from flask import Blueprint, jsonify, request, send_from_directory
 
 import env_config  # noqa: F401  (loads .env before any os.environ default below)
+from jobs import set_progress, start_job
 from studio import (
     UK_MALE_VOICES,
     ClaudeScriptWriter,
@@ -37,50 +31,19 @@ MEDIA_OUTPUT_DIR = APP_DIR / "shot_media_output"
 
 bp = Blueprint("studio_api", __name__)
 
-_jobs_lock = threading.Lock()
-_jobs: dict[str, dict] = {}
 
-
-def _new_job() -> str:
-    job_id = uuid.uuid4().hex
-    with _jobs_lock:
-        _jobs[job_id] = {"status": "running", "progress": "Starting...", "result": None, "error": None}
-    return job_id
-
-
-def _set_progress(job_id: str, message: str) -> None:
-    with _jobs_lock:
-        if job_id in _jobs:
-            _jobs[job_id]["progress"] = message
-
-
-def _finish_job(job_id: str, result=None, error: Optional[str] = None) -> None:
-    with _jobs_lock:
-        if job_id not in _jobs:
-            return
-        _jobs[job_id]["status"] = "error" if error else "done"
-        _jobs[job_id]["result"] = result
-        _jobs[job_id]["error"] = error
-
-
-def _run_in_background(job_id: str, fn) -> None:
-    def worker():
-        try:
-            result = fn()
-            _finish_job(job_id, result=result)
-        except Exception as exc:
-            _finish_job(job_id, error=str(exc))
-
-    threading.Thread(target=worker, daemon=True).start()
-
-
-@bp.route("/api/studio/jobs/<job_id>")
-def get_job(job_id):
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-    if job is None:
-        return jsonify({"error": "No such job."}), 404
-    return jsonify(job)
+def make_writer(engine: str, data: dict):
+    """Shared by studio_api and auto_api so both build script writers the
+    same way from the same request-shaped config dict."""
+    if engine == "claude":
+        api_key = str(data.get("anthropic_key", "")).strip()
+        if not api_key:
+            raise ValueError("anthropic_key is required for the Claude engine.")
+        return ClaudeScriptWriter(api_key=api_key, model=data.get("model") or "claude-sonnet-5")
+    return OllamaScriptWriter(
+        model=data.get("model") or "llama3",
+        host=str(data.get("ollama_host") or "http://localhost:11434"),
+    )
 
 
 # ---------------------------------------------------------------------
@@ -96,32 +59,22 @@ def list_voices():
 def generate_script():
     data = request.get_json(silent=True) or {}
     topic = str(data.get("topic", "")).strip()
-    engine = data.get("engine", "ollama")
     target_words = int(data.get("target_words", 2000))
 
     if not topic:
         return jsonify({"error": "topic is required."}), 400
+    try:
+        writer = make_writer(data.get("engine", "ollama"), data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    if engine == "claude":
-        api_key = str(data.get("anthropic_key", "")).strip()
-        if not api_key:
-            return jsonify({"error": "anthropic_key is required for the Claude engine."}), 400
-        writer = ClaudeScriptWriter(api_key=api_key, model=data.get("model") or "claude-sonnet-5")
-    else:
-        writer = OllamaScriptWriter(
-            model=data.get("model") or "llama3",
-            host=str(data.get("ollama_host") or "http://localhost:11434"),
-        )
-
-    job_id = _new_job()
-
-    def task():
+    def task(job_id):
         try:
-            return writer.generate_script(topic, target_words=target_words, progress=lambda m: _set_progress(job_id, m))
+            return writer.generate_script(topic, target_words=target_words, progress=lambda m: set_progress(job_id, m))
         except ScriptGenerationError as exc:
             raise RuntimeError(str(exc))
 
-    _run_in_background(job_id, task)
+    job_id = start_job(task)
     return jsonify({"job_id": job_id}), 202
 
 
@@ -136,17 +89,17 @@ def generate_voiceover():
     if voice not in UK_MALE_VOICES.values():
         return jsonify({"error": "Unknown voice id."}), 400
 
-    job_id = _new_job()
-    out_path = VOICEOVER_OUTPUT_DIR / f"voiceover-{job_id}.mp3"
+    VOICEOVER_OUTPUT_DIR.mkdir(exist_ok=True)
 
-    def task():
+    def task(job_id):
+        out_path = VOICEOVER_OUTPUT_DIR / f"voiceover-{job_id}.mp3"
         try:
-            synthesize_speech(script, voice, out_path, progress=lambda m: _set_progress(job_id, m))
+            synthesize_speech(script, voice, out_path, progress=lambda m: set_progress(job_id, m))
         except VoiceSynthesisError as exc:
             raise RuntimeError(str(exc))
         return {"filename": out_path.name}
 
-    _run_in_background(job_id, task)
+    job_id = start_job(task)
     return jsonify({"job_id": job_id}), 202
 
 
@@ -177,16 +130,14 @@ def find_media():
     if not shots_text:
         return jsonify({"error": "shots is required (one description per line)."}), 400
 
-    job_id = _new_job()
-
-    def task():
+    def task(job_id):
         from shotsource.pipeline import run_pipeline
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
             f.write(shots_text)
             shots_path = f.name
         try:
-            _set_progress(job_id, "Querying sources and quality-filtering results - this can take a while...")
+            set_progress(job_id, "Querying sources and quality-filtering results - this can take a while...")
             manifest_path = run_pipeline(shots_path, output_dir_override=str(MEDIA_OUTPUT_DIR))
         finally:
             Path(shots_path).unlink(missing_ok=True)
@@ -204,7 +155,7 @@ def find_media():
                     rows.append(row)
         return {"manifest": rows}
 
-    _run_in_background(job_id, task)
+    job_id = start_job(task)
     return jsonify({"job_id": job_id}), 202
 
 
