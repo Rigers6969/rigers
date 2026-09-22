@@ -199,6 +199,20 @@ def produce_video(
     if manifest_path.exists():
         kept = max(0, sum(1 for _ in manifest_path.open(encoding="utf-8")) - 1)  # minus header row
 
+    video_error = None
+    if kept > 0:
+        report("Assembling final video...")
+        try:
+            from video_assembler import AssemblyError, assemble_video
+
+            assemble_video(video_dir, progress=lambda m: report(f"Video: {m}"))
+        except Exception as exc:
+            # Script/voiceover/metadata are still real, useful output even if
+            # assembly fails (e.g. ffmpeg missing) - don't fail the whole run.
+            video_error = str(exc)
+    else:
+        video_error = "No media was kept, so there's nothing to build a video from."
+
     report("Done.")
     return {
         "slug": slug,
@@ -207,4 +221,5 @@ def produce_video(
         "shots": len(shots),
         "media_kept": kept,
         "word_count": len(script.split()),
+        "video_error": video_error,
     }

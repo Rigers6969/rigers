@@ -130,6 +130,7 @@ async function loadVideos() {
         <span class="stage-dot ${v.has_script ? "done" : ""}" title="Script"></span>
         <span class="stage-dot ${v.has_voiceover ? "done" : ""}" title="Voiceover"></span>
         <span class="stage-dot ${v.has_media ? "done" : ""}" title="Media"></span>
+        <span class="stage-dot ${v.has_video ? "done" : ""}" title="Final video"></span>
       </div>
     `;
     card.addEventListener("click", () => selectVideo(v.slug));
@@ -168,7 +169,17 @@ async function selectVideo(slug) {
   `).join("") || "<p class='hint'>No media found yet.</p>";
 
   document.getElementById("detail-body").innerHTML = `
-    ${data.voiceover_url ? `<h4>Voiceover</h4><audio controls src="${data.voiceover_url}" style="width:100%; margin-bottom:20px;"></audio>` : ""}
+    <h4>Final Video</h4>
+    ${data.video_url
+      ? `<video controls src="${data.video_url}" style="width:100%; max-width:640px; background:#000; margin-bottom:10px;"></video>
+         <div><a href="${data.video_url}" download class="btn-ghost" style="display:inline-block; margin:6px 0 20px;">Download .mp4</a>
+         <button id="reassemble-btn" class="btn-ghost" style="margin-left:8px;">Re-assemble</button></div>`
+      : `<p class="hint">Not assembled yet${data.manifest && data.manifest.length ? "" : " - no media found yet, so there's nothing to build a video from"}.</p>
+         <button id="assemble-btn" class="btn-primary" ${data.manifest && data.manifest.length ? "" : "disabled"}>Assemble Video</button>
+         <div id="assemble-progress" class="save-status"></div>`
+    }
+
+    ${data.voiceover_url ? `<h4 style="margin-top:24px;">Voiceover</h4><audio controls src="${data.voiceover_url}" style="width:100%; margin-bottom:20px;"></audio>` : ""}
 
     <h4>YouTube</h4>
     <p><b>${escapeHtml(yt.title)}</b></p>
@@ -189,6 +200,35 @@ async function selectVideo(slug) {
     <h4 style="margin-top:20px;">Media</h4>
     ${mediaHtml}
   `;
+
+  const assembleBtn = document.getElementById("assemble-btn") || document.getElementById("reassemble-btn");
+  if (assembleBtn) {
+    assembleBtn.addEventListener("click", () => runAssemble(slug));
+  }
+}
+
+async function runAssemble(slug) {
+  const progressEl = document.getElementById("assemble-progress");
+  const btn = document.getElementById("assemble-btn") || document.getElementById("reassemble-btn");
+  if (btn) btn.disabled = true;
+  if (progressEl) progressEl.innerText = "Starting...";
+
+  const resp = await fetch(`/api/auto/videos/${encodeURIComponent(slug)}/assemble`, { method: "POST" });
+  const data = await resp.json();
+  if (!resp.ok) {
+    if (progressEl) progressEl.innerText = data.error || "Failed to start.";
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  pollJob(data.job_id, {
+    onProgress: (msg) => { if (progressEl) progressEl.innerText = msg; },
+    onDone: () => { selectVideo(slug); loadVideos(); },
+    onError: (err) => {
+      if (progressEl) progressEl.innerText = "Error: " + err;
+      if (btn) btn.disabled = false;
+    },
+  });
 }
 
 loadVideos();

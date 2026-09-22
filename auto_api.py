@@ -82,6 +82,7 @@ def list_videos():
             "has_script": (entry / "script.txt").exists(),
             "has_voiceover": (entry / "voiceover.mp3").exists(),
             "has_media": (entry / "media" / "manifest.csv").exists(),
+            "has_video": (entry / "final.mp4").exists(),
         })
     return jsonify({"videos": videos})
 
@@ -122,6 +123,7 @@ def get_video(slug):
         "shots": shots,
         "manifest": manifest,
         "voiceover_url": f"/api/auto/videos/{slug}/voiceover" if (video_dir / "voiceover.mp3").exists() else None,
+        "video_url": f"/api/auto/videos/{slug}/video" if (video_dir / "final.mp4").exists() else None,
     })
 
 
@@ -131,6 +133,31 @@ def get_voiceover(slug):
     if video_dir is None or not (video_dir / "voiceover.mp3").exists():
         return jsonify({"error": "Not found."}), 404
     return send_from_directory(video_dir, "voiceover.mp3")
+
+
+@bp.route("/api/auto/videos/<slug>/video")
+def get_video_file(slug):
+    video_dir = _safe_content_path(slug)
+    if video_dir is None or not (video_dir / "final.mp4").exists():
+        return jsonify({"error": "Not found."}), 404
+    return send_from_directory(video_dir, "final.mp4")
+
+
+@bp.route("/api/auto/videos/<slug>/assemble", methods=["POST"])
+def assemble(slug):
+    video_dir = _safe_content_path(slug)
+    if video_dir is None or not video_dir.exists():
+        return jsonify({"error": f"No such video: {slug}"}), 404
+
+    def task(job_id):
+        from jobs import set_progress
+        from video_assembler import assemble_video
+
+        assemble_video(video_dir, progress=lambda m: set_progress(job_id, m))
+        return {"video_url": f"/api/auto/videos/{slug}/video"}
+
+    job_id = start_job(task)
+    return jsonify({"job_id": job_id}), 202
 
 
 @bp.route("/api/auto/videos/<slug>/media/<path:relpath>")
