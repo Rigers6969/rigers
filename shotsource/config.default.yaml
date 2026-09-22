@@ -90,6 +90,14 @@ quality:
     sharpness_reference_variance: 800.0
     # Any sentence-transformers model name.
     embedding_model: "all-MiniLM-L6-v2"
+    # Hard floor on caption similarity (0-1), checked before scoring. A
+    # sharp, high-resolution but totally unrelated image (a random office
+    # photo, a company logo, an old map) can still score well under the
+    # weighted blend above since resolution+sharpness make up 60% of
+    # final_score - this rejects it outright regardless of those two.
+    # Raise it if irrelevant images are still slipping through; lower it
+    # if too many shots are coming back empty.
+    min_caption_similarity: 0.15
 
 http:
   user_agent: "shotsource-cli/1.0 (open media finder for a shot list; contact: set-your-email-here)"

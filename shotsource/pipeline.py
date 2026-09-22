@@ -143,10 +143,17 @@ def _score_candidates(
             continue
         seen_hashes.append(info.phash)
 
+        caption_score = similarity.score(shot.description, candidate.title)
+        if caption_score < scoring_cfg.min_caption_similarity:
+            reject_log.reject(
+                shot.id, shot.description, candidate,
+                f"not relevant to shot ({caption_score:.2f} similarity below {scoring_cfg.min_caption_similarity} minimum)",
+            )
+            continue
+
         variance = sharpness_variance(info.gray)
         res_score = resolution_score(info.width, scoring_cfg.resolution_reference_width_px)
         sharp_score = sharpness_score(variance, scoring_cfg.sharpness_reference_variance)
-        caption_score = similarity.score(shot.description, candidate.title)
         final = combine_scores(res_score, sharp_score, caption_score, scoring_cfg.weights)
 
         scored.append(ScoredCandidate(

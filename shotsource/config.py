@@ -47,6 +47,13 @@ class ScoringConfig:
     resolution_reference_width_px: float = 3840.0
     sharpness_reference_variance: float = 800.0
     embedding_model: str = "all-MiniLM-L6-v2"
+    # A sharp, high-resolution but completely unrelated image (e.g. a company
+    # logo when the shot asked for "geologists studying maps") could still
+    # score well under the weighted blend alone, since resolution/sharpness
+    # make up 60% of final_score. This is a hard floor on caption similarity
+    # applied before scoring - below it, an image is rejected outright
+    # regardless of how sharp or high-res it is.
+    min_caption_similarity: float = 0.15
 
 
 @dataclass
