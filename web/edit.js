@@ -129,6 +129,78 @@ document.getElementById("music-upload-btn").addEventListener("click", async () =
 });
 
 // ---------------------------------------------------------------------
+// Jamendo search - real, licensed tracks, already filtered server-side
+// to commercial-safe licenses only (see music_finder.py).
+// ---------------------------------------------------------------------
+function formatDuration(seconds) {
+  if (!seconds && seconds !== 0) return "";
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+async function searchMusic() {
+  const query = document.getElementById("music-search-input").value.trim();
+  const resultsEl = document.getElementById("music-search-results");
+  const errorEl = document.getElementById("music-search-error");
+  if (!query) return;
+
+  resultsEl.innerHTML = '<p class="empty-note">Searching...</p>';
+  errorEl.classList.add("hidden");
+
+  const resp = await fetch(`/api/editor/music/search?q=${encodeURIComponent(query)}`);
+  const data = await resp.json();
+
+  if (data.error) {
+    errorEl.innerText = data.error;
+    errorEl.classList.remove("hidden");
+  }
+
+  const tracks = data.tracks || [];
+  if (!tracks.length) {
+    resultsEl.innerHTML = data.error ? "" : '<p class="empty-note">No results.</p>';
+    return;
+  }
+
+  resultsEl.innerHTML = tracks.map((t, i) => `
+    <div class="music-track" data-index="${i}">
+      <label style="flex:none; cursor:default;">${escapeHtml(t.title)} <span class="hint">by ${escapeHtml(t.artist)} (${formatDuration(t.duration)})</span></label>
+      <audio controls src="${t.preview_url}"></audio>
+      <button class="btn-ghost music-add-btn" style="font-size:11px; padding:4px 10px;">Add to Library</button>
+    </div>
+  `).join("");
+
+  resultsEl.querySelectorAll(".music-add-btn").forEach((btn, i) => {
+    btn.addEventListener("click", async () => {
+      const track = tracks[i];
+      btn.disabled = true;
+      btn.innerText = "Adding...";
+      const resp = await fetch("/api/editor/music/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: track.id, title: track.title, artist: track.artist, download_url: track.download_url,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        btn.innerText = data.error || "Failed";
+        btn.disabled = false;
+        return;
+      }
+      btn.innerText = "Added";
+      selectedMusic = data.filename;
+      loadMusicLibrary();
+    });
+  });
+}
+
+document.getElementById("music-search-btn").addEventListener("click", searchMusic);
+document.getElementById("music-search-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") searchMusic();
+});
+
+// ---------------------------------------------------------------------
 // Captions
 // ---------------------------------------------------------------------
 async function loadCaptionStyles() {

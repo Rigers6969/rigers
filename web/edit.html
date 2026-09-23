@@ -54,14 +54,23 @@
 
       <div class="panel">
         <h3>Music</h3>
-        <p class="hint" style="margin-bottom:14px;">Grab a real no-copyright track from <a href="https://pixabay.com/music/" target="_blank" rel="noopener">Pixabay Music</a>, <a href="https://mixkit.co/free-stock-music/" target="_blank" rel="noopener">Mixkit</a>, or YouTube Studio's Audio Library, then upload it here once &mdash; it's saved to a shared library you can reuse on any video.</p>
+        <p class="hint" style="margin-bottom:14px;">Searches Jamendo's real, licensed music library and only shows commercial-safe results (CC-BY, CC-BY-SA, CC0 &mdash; never non-commercial). Or upload your own track from <a href="https://pixabay.com/music/" target="_blank" rel="noopener">Pixabay Music</a> or <a href="https://mixkit.co/free-stock-music/" target="_blank" rel="noopener">Mixkit</a> below.</p>
 
+        <div class="form-row" style="margin-bottom:10px;">
+          <input type="text" id="music-search-input" placeholder="Search for music (e.g. tense corporate drama)">
+          <button id="music-search-btn" class="btn-ghost">Search</button>
+        </div>
+        <div id="music-search-error" class="error-line hidden"></div>
+        <div id="music-search-results" class="music-library" style="margin-bottom:18px;"></div>
+
+        <p class="hint" style="margin-bottom:10px;">Or upload your own file:</p>
         <div class="form-row" style="margin-bottom:14px;">
           <input type="file" id="music-upload-input" accept=".mp3,.wav,.m4a,.ogg">
           <button id="music-upload-btn" class="btn-ghost">Upload</button>
         </div>
         <div id="music-upload-status" class="save-status"></div>
 
+        <p class="hint" style="margin:14px 0 10px;">Your library (selected track is used for Apply Edits):</p>
         <div id="music-library" class="music-library"></div>
       </div>
 

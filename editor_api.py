@@ -4,12 +4,16 @@ list via "Edit", not from re-running Produce itself.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
+import requests
 from flask import Blueprint, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
+import env_config  # noqa: F401  (loads .env before any os.environ read below)
 from jobs import start_job
+from music_finder import search_tracks
 from producer import CONTENT_ROOT
 from video_editor import CAPTION_STYLES, DEFAULT_CAPTION_STYLE, MUSIC_LIBRARY_DIR, apply_edits, list_music_library
 
@@ -44,6 +48,45 @@ def caption_styles():
 @bp.route("/api/editor/music")
 def list_music():
     return jsonify({"tracks": list_music_library()})
+
+
+@bp.route("/api/editor/music/search")
+def search_music():
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"tracks": [], "error": "q is required."}), 400
+    return jsonify(search_tracks(query))
+
+
+def _music_filename_for(track: dict) -> str:
+    raw = f"{track.get('artist', 'unknown')} - {track.get('title', 'untitled')} ({track.get('id', '')})"
+    safe = re.sub(r"[^\w\s()-]", "", raw).strip()
+    safe = re.sub(r"\s+", " ", safe)
+    return secure_filename(f"{safe}.mp3") or f"jamendo-{track.get('id', 'track')}.mp3"
+
+
+@bp.route("/api/editor/music/import", methods=["POST"])
+def import_music():
+    data = request.get_json(silent=True) or {}
+    download_url = str(data.get("download_url", "")).strip()
+    if not download_url.startswith("https://") and not download_url.startswith("http://"):
+        return jsonify({"error": "A valid download_url is required."}), 400
+
+    filename = _music_filename_for(data)
+
+    try:
+        resp = requests.get(download_url, timeout=30, stream=True)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        return jsonify({"error": f"Download failed: {exc}"}), 502
+
+    MUSIC_LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
+    dest = MUSIC_LIBRARY_DIR / filename
+    with open(dest, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=65536):
+            f.write(chunk)
+
+    return jsonify({"filename": filename})
 
 
 @bp.route("/api/editor/music/upload", methods=["POST"])
