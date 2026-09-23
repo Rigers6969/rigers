@@ -75,6 +75,29 @@ Rules:
 """
 
 
+# Duration presets for the Produce page, so a Ollama-technical "target
+# words" number never has to be typed by hand - pick a length, the word
+# count (and therefore how many distinct topics/sections the script ends
+# up covering) follows automatically from studio.py's ~150 spoken
+# words/minute pacing and its ~900-word-per-outline-section chunking.
+VIDEO_LENGTH_PRESETS = {
+    "short": 90,     # ~30-40s of narration -> studio.py plans 1 outline section
+    "long": 1500,    # ~10min of narration -> studio.py plans a handful of sections
+}
+DEFAULT_VIDEO_LENGTH = "long"
+
+
+def resolve_target_words(length: Optional[str], target_words: Optional[int] = None) -> int:
+    """Turns the Produce page's length choice into a word count. An
+    explicit target_words (e.g. from an older client, or advanced use)
+    always wins; otherwise a known length preset is used, falling back to
+    DEFAULT_VIDEO_LENGTH for anything unset or unrecognized."""
+    if target_words:
+        return int(target_words)
+    key = (length or "").strip().lower()
+    return VIDEO_LENGTH_PRESETS.get(key, VIDEO_LENGTH_PRESETS[DEFAULT_VIDEO_LENGTH])
+
+
 def slugify(text: str, limit: int = 50) -> str:
     text = re.sub(r"[^\w\s-]", "", text).strip().lower()
     text = re.sub(r"[-\s]+", "-", text)

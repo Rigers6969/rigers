@@ -55,7 +55,10 @@
           <option value="ollama">Ollama (local)</option>
           <option value="claude">Claude API</option>
         </select>
-        <input id="words-input" type="number" min="500" max="8000" step="250" value="1500" placeholder="Target words">
+        <select id="length-select">
+          <option value="short">Short &mdash; 30&ndash;40 seconds</option>
+          <option value="long" selected>Long &mdash; full documentary</option>
+        </select>
         <select id="voice-select"></select>
       </div>
       <div class="form-row" id="engine-extra" style="margin-top:10px;">

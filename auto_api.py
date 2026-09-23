@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify, request, send_from_directory
 
 import env_config  # noqa: F401
 from jobs import start_job
-from producer import CONTENT_ROOT, produce_video
+from producer import CONTENT_ROOT, produce_video, resolve_target_words
 from studio_api import make_writer
 
 bp = Blueprint("auto_api", __name__)
@@ -29,7 +29,10 @@ def produce():
     topic = str(data.get("topic", "")).strip()
     channel = str(data.get("channel", "")).strip() or "Paper Trail"
     voice = str(data.get("voice", "en-GB-RyanNeural"))
-    target_words = int(data.get("target_words", 1500))
+    # length ("short"/"long") drives target_words automatically - see
+    # producer.VIDEO_LENGTH_PRESETS. An explicit target_words is still
+    # honored if a caller passes one directly.
+    target_words = resolve_target_words(data.get("length"), data.get("target_words"))
     style_slug = (str(data.get("style_slug", "")).strip() or None)
 
     if not topic:

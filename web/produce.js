@@ -65,7 +65,7 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
   const topic = document.getElementById("topic-text").value.trim();
   const channel = document.getElementById("channel-input").value.trim() || "Paper Trail";
   const engine = document.getElementById("engine-select").value;
-  const target_words = parseInt(document.getElementById("words-input").value, 10) || 1500;
+  const length = document.getElementById("length-select").value;
   const voice = document.getElementById("voice-select").value;
   const ollama_host = document.getElementById("ollama-host").value.trim();
   const anthropic_key = document.getElementById("anthropic-key").value.trim();
@@ -83,7 +83,7 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
   const resp = await fetch("/api/auto/produce", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, channel, engine, target_words, voice, ollama_host, anthropic_key }),
+    body: JSON.stringify({ topic, channel, engine, length, voice, ollama_host, anthropic_key }),
   });
   const data = await resp.json();
   if (!resp.ok) {
