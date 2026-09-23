@@ -33,7 +33,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, send_from_directory
 
-from analytics import StatsFetchError, fetch_instagram_stats, fetch_youtube_revenue, fetch_youtube_stats
+from analytics import StatsFetchError, fetch_youtube_revenue, fetch_youtube_stats
 from video_api import bp as video_bp
 from studio_api import bp as studio_bp
 from auto_api import bp as auto_bp
@@ -107,7 +107,7 @@ def static_files(filename):
 
 @app.route("/api/stats")
 def api_stats():
-    result: dict = {"youtube": None, "instagram": None, "errors": []}
+    result: dict = {"youtube": None, "errors": []}
 
     try:
         config = load_config()
@@ -129,14 +129,6 @@ def api_stats():
         result["errors"].append(
             "YouTube not configured: set YOUTUBE_CHANNEL_ID and YOUTUBE_API_KEY in config.json"
         )
-
-    if config["IG_USER_ID"] and config["IG_ACCESS_TOKEN"]:
-        try:
-            result["instagram"] = fetch_instagram_stats(config["IG_USER_ID"], config["IG_ACCESS_TOKEN"])
-        except Exception as exc:
-            result["errors"].append(f"Instagram: {exc}")
-    else:
-        result["errors"].append("Instagram not configured: set IG_USER_ID and IG_ACCESS_TOKEN in config.json")
 
     return jsonify(result)
 

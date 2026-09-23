@@ -69,7 +69,7 @@
       <div class="hero-content">
         <div class="eyebrow" id="eyebrow">Gotham City &middot; Tirana Time</div>
         <h1 id="greeting">Good Evening, <em>Rigers</em>.</h1>
-        <p>Real-time performance across your YouTube channel and Instagram account, pulled straight from the source and updated on demand &mdash; no vanity metrics, no delay.</p>
+        <p>Real-time performance across your YouTube channel, pulled straight from the source and updated on demand &mdash; no vanity metrics, no delay.</p>
         <div class="hero-actions">
           <a href="#channels" class="btn-primary">View Live Stats</a>
           <button id="hero-refresh-btn" class="btn-ghost">Refresh Now</button>
@@ -93,10 +93,6 @@
         <span class="val" id="ticker-views">&mdash;</span>
       </div>
       <div class="ticker-item">
-        <span class="label">IG Followers</span>
-        <span class="val" id="ticker-followers">&mdash;</span>
-      </div>
-      <div class="ticker-item">
         <span class="label">Last Updated</span>
         <span class="val" id="ticker-updated">&mdash;</span>
       </div>
@@ -109,8 +105,8 @@
     <div class="wrap">
       <div class="section-head">
         <span class="section-label">Live Performance</span>
-        <h2>Two channels, one dashboard.</h2>
-        <p>Every number below is fetched fresh from the YouTube Data API and Instagram Graph API &mdash; nothing cached, nothing estimated.</p>
+        <h2>One channel, real numbers.</h2>
+        <p>Every number below is fetched fresh from the YouTube Data API &mdash; nothing cached, nothing estimated.</p>
       </div>
     </div>
     <div class="wrap">
@@ -133,20 +129,8 @@
           <p class="div-label">Videos Published</p>
           <p class="stat-note"></p>
         </div>
-        <div class="div-card stat-card" id="card-followers">
-          <div class="div-num">04 &mdash; Instagram</div>
-          <h3 class="stat-value" data-target="0">0</h3>
-          <p class="div-label">Followers</p>
-          <p class="stat-note"></p>
-        </div>
-        <div class="div-card stat-card" id="card-posts">
-          <div class="div-num">05 &mdash; Instagram</div>
-          <h3 class="stat-value" data-target="0">0</h3>
-          <p class="div-label">Posts</p>
-          <p class="stat-note"></p>
-        </div>
         <div class="div-card">
-          <div class="div-num">06 &mdash; Status</div>
+          <div class="div-num">04 &mdash; Status</div>
           <h3 class="stat-value" id="status-tile">Live</h3>
           <p class="div-label">Connection status</p>
           <p class="stat-note" id="status-note"></p>
@@ -168,7 +152,7 @@
         </div>
         <div class="pillar">
           <h4>No cached numbers</h4>
-          <p>Every load calls the YouTube and Instagram APIs directly. What you see is what those platforms report right now.</p>
+          <p>Every load calls the YouTube Data API directly. What you see is what YouTube reports right now.</p>
         </div>
         <div class="pillar">
           <h4>Fails loud, not silent</h4>

@@ -169,12 +169,6 @@ async function loadStats() {
       setTicker("ticker-subs", data.youtube.subscriber_count_hidden ? null : data.youtube.subscriber_count);
       setTicker("ticker-views", data.youtube.view_count);
     }
-    if (data.instagram) {
-      setCard("card-followers", data.instagram.followers_count, `@${data.instagram.username}`);
-      setCard("card-posts", data.instagram.media_count, "");
-      setTicker("ticker-followers", data.instagram.followers_count);
-    }
-
     document.getElementById("ticker-updated").innerText = new Intl.DateTimeFormat("en-GB", {
       timeZone: TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false,
     }).format(new Date());
@@ -188,16 +182,15 @@ async function loadStats() {
 
     const statusTile = document.getElementById("status-tile");
     const statusNote = document.getElementById("status-note");
-    const connected = [data.youtube ? "YouTube" : null, data.instagram ? "Instagram" : null].filter(Boolean);
-    if (connected.length === 0) {
+    if (!data.youtube) {
       statusTile.innerText = "Not configured";
       statusNote.innerText = "add credentials to config.json";
     } else if ((data.errors || []).length > 0) {
       statusTile.innerText = "Partial";
-      statusNote.innerText = `${connected.join(" + ")} connected`;
+      statusNote.innerText = "YouTube connected";
     } else {
       statusTile.innerText = "Live";
-      statusNote.innerText = `${connected.join(" + ")} connected`;
+      statusNote.innerText = "YouTube connected";
     }
   } catch (exc) {
     const div = document.createElement("div");

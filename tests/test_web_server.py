@@ -31,9 +31,7 @@ class TestApiStats(unittest.TestCase):
         resp = self.client.get("/api/stats")
         data = resp.get_json()
         self.assertIsNone(data["youtube"])
-        self.assertIsNone(data["instagram"])
         self.assertTrue(any("YouTube not configured" in e for e in data["errors"]))
-        self.assertTrue(any("Instagram not configured" in e for e in data["errors"]))
 
     def test_unexpected_config_error_still_returns_json_not_html(self):
         # Regression: api_stats() used to only catch RuntimeError around
@@ -59,7 +57,6 @@ class TestApiStats(unittest.TestCase):
         resp = self.client.get("/api/stats")
         data = resp.get_json()
         self.assertEqual(data["youtube"]["subscriber_count"], 100)
-        self.assertIsNone(data["instagram"])
 
     @patch.dict("os.environ", {"YOUTUBE_CHANNEL_ID": "UC123", "YOUTUBE_API_KEY": "bad"}, clear=True)
     @patch("web_server.fetch_youtube_stats")
@@ -70,15 +67,6 @@ class TestApiStats(unittest.TestCase):
         data = resp.get_json()
         self.assertIsNone(data["youtube"])
         self.assertTrue(any("API key not valid" in e for e in data["errors"]))
-
-    @patch.dict("os.environ", {"IG_USER_ID": "17841", "IG_ACCESS_TOKEN": "tok"}, clear=True)
-    @patch("web_server.fetch_instagram_stats")
-    def test_instagram_success(self, mock_fetch):
-        mock_fetch.return_value = {"username": "wayne", "followers_count": 200, "media_count": 5}
-        resp = self.client.get("/api/stats")
-        data = resp.get_json()
-        self.assertEqual(data["instagram"]["followers_count"], 200)
-        self.assertIsNone(data["youtube"])
 
 
 class TestLoadConfig(unittest.TestCase):
