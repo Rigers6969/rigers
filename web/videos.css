@@ -104,3 +104,67 @@
 .results .shot-list{ list-style:none; padding:0; }
 .results .shot-list li{ padding:6px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
 .results .shot-list li b{ color:var(--gold); margin-right:8px; }
+
+/* ------------------------------------------------------------------ */
+/* Pipeline tracker (Produce page) - a live view of which stage a      */
+/* production run is on, driven by the plain-text progress messages    */
+/* jobs.py already reports; produce.js maps message prefixes to a      */
+/* stage and toggles these classes.                                    */
+/* ------------------------------------------------------------------ */
+.pipeline-tracker{
+  display:flex; align-items:center; margin-top:18px; flex-wrap:wrap; gap:2px;
+}
+.pipeline-step{
+  display:flex; align-items:center; gap:8px;
+  font-size:12px; letter-spacing:0.3px; color:var(--text-dim);
+  transition:color .3s ease;
+}
+.pipeline-dot{
+  width:11px; height:11px; border-radius:50%;
+  border:1.5px solid var(--border); background:var(--panel);
+  transition:background .3s ease, border-color .3s ease, box-shadow .3s ease;
+  flex-shrink:0;
+}
+.pipeline-connector{
+  width:22px; height:1px; background:var(--border); margin:0 2px;
+  transition:background .4s ease;
+}
+
+.pipeline-step.done{ color:var(--text); }
+.pipeline-step.done .pipeline-dot{
+  background:#7fbf8f; border-color:#7fbf8f;
+}
+.pipeline-step.done + .pipeline-connector{ background:#7fbf8f; }
+
+.pipeline-step.active{ color:var(--gold); }
+.pipeline-step.active .pipeline-dot{
+  background:var(--gold); border-color:var(--gold);
+  animation:pipeline-pulse 1.4s ease-in-out infinite;
+}
+
+.pipeline-step.error .pipeline-dot{ background:var(--red); border-color:var(--red); }
+.pipeline-step.error{ color:var(--red); }
+
+@keyframes pipeline-pulse{
+  0%, 100%{ box-shadow:0 0 0 0 rgba(201,162,75,0.45); }
+  50%{ box-shadow:0 0 0 5px rgba(201,162,75,0); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .pipeline-step.active .pipeline-dot{ animation:none; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared fade-in-up entrance, used for headline/video cards (news.js) */
+/* and anything else that streams in as a list.                       */
+/* ------------------------------------------------------------------ */
+@keyframes fade-in-up{
+  from{ opacity:0; transform:translateY(10px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+.fade-in-up{
+  animation:fade-in-up .45s ease both;
+}
+@media (prefers-reduced-motion: reduce){
+  .fade-in-up{ animation:none; }
+}

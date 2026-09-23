@@ -27,6 +27,86 @@ function timeAgo(iso) {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
+// A small stagger so a freshly-loaded list of cards eases in one after
+// another instead of all popping in at once - capped so a long list
+// doesn't drag the entrance out.
+function staggerDelay(index) {
+  return `${Math.min(index * 40, 400)}ms`;
+}
+
+// ---------------------------------------------------------------------
+// Headlines-by-source bar chart. Single series (one measure - count per
+// source), so one hue (the site's gold accent) carries it and no legend
+// is needed - the chart title already says what's plotted. See the
+// dataviz skill's mark spec: bars capped at 24px thick, rounded top
+// corners only (square at the baseline), hairline baseline, value
+// labeled at the bar's tip, category label below.
+// ---------------------------------------------------------------------
+function roundedTopBarPath(x, yTop, w, h, r) {
+  const rr = Math.max(0, Math.min(r, h, w / 2));
+  if (rr <= 0) return `M${x},${yTop} h${w} v${h} h${-w} Z`;
+  return `M${x},${yTop + rr}
+    a${rr},${rr} 0 0 1 ${rr},${-rr}
+    h${w - 2 * rr}
+    a${rr},${rr} 0 0 1 ${rr},${rr}
+    v${h - rr}
+    h${-w}
+    Z`;
+}
+
+function renderSourceChart(items) {
+  const container = document.getElementById("source-chart");
+  const counts = {};
+  for (const item of items) counts[item.source] = (counts[item.source] || 0) + 1;
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+  if (!entries.length) {
+    container.innerHTML = '<div class="chart-title">Headlines by Source</div><p class="empty-note">No data yet.</p>';
+    return;
+  }
+
+  const barW = 30;
+  const gap = 34;
+  const chartH = 90;
+  // topPad clears the value label above the tallest bar (it was clipping
+  // outside the viewBox at the top edge); bottomPad clears the category
+  // labels, which are long ("CNBC - US Top News") and rotated (labelAngle)
+  // rather than overlapping horizontally at this bar spacing. leftPad
+  // specifically clears the first bar's rotated label, which
+  // (text-anchor="end", rotated) extends up-and-left from its anchor and
+  // was running off the left edge of the viewBox at a shallower angle.
+  const topPad = 22;
+  const bottomPad = 85;
+  const leftPad = 95;
+  const rightPad = 20;
+  const labelAngle = -40;
+  const maxCount = Math.max(...entries.map(([, c]) => c));
+  const svgW = leftPad + entries.length * barW + Math.max(0, entries.length - 1) * gap + rightPad;
+  const svgH = topPad + chartH + bottomPad;
+  const baselineY = topPad + chartH;
+
+  const bars = entries.map(([source, count], i) => {
+    const x = leftPad + i * (barW + gap);
+    const h = maxCount > 0 ? (count / maxCount) * chartH : 0;
+    const y = topPad + (chartH - h);
+    const labelX = x + barW / 2;
+    const labelY = baselineY + 14;
+    return `
+      <path d="${roundedTopBarPath(x, y, barW, h, 4)}" fill="var(--gold)"></path>
+      <text x="${labelX}" y="${y - 8}" text-anchor="middle" font-size="12" fill="var(--text)" class="source-chart-bar-value">${count}</text>
+      <text x="${labelX}" y="${labelY}" text-anchor="end" font-size="10.5" fill="var(--text-dim)" transform="rotate(${labelAngle} ${labelX} ${labelY})">${escapeHtml(source)}</text>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="chart-title">Headlines by Source</div>
+    <svg viewBox="0 0 ${svgW} ${svgH}" class="source-chart-svg fade-in-up" role="img" aria-label="Bar chart of headline counts by source">
+      <line x1="0" y1="${baselineY}" x2="${svgW}" y2="${baselineY}" stroke="var(--border)" stroke-width="1"></line>
+      ${bars}
+    </svg>
+  `;
+}
+
 // ---------------------------------------------------------------------
 // Headlines - self-refreshing: the server caches for 10 minutes and
 // refetches the RSS feeds itself when that goes stale, so this page just
@@ -53,14 +133,16 @@ async function loadHeadlines(force) {
     errorsEl.classList.add("hidden");
   }
 
+  renderSourceChart(data.items || []);
+
   if (!data.items || data.items.length === 0) {
     listEl.innerHTML = '<p class="empty-note">No headlines yet.</p>';
     return;
   }
 
-  listEl.innerHTML = data.items.map((item) => `
-    <div class="headline-card">
-      ${item.image_url ? `<img class="headline-thumb" src="${item.image_url}" loading="lazy" alt="">` : ""}
+  listEl.innerHTML = data.items.map((item, i) => `
+    <div class="headline-card fade-in-up" style="animation-delay:${staggerDelay(i)}">
+      ${item.image_url ? `<img class="headline-thumb" src="${item.image_url}" loading="lazy" alt="" onload="this.classList.add('loaded')">` : ""}
       <div class="headline-body">
         <div class="headline-source">${escapeHtml(item.source)}<span class="time">${timeAgo(item.published)}</span></div>
         <div class="headline-title"><a href="${item.link}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></div>
@@ -105,8 +187,8 @@ async function loadVideos(query) {
     return;
   }
 
-  listEl.innerHTML = data.videos.map((v) => `
-    <div class="video-card">
+  listEl.innerHTML = data.videos.map((v, i) => `
+    <div class="video-card fade-in-up" style="animation-delay:${staggerDelay(i)}">
       <iframe src="https://www.youtube.com/embed/${v.video_id}" title="${escapeHtml(v.title)}" loading="lazy" allowfullscreen></iframe>
       <div class="video-title">${escapeHtml(v.title)}</div>
       <div class="video-channel">${escapeHtml(v.channel)} &middot; ${timeAgo(v.published)}</div>

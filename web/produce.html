@@ -67,6 +67,20 @@
       </div>
 
       <button id="produce-btn" class="btn-primary" style="margin-top:16px;">Produce Video</button>
+
+      <div id="pipeline-tracker" class="pipeline-tracker hidden">
+        <div class="pipeline-step" data-stage="script"><span class="pipeline-dot"></span>Script</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="shots"><span class="pipeline-dot"></span>Shots</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="metadata"><span class="pipeline-dot"></span>Metadata</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="voiceover"><span class="pipeline-dot"></span>Voiceover</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="media"><span class="pipeline-dot"></span>Media</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="assemble"><span class="pipeline-dot"></span>Assemble</div>
+      </div>
       <div id="produce-progress" class="save-status"></div>
       <div id="produce-result"></div>
     </div>

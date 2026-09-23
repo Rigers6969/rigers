@@ -62,6 +62,59 @@ if (prefillTopic) {
 }
 
 // ---------------------------------------------------------------------
+// Pipeline tracker - maps producer.py's plain-text progress messages to
+// one of the 6 stages it always reports in order (see produce_video() in
+// producer.py), so the page shows a live stepper instead of just a
+// changing line of text.
+// ---------------------------------------------------------------------
+const PIPELINE_STAGES = ["script", "shots", "metadata", "voiceover", "media", "assemble"];
+const PIPELINE_MATCHERS = {
+  script: (m) => m.startsWith("Writing script") || m.startsWith("Script:"),
+  shots: (m) => m.startsWith("Planning shots"),
+  metadata: (m) => m.startsWith("Writing YouTube"),
+  voiceover: (m) => m.startsWith("Generating voiceover") || m.startsWith("Voiceover:"),
+  media: (m) => m.startsWith("Searching stock media") || m.startsWith("Media:"),
+  assemble: (m) => m.startsWith("Assembling final video") || m.startsWith("Video:"),
+};
+
+function resetPipeline() {
+  document.getElementById("pipeline-tracker").classList.remove("hidden");
+  for (const stage of PIPELINE_STAGES) {
+    const el = document.querySelector(`.pipeline-step[data-stage="${stage}"]`);
+    el.classList.remove("done", "active", "error");
+  }
+}
+
+function updatePipeline(message) {
+  const stageIndex = PIPELINE_STAGES.findIndex((stage) => PIPELINE_MATCHERS[stage](message));
+  if (stageIndex === -1) return; // sub-message that doesn't map cleanly - leave current state as-is
+  PIPELINE_STAGES.forEach((stage, i) => {
+    const el = document.querySelector(`.pipeline-step[data-stage="${stage}"]`);
+    el.classList.remove("done", "active");
+    if (i < stageIndex) el.classList.add("done");
+    else if (i === stageIndex) el.classList.add("active");
+  });
+}
+
+function finishPipeline(hasError) {
+  for (const stage of PIPELINE_STAGES) {
+    const el = document.querySelector(`.pipeline-step[data-stage="${stage}"]`);
+    if (hasError) {
+      // Whichever stage was mid-flight when the job failed becomes the
+      // error marker; everything before it stays "done" since it did
+      // complete successfully.
+      if (el.classList.contains("active")) {
+        el.classList.remove("active");
+        el.classList.add("error");
+      }
+    } else {
+      el.classList.remove("active");
+      el.classList.add("done");
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
 // Produce
 // ---------------------------------------------------------------------
 // Editing style (pacing measured from a reference video via
@@ -87,6 +140,7 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
   btn.disabled = true;
   resultEl.innerHTML = "";
   progressEl.innerText = "Starting...";
+  resetPipeline();
 
   const resp = await fetch("/api/auto/produce", {
     method: "POST",
@@ -101,9 +155,10 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
   }
 
   pollJob(data.job_id, {
-    onProgress: (msg) => { progressEl.innerText = msg; },
+    onProgress: (msg) => { progressEl.innerText = msg; updatePipeline(msg); },
     onDone: (result) => {
       progressEl.innerText = "Done.";
+      finishPipeline(false);
       resultEl.innerHTML = `<p style="margin-top:10px; color:var(--text-dim);">
         Produced <b style="color:var(--gold);">${escapeHtml(result.slug)}</b> -
         ${result.word_count} words, ${result.shots} shots, ${result.media_kept} media file(s) kept.
@@ -114,6 +169,7 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
     },
     onError: (err) => {
       progressEl.innerText = "Error: " + err;
+      finishPipeline(true);
       btn.disabled = false;
     },
   });
