@@ -58,6 +58,12 @@
 .stage-dot.done{ background:#7fbf8f; border-color:#7fbf8f; }
 .stage-dot.error{ background:var(--red); border-color:var(--red); }
 .project-card .empty-note{ font-size:12px; color:var(--text-dim); grid-column:1/-1; }
+.project-edit-btn{
+  display:inline-block; margin-top:12px; font-size:12px; letter-spacing:0.3px;
+  color:var(--gold); border:1px solid var(--border); border-radius:2px; padding:6px 12px;
+  transition:border-color .2s;
+}
+.project-edit-btn:hover{ border-color:var(--gold); }
 
 .detail-head{ display:flex; align-items:baseline; gap:14px; margin-bottom:20px; }
 .detail-head h3{ font-family:'Playfair Display', serif; font-size:24px; font-weight:600; }

@@ -201,8 +201,12 @@ async function loadVideos() {
         <span class="stage-dot ${v.has_media ? "done" : ""}" title="Media"></span>
         <span class="stage-dot ${v.has_video ? "done" : ""}" title="Final video"></span>
       </div>
+      ${v.has_video ? `<a class="project-edit-btn" href="/edit.html?slug=${encodeURIComponent(v.slug)}">Edit &rarr;</a>` : ""}
     `;
-    card.addEventListener("click", () => selectVideo(v.slug));
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".project-edit-btn")) return;
+      selectVideo(v.slug);
+    });
     listEl.appendChild(card);
   }
 }

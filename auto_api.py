@@ -71,7 +71,9 @@ def list_videos():
         return jsonify({"videos": []})
     videos = []
     for entry in sorted(CONTENT_ROOT.iterdir(), reverse=True):
-        if not entry.is_dir():
+        if not entry.is_dir() or entry.name.startswith("_"):
+            # _styles (style_analyzer.py profiles) and _music (the
+            # editor's shared music library) aren't produced videos.
             continue
         metadata_path = entry / "metadata.json"
         metadata = {}

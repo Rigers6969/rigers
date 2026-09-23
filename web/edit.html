@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edit Video &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+<link rel="stylesheet" href="edit.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/videos.html">Videos</a>
+        <a href="/studio.html">Studio</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/news.html">News</a>
+      </div>
+      <div class="nav-right">
+        <div id="header-clock" class="nav-clock"></div>
+      </div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">Post-Production</span>
+      <h1 id="edit-title">Edit Video</h1>
+      <p>Add background music and burned-in captions to this already-produced video &mdash; no need to produce it again. Every "Apply" rebuilds fresh from the original assembled video, so switching options on or off never stacks.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="edit-layout">
+      <div class="panel">
+        <h3>Preview</h3>
+        <video id="preview-video" controls style="width:100%; background:#000; border-radius:2px;"></video>
+        <div id="preview-note" class="hint" style="margin-top:8px;"></div>
+        <a id="download-link" href="#" download class="btn-ghost hidden" style="display:inline-block; margin-top:12px;">Download Edited Video</a>
+      </div>
+
+      <div class="panel">
+        <h3>Music</h3>
+        <p class="hint" style="margin-bottom:14px;">Grab a real no-copyright track from <a href="https://pixabay.com/music/" target="_blank" rel="noopener">Pixabay Music</a>, <a href="https://mixkit.co/free-stock-music/" target="_blank" rel="noopener">Mixkit</a>, or YouTube Studio's Audio Library, then upload it here once &mdash; it's saved to a shared library you can reuse on any video.</p>
+
+        <div class="form-row" style="margin-bottom:14px;">
+          <input type="file" id="music-upload-input" accept=".mp3,.wav,.m4a,.ogg">
+          <button id="music-upload-btn" class="btn-ghost">Upload</button>
+        </div>
+        <div id="music-upload-status" class="save-status"></div>
+
+        <div id="music-library" class="music-library"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Captions</h3>
+        <label class="radio-label" style="margin-bottom:14px;">
+          <input type="checkbox" id="captions-toggle">
+          Add captions (auto-transcribed from the voiceover)
+        </label>
+        <select id="caption-style-select" class="hidden"></select>
+      </div>
+
+      <div class="panel">
+        <button id="apply-btn" class="btn-primary">Apply Edits</button>
+        <div id="apply-progress" class="save-status"></div>
+      </div>
+    </div>
+  </section>
+
+  <script src="edit.js"></script>
+</body>
+</html>
