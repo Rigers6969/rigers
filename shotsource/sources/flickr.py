@@ -1,6 +1,13 @@
-"""Flickr (flickr.com) via its REST API - requires a free API key. Flickr
-is enormous compared to any single stock site, so this is a real increase
-in match rate, not just one more thin source.
+"""Flickr (flickr.com) via its REST API.
+
+NOT free like this package's other API-key sources: as of 2026, Flickr
+requires a paid Flickr Pro subscription (~$82/year) just to request an
+API key at all, and commercial use (a monetized channel counts) needs a
+separate, staff-approved commercial key on top of that. Left in as an
+option for anyone who already has Flickr Pro - Flickr's catalog is
+enormous compared to any single stock site - but don't set FLICKR_API_KEY
+expecting a free win; without it this source just silently returns
+nothing, same as every other optional source here.
 
 Only license ids that permit commercial reuse are requested - Flickr's
 NonCommercial-only licenses (1, 2, 3) are excluded outright, since these

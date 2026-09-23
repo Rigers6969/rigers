@@ -57,10 +57,11 @@ sources:
     enabled: true
     requests_per_minute: 20
     max_results_per_shot: 30
-    # Get a free key at https://www.flickr.com/services/apps/create/apply/ -
-    # without it this source is silently skipped. Flickr is huge compared
-    # to the other sources here, so this is usually the single biggest
-    # improvement to how often a shot finds a real match.
+    # Unlike the sources above, Flickr is NOT free: getting a key at all
+    # requires a paid Flickr Pro subscription (~$82/year), and commercial
+    # use needs a separate staff-approved commercial key. Only worth
+    # setting up if you already have Flickr Pro - leave FLICKR_API_KEY
+    # blank otherwise and this source just silently skips, no downside.
     api_key_env: "FLICKR_API_KEY"
 
 quality:
