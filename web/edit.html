@@ -84,6 +84,27 @@
       </div>
 
       <div class="panel">
+        <h3>Thumbnail</h3>
+        <p class="hint" style="margin-bottom:14px;">Generates a 1280&times;720 YouTube thumbnail - bold headline, gold highlight, no real logos or faces used.</p>
+        <textarea id="thumb-headline" rows="2" placeholder="Big bold headline text" style="margin-bottom:10px;"></textarea>
+        <div class="form-row" style="margin-bottom:14px;">
+          <input type="text" id="thumb-kicker" placeholder="Kicker (optional, small text above)">
+          <input type="text" id="thumb-tag" placeholder="Tag (optional, red pill text)">
+          <input type="text" id="thumb-brand" placeholder="Brand (optional, corner label)">
+          <select id="thumb-aspect">
+            <option value="16:9">YouTube (16:9)</option>
+            <option value="9:16">Instagram / Reels / Shorts (9:16)</option>
+          </select>
+        </div>
+        <button id="thumb-generate-btn" class="btn-ghost">Generate Thumbnail</button>
+        <div id="thumb-progress" class="save-status"></div>
+        <div id="thumb-preview-wrap" class="hidden" style="margin-top:14px;">
+          <img id="thumb-preview" style="max-width:100%; max-height:480px; border-radius:2px; display:block;">
+          <a id="thumb-download-link" href="#" download="thumbnail.jpg" class="btn-ghost" style="display:inline-block; margin-top:10px;">Download Thumbnail</a>
+        </div>
+      </div>
+
+      <div class="panel">
         <button id="apply-btn" class="btn-primary">Apply Edits</button>
         <div id="apply-progress" class="save-status"></div>
       </div>

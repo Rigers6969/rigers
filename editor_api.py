@@ -4,6 +4,7 @@ list via "Edit", not from re-running Produce itself.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import env_config  # noqa: F401  (loads .env before any os.environ read below)
 from jobs import start_job
 from music_finder import search_tracks
 from producer import CONTENT_ROOT
+from thumbnail_generator import ThumbnailError, generate_thumbnail
 from video_editor import CAPTION_STYLES, DEFAULT_CAPTION_STYLE, MUSIC_LIBRARY_DIR, apply_edits, list_music_library
 
 bp = Blueprint("editor_api", __name__)
@@ -122,12 +124,26 @@ def get_state(slug):
 
     has_base = (video_dir / "final.mp4").exists()
     has_edited = (video_dir / "final_edited.mp4").exists()
+    has_thumbnail = (video_dir / "thumbnail.jpg").exists()
+
+    youtube_title = ""
+    metadata_path = video_dir / "metadata.json"
+    if metadata_path.exists():
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            youtube_title = (metadata.get("youtube") or {}).get("title", "")
+        except (json.JSONDecodeError, OSError):
+            pass
+
     return jsonify({
         "slug": slug,
         "has_base_video": has_base,
         "has_edited": has_edited,
         "base_video_url": f"/api/auto/videos/{slug}/video" if has_base else None,
         "edited_video_url": f"/api/editor/{slug}/video" if has_edited else None,
+        "youtube_title": youtube_title,
+        "has_thumbnail": has_thumbnail,
+        "thumbnail_url": f"/api/editor/{slug}/thumbnail" if has_thumbnail else None,
     })
 
 
@@ -137,6 +153,53 @@ def get_edited_video(slug):
     if video_dir is None or not (video_dir / "final_edited.mp4").exists():
         return jsonify({"error": "Not found."}), 404
     return send_from_directory(video_dir, "final_edited.mp4")
+
+
+_THUMBNAIL_FILENAMES = {"16:9": "thumbnail.jpg", "9:16": "thumbnail_vertical.jpg"}
+
+
+def _thumbnail_filename(aspect: str) -> str | None:
+    return _THUMBNAIL_FILENAMES.get(aspect)
+
+
+@bp.route("/api/editor/<slug>/thumbnail")
+def get_thumbnail(slug):
+    aspect = request.args.get("aspect", "16:9")
+    filename = _thumbnail_filename(aspect)
+    video_dir = _safe_content_path(slug)
+    if filename is None or video_dir is None or not (video_dir / filename).exists():
+        return jsonify({"error": "Not found."}), 404
+    return send_from_directory(video_dir, filename)
+
+
+@bp.route("/api/editor/<slug>/thumbnail", methods=["POST"])
+def make_thumbnail(slug):
+    video_dir = _safe_content_path(slug)
+    if video_dir is None or not video_dir.exists():
+        return jsonify({"error": f"No such video: {slug}"}), 404
+
+    data = request.get_json(silent=True) or {}
+    headline = str(data.get("headline", "")).strip()
+    if not headline:
+        return jsonify({"error": "headline is required."}), 400
+    aspect = str(data.get("aspect", "16:9"))
+    filename = _thumbnail_filename(aspect)
+    if filename is None:
+        return jsonify({"error": f"Unknown aspect {aspect!r} - use 16:9 or 9:16."}), 400
+
+    try:
+        generate_thumbnail(
+            headline=headline,
+            kicker=str(data.get("kicker", "")).strip(),
+            tag=str(data.get("tag", "")).strip(),
+            brand=str(data.get("brand", "")).strip(),
+            aspect=aspect,
+            out_path=video_dir / filename,
+        )
+    except ThumbnailError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"thumbnail_url": f"/api/editor/{slug}/thumbnail?aspect={aspect}"})
 
 
 @bp.route("/api/editor/<slug>/apply", methods=["POST"])

@@ -16,6 +16,15 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
+// Appends a cache-busting param without producing a malformed double "?"
+// when the URL already has a query string (e.g. thumbnail URLs carry
+// ?aspect=... - naively appending another "?t=..." after that makes the
+// whole "aspect=9:16?t=..." string get parsed as one mangled query value
+// server-side, which 404s).
+function cacheBust(url) {
+  return `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+}
+
 function pollJob(jobId, { onProgress, onDone, onError }) {
   const interval = setInterval(async () => {
     const resp = await fetch(`/api/jobs/${jobId}`);
@@ -62,15 +71,67 @@ async function loadState() {
 
   const url = data.edited_video_url || data.base_video_url;
   if (url) {
-    videoEl.src = `${url}?t=${Date.now()}`; // cache-bust after re-applying edits
+    videoEl.src = cacheBust(url); // cache-bust after re-applying edits
     downloadLink.href = url;
     downloadLink.classList.remove("hidden");
   }
   noteEl.innerText = data.has_edited
     ? "Showing the edited version (music/captions applied)."
     : "Showing the original assembled video - no edits applied yet.";
+
+  const headlineInput = document.getElementById("thumb-headline");
+  if (!headlineInput.value && data.youtube_title) {
+    headlineInput.value = data.youtube_title;
+  }
+  if (data.thumbnail_url) {
+    showThumbnail(cacheBust(data.thumbnail_url));
+  }
 }
 loadState();
+
+// ---------------------------------------------------------------------
+// Thumbnail
+// ---------------------------------------------------------------------
+function showThumbnail(url) {
+  document.getElementById("thumb-preview").src = url;
+  document.getElementById("thumb-download-link").href = url;
+  document.getElementById("thumb-preview-wrap").classList.remove("hidden");
+}
+
+document.getElementById("thumb-generate-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("thumb-generate-btn");
+  const progressEl = document.getElementById("thumb-progress");
+  const headline = document.getElementById("thumb-headline").value.trim();
+  if (!headline) {
+    progressEl.innerText = "Enter a headline first.";
+    return;
+  }
+
+  btn.disabled = true;
+  progressEl.innerText = "Generating...";
+
+  const aspect = document.getElementById("thumb-aspect").value;
+  const resp = await fetch(`/api/editor/${encodeURIComponent(slug)}/thumbnail`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      headline,
+      kicker: document.getElementById("thumb-kicker").value.trim(),
+      tag: document.getElementById("thumb-tag").value.trim(),
+      brand: document.getElementById("thumb-brand").value.trim(),
+      aspect,
+    }),
+  });
+  const data = await resp.json();
+  btn.disabled = false;
+
+  if (!resp.ok) {
+    progressEl.innerText = data.error || "Failed to generate.";
+    return;
+  }
+  progressEl.innerText = "Done.";
+  showThumbnail(cacheBust(data.thumbnail_url));
+});
 
 // ---------------------------------------------------------------------
 // Music library
