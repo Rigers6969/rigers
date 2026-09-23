@@ -61,23 +61,9 @@
         <input id="ollama-host" placeholder="Ollama host" value="http://localhost:11434">
         <input id="anthropic-key" type="password" placeholder="Anthropic API key (Claude engine only)" class="hidden">
       </div>
-      <div class="form-row" style="margin-top:10px;">
-        <select id="style-select">
-          <option value="">No style profile (default even pacing)</option>
-        </select>
-      </div>
 
       <button id="produce-btn" class="btn-primary" style="margin-top:16px;">Produce Video</button>
       <div id="produce-progress" class="save-status"></div>
-
-      <h4 style="margin-top:28px;">Editing Style (optional)</h4>
-      <p class="hint">Paste a reference YouTube video link to measure its cut pacing and reuse that rhythm in your own videos. Only the timing pattern is extracted - no footage from the reference video is used in your output.</p>
-      <div class="form-row">
-        <input id="style-url" placeholder="https://www.youtube.com/watch?v=...">
-        <input id="style-key" type="password" placeholder="Anthropic API key (for style analysis)">
-        <button id="analyze-style-btn" class="btn-ghost">Analyze Style</button>
-      </div>
-      <div id="style-progress" class="save-status"></div>
       <div id="produce-result"></div>
     </div>
 

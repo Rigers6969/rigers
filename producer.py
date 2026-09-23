@@ -81,6 +81,18 @@ def slugify(text: str, limit: int = 50) -> str:
     return text[:limit].rstrip("-") or "video"
 
 
+def default_style_slug() -> Optional[str]:
+    """Auto-applies your most recently saved style profile when none is
+    explicitly requested, so the editing-style behavior just works without
+    needing a UI to pick one - style_analyzer.py's output stays a backend
+    capability, not something exposed as a page control."""
+    styles_dir = CONTENT_ROOT / "_styles"
+    if not styles_dir.exists():
+        return None
+    profiles = sorted(styles_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return profiles[0].stem if profiles else None
+
+
 def unique_slug(base: str) -> str:
     slug = base
     n = 2
@@ -164,8 +176,9 @@ def produce_video(
         voice = "en-GB-RyanNeural"
 
     style = None
-    if style_slug:
-        style_path = CONTENT_ROOT / "_styles" / f"{style_slug}.json"
+    effective_style_slug = style_slug or default_style_slug()
+    if effective_style_slug:
+        style_path = CONTENT_ROOT / "_styles" / f"{effective_style_slug}.json"
         if style_path.exists():
             style = json.loads(style_path.read_text(encoding="utf-8"))
 
