@@ -65,7 +65,10 @@ async function loadHeadlines(force) {
         <div class="headline-source">${escapeHtml(item.source)}<span class="time">${timeAgo(item.published)}</span></div>
         <div class="headline-title"><a href="${item.link}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></div>
         <div class="headline-snippet">${escapeHtml(item.snippet)}</div>
-        <a class="headline-link" href="${item.link}" target="_blank" rel="noopener">Read full article on ${escapeHtml(item.source)} &rarr;</a>
+        <div class="headline-actions">
+          <a class="headline-link" href="${item.link}" target="_blank" rel="noopener">Read full article on ${escapeHtml(item.source)} &rarr;</a>
+          <a class="headline-produce-btn" href="/produce.html?topic=${encodeURIComponent(item.title)}">Produce Video &rarr;</a>
+        </div>
       </div>
     </div>
   `).join("");

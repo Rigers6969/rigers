@@ -53,6 +53,14 @@ async function loadVoices() {
 }
 loadVoices();
 
+// A "Produce Video" link from the News page (see news.js) arrives as
+// /produce.html?topic=... - prefill the topic box from it so a headline
+// can become a video without retyping it.
+const prefillTopic = new URLSearchParams(window.location.search).get("topic");
+if (prefillTopic) {
+  document.getElementById("topic-text").value = prefillTopic;
+}
+
 // ---------------------------------------------------------------------
 // Produce
 // ---------------------------------------------------------------------
