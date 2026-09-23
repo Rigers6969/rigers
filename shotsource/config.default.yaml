@@ -53,6 +53,15 @@ sources:
     # Get a free "Access Key" at https://unsplash.com/developers - without
     # it this source is silently skipped.
     api_key_env: "UNSPLASH_ACCESS_KEY"
+  flickr:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 30
+    # Get a free key at https://www.flickr.com/services/apps/create/apply/ -
+    # without it this source is silently skipped. Flickr is huge compared
+    # to the other sources here, so this is usually the single biggest
+    # improvement to how often a shot finds a real match.
+    api_key_env: "FLICKR_API_KEY"
 
 quality:
   hard_reject:

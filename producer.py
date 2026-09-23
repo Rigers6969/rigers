@@ -34,20 +34,26 @@ Script:
 
 Each entry must describe something a camera could literally photograph - a physical object, place, person's generic appearance, action, or setting. Stock photo libraries are searched with these exact words, so an entry that isn't a concrete visual scene will return zero results.
 
+Free stock libraries are shallow compared to paid ones - a specific, multi-detail scene ("German flag outside a modern glass office building at dusk") often has no real match and comes back empty. A short, common, generic subject ("office building exterior", "stack of paperwork", "handshake close up") almost always has dozens. When in doubt, describe the single most important, most generic object or scene in the moment - not everything happening in it.
+
 NEVER write:
 - Abstract ideas or analysis ("lack of transparency", "investors ignore red flags", "regulatory failure")
 - Named real people ("Markus Braun and Oliver Bussmann") - stock libraries won't have them; describe their generic role instead
 - Narrative summary or cause-and-effect statements ("meteoric rise fuels investor confidence")
+- More than one distinct subject or detail stacked into one description ("German flag outside a modern office building" - pick one: the flag, or the building)
 
-ALWAYS write concrete, literally-photographable scenes, e.g.:
-- "stack of financial documents on a desk"
-- "empty corporate boardroom with glass walls"
-- "businessman signing paperwork close up"
-- "German flag outside a modern office building"
-- "stock market ticker screen with red numbers"
-- "auditor reviewing spreadsheets with a magnifying glass"
+ALWAYS write short, common, easy-to-find scenes (2-6 words), e.g.:
+- "stack of financial documents"
+- "empty corporate boardroom"
+- "businessman signing paperwork"
+- "national flag on flagpole"
+- "stock market ticker screen"
+- "person reviewing spreadsheet"
+- "courthouse exterior"
+- "handcuffs close up"
+- "newspaper front page"
 
-Respond with ONLY a JSON array of short visual descriptions (strings), each 4-10 words, in the same order the script flows. No other text, no markdown fences.
+Respond with ONLY a JSON array of short visual descriptions (strings), each 2-6 words, in the same order the script flows. No other text, no markdown fences.
 """
 
 METADATA_PROMPT = """You are a social media manager writing publish-ready metadata for one video.

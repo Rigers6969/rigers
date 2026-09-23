@@ -5,6 +5,7 @@ rejections.csv.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
@@ -21,6 +22,7 @@ from .rejection_log import RejectionLog
 from .similarity import CaptionSimilarityScorer
 from .sources.archive_org import ArchiveOrgSource
 from .sources.base import BaseSource
+from .sources.flickr import FlickrSource
 from .sources.loc import LocSource
 from .sources.openverse import OpenverseSource
 from .sources.pexels import PexelsSource
@@ -38,12 +40,14 @@ SOURCE_CLASSES = {
     "pexels": PexelsSource,
     "pixabay": PixabaySource,
     "unsplash": UnsplashSource,
+    "flickr": FlickrSource,
 }
 
 _DEFAULT_API_KEY_ENV = {
     "pexels": "PEXELS_API_KEY",
     "pixabay": "PIXABAY_API_KEY",
     "unsplash": "UNSPLASH_ACCESS_KEY",
+    "flickr": "FLICKR_API_KEY",
 }
 
 
@@ -180,6 +184,18 @@ def run_shot(
 ) -> List[dict]:
     candidates = _collect_candidates(shot, sources)
     scored = _score_candidates(shot, candidates, sources, similarity, config, reject_log)
+
+    if not scored and candidates:
+        # Nothing cleared the normal relevance floor - rather than leaving
+        # this shot with zero media (which breaks the final assembly, not
+        # just looks sparse), retry once against the same already-fetched
+        # candidates with a relaxed floor. Re-scoring hits the on-disk
+        # cache, not the network, so this doesn't cost extra API calls.
+        logger.info("  shot %s: 0 matches at normal threshold, retrying relaxed", shot.id)
+        relaxed_config = copy.deepcopy(config)
+        relaxed_config.quality.scoring.min_caption_similarity /= 2
+        scored = _score_candidates(shot, candidates, sources, similarity, relaxed_config, reject_log)
+
     scored.sort(key=lambda s: s.final_score, reverse=True)
 
     top = scored[: config.top_n_per_shot]
