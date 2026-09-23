@@ -40,6 +40,7 @@ from auto_api import bp as auto_bp
 from jobs import bp as jobs_bp
 from news_api import bp as news_bp
 from editor_api import bp as editor_bp
+from grammar_guide_api import bp as grammar_guide_bp
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -51,6 +52,7 @@ app.register_blueprint(studio_bp)
 app.register_blueprint(auto_bp)
 app.register_blueprint(jobs_bp)
 app.register_blueprint(news_bp)
+app.register_blueprint(grammar_guide_bp)
 app.register_blueprint(editor_bp)
 
 

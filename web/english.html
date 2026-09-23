@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Financial News &mdash; The Wayne Factory</title>
+<title>English Guide &mdash; The Wayne Factory</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="videos.css">
-<link rel="stylesheet" href="news.css">
+<link rel="stylesheet" href="english.css">
 </head>
 <body>
   <header>
@@ -38,43 +38,38 @@
 
   <section class="videos-hero">
     <div class="wrap">
-      <span class="section-label">Self-Updating</span>
-      <h1>Financial News</h1>
-      <p>Real headlines pulled straight from publishers' own RSS feeds &mdash; headline, a short snippet, and a link back to the full article on the original site. Refreshes itself in the background, same as any news aggregator.</p>
+      <span class="section-label">Advanced Grammar</span>
+      <h1>English Guide</h1>
+      <p>Real grammar chapters pulled straight from two open-license Wikibooks &mdash; "English in Use" and "English Grammar" (CC BY-SA) &mdash; going past the basics into sentence structure, punctuation, register, and the finer points serious learners need. Not an official CEFR-certified textbook (those are commercial), just the deepest real, free material we could find.</p>
     </div>
   </section>
 
   <section class="wrap">
     <div class="panel news-toolbar">
       <div>
-        <span id="news-updated" class="hint">Loading...</span>
-        <span id="news-sources" class="hint"></span>
+        <span id="guide-updated" class="hint">Loading...</span>
       </div>
-      <button id="refresh-btn" class="btn-ghost">Refresh Now</button>
+      <button id="refresh-btn" class="btn-ghost">Refresh from Source</button>
     </div>
 
-    <div id="news-errors" class="error-line hidden"></div>
+    <div id="guide-progress" class="hint hidden"></div>
+    <div id="guide-error" class="error-line hidden"></div>
 
-    <div class="panel">
-      <div id="source-chart"></div>
+    <div id="guide-empty" class="panel hidden">
+      <p>No chapters yet &mdash; click "Refresh from Source" to fetch them. This needs a real internet connection to en.wikibooks.org.</p>
     </div>
 
-    <div class="news-layout">
-      <div id="headline-list" class="headline-list"></div>
+    <div class="english-layout">
+      <div class="panel english-toc">
+        <div id="toc-list"></div>
+      </div>
 
-      <div class="panel video-panel">
-        <h3>Video Coverage</h3>
-        <p class="hint" style="margin-bottom:12px;">From CNBC, Bloomberg Television, Yahoo Finance, and Reuters only &mdash; not open YouTube search, so no random finance-influencer channels or sales pitches.</p>
-        <div class="form-row" style="margin-bottom:14px;">
-          <input id="video-query" placeholder="Search topic" value="stock market news today">
-          <button id="video-search-btn" class="btn-ghost">Search</button>
-        </div>
-        <div id="video-error" class="error-line hidden"></div>
-        <div id="video-list" class="video-list"></div>
+      <div class="panel english-reader" id="reader-panel">
+        <span class="hint">Select a chapter to read.</span>
       </div>
     </div>
   </section>
 
-  <script src="news.js"></script>
+  <script src="english.js"></script>
 </body>
 </html>
