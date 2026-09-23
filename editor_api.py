@@ -199,6 +199,10 @@ def make_thumbnail(slug):
     except ThumbnailError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    from obsidian_export import refresh_video_note
+
+    refresh_video_note(video_dir)
+
     return jsonify({"thumbnail_url": f"/api/editor/{slug}/thumbnail?aspect={aspect}"})
 
 
@@ -235,6 +239,9 @@ def apply(slug):
             music_path=music_path,
             progress=lambda m: set_progress(job_id, m),
         )
+        from obsidian_export import refresh_video_note
+
+        refresh_video_note(video_dir)
         return {"video_url": f"/api/editor/{slug}/video"}
 
     job_id = start_job(task)

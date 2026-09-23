@@ -269,6 +269,12 @@ def produce_video(
     else:
         video_error = "No media was kept, so there's nothing to build a video from."
 
+    report("Writing Obsidian note...")
+    from obsidian_export import update_index, write_video_note
+
+    write_video_note(video_dir, slug, topic, channel, script, shots, metadata)
+    update_index(CONTENT_ROOT)
+
     report("Done.")
     return {
         "slug": slug,
