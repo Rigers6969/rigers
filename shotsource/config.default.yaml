@@ -14,15 +14,22 @@ cache_ttl_hours: 168 # 1 week - how long a cached *API search* response is trust
 # How many of the best-scoring survivors to keep per shot.
 top_n_per_shot: 5
 
+# Each source's max_results_per_shot was 30 (20 for archive_org) - with up
+# to 8 sources enabled, that's up to ~230 candidates downloaded and
+# scored (image fetch + hash + sharpness + caption similarity) per shot,
+# to keep only the best 5. That fixed per-shot cost doesn't shrink for a
+# short video with only 1-2 shots, so it dominated total runtime there.
+# Dropped to 10/source - still a healthy pool (~50-80 candidates/shot
+# across a typical set of enabled sources) without the waste.
 sources:
   openverse:
     enabled: true
     requests_per_minute: 20
-    max_results_per_shot: 30
+    max_results_per_shot: 10
   wikimedia:
     enabled: true
     requests_per_minute: 30
-    max_results_per_shot: 30
+    max_results_per_shot: 10
   loc:
     enabled: true
     # LOC's own documented limit for this API is 20 requests/minute, with
@@ -32,15 +39,15 @@ sources:
     # tripped, every request fails with 403 for the next hour regardless
     # of pacing after that. Kept comfortably under the ceiling instead.
     requests_per_minute: 12
-    max_results_per_shot: 30
+    max_results_per_shot: 10
   archive_org:
     enabled: true
     requests_per_minute: 20
-    max_results_per_shot: 20
+    max_results_per_shot: 10
   pexels:
     enabled: true
     requests_per_minute: 20
-    max_results_per_shot: 30
+    max_results_per_shot: 10
     # Name of the environment variable holding your Pexels API key.
     # Get a free key at https://www.pexels.com/api/ - without it this
     # source is silently skipped.
@@ -48,21 +55,21 @@ sources:
   pixabay:
     enabled: true
     requests_per_minute: 20
-    max_results_per_shot: 30
+    max_results_per_shot: 10
     # Get a free key at https://pixabay.com/api/docs/ - without it this
     # source is silently skipped.
     api_key_env: "PIXABAY_API_KEY"
   unsplash:
     enabled: true
     requests_per_minute: 20
-    max_results_per_shot: 30
+    max_results_per_shot: 10
     # Get a free "Access Key" at https://unsplash.com/developers - without
     # it this source is silently skipped.
     api_key_env: "UNSPLASH_ACCESS_KEY"
   flickr:
     enabled: true
     requests_per_minute: 20
-    max_results_per_shot: 30
+    max_results_per_shot: 10
     # Unlike the sources above, Flickr is NOT free: getting a key at all
     # requires a paid Flickr Pro subscription (~$82/year), and commercial
     # use needs a separate staff-approved commercial key. Only worth
