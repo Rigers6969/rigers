@@ -10,3 +10,4 @@ google-auth-httplib2
 flask
 edge-tts
 python-dotenv
+feedparser
