@@ -9,9 +9,14 @@
 """
 import argparse
 import sys
+from pathlib import Path
+
+import requests
 
 try:
-    import env_config  # noqa: F401  - loads the repo-root .env when run from there
+    from dotenv import load_dotenv
+    # .env sits next to the forex_bot folder (the repo root, or the unzipped folder).
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 except ImportError:
     pass
 
@@ -92,6 +97,8 @@ def main(argv=None) -> None:
         {"demo": cmd_demo, "backtest": cmd_backtest, "check": cmd_check, "run": cmd_run}[args.cmd](s, args)
     except (OandaError, ValueError) as e:
         sys.exit(f"Error: {e}")
+    except requests.RequestException as e:
+        sys.exit(f"Error: could not reach OANDA - check your internet connection ({type(e).__name__})")
     except KeyboardInterrupt:
         print("\nStopped.")
 
