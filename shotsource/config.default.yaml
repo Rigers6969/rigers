@@ -25,7 +25,13 @@ sources:
     max_results_per_shot: 30
   loc:
     enabled: true
-    requests_per_minute: 20
+    # LOC's own documented limit for this API is 20 requests/minute, with
+    # a 1-HOUR block if you go over it (https://www.loc.gov/apis/json-and-yaml/working-within-limits/).
+    # This was set to exactly 20 with no safety margin, so any small burst
+    # (multiple shots queued close together) could trip it - and once
+    # tripped, every request fails with 403 for the next hour regardless
+    # of pacing after that. Kept comfortably under the ceiling instead.
+    requests_per_minute: 12
     max_results_per_shot: 30
   archive_org:
     enabled: true
