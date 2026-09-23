@@ -15,6 +15,7 @@ import env_config  # noqa: F401  (loads .env before any os.environ.get default b
 import asyncio
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -269,7 +270,14 @@ def synthesize_speech(
             part_paths.append(part_path)
 
         if len(part_paths) == 1:
-            part_paths[0].replace(output_path)
+            # shutil.move, not Path.replace()/os.replace() - the temp dir
+            # (tempfile.TemporaryDirectory) lands on the OS temp drive, which
+            # on Windows is commonly C: even when the project lives on D:.
+            # os.replace() maps to Windows' MoveFileEx without the
+            # copy-allowed flag, so it hard-fails with WinError 17 on a
+            # cross-drive move; shutil.move() falls back to copy+delete when
+            # a same-volume rename isn't possible.
+            shutil.move(str(part_paths[0]), str(output_path))
             return output_path
 
         if progress:
