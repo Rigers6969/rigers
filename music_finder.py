@@ -51,15 +51,35 @@ def search_tracks(query: str, limit: int = 12, client_id: Optional[str] = None) 
             },
             timeout=15,
         )
-        resp.raise_for_status()
-        data = resp.json()
     except requests.RequestException as exc:
-        return {"tracks": [], "error": f"Jamendo search failed: {exc}"}
+        return {"tracks": [], "error": f"Could not reach Jamendo: {exc}"}
 
+    if resp.status_code != 200:
+        # Surface the real cause (bad client_id, malformed request, Jamendo
+        # outage) instead of a generic message - the response body usually
+        # says exactly what's wrong.
+        return {
+            "tracks": [],
+            "error": f"Jamendo returned HTTP {resp.status_code}: {resp.text[:300]}",
+        }
+
+    try:
+        data = resp.json()
+    except ValueError:
+        return {"tracks": [], "error": f"Jamendo returned a non-JSON response: {resp.text[:300]}"}
+
+    header_status = (data.get("headers") or {}).get("status")
+    if header_status and header_status != "success":
+        error_message = (data.get("headers") or {}).get("error_message") or "unknown error"
+        return {"tracks": [], "error": f"Jamendo API error: {error_message}"}
+
+    raw_results = data.get("results", [])
     tracks = []
-    for item in data.get("results", []):
+    rejected_license = 0
+    for item in raw_results:
         license_url = item.get("license_ccurl", "")
         if not _is_commercial_safe(license_url):
+            rejected_license += 1
             continue
         download_url = item.get("audiodownload") or item.get("audio")
         if not download_url:
@@ -74,4 +94,15 @@ def search_tracks(query: str, limit: int = 12, client_id: Optional[str] = None) 
             "download_url": download_url,
         })
 
-    return {"tracks": tracks, "error": None}
+    result = {"tracks": tracks, "error": None}
+    if not tracks and raw_results:
+        # Jamendo found something, but every result was filtered out - say
+        # so explicitly rather than looking identical to "nothing found at
+        # all", which is a different problem with a different fix (try a
+        # different search term).
+        result["error"] = (
+            f"Jamendo found {len(raw_results)} track(s) for this search, but all "
+            f"{rejected_license} were non-commercial-licensed (or had no clear "
+            "license) and were excluded. Try a different search term."
+        )
+    return result
