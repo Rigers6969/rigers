@@ -119,6 +119,14 @@ class BaseScriptWriter:
             raise ValueError("target_words must be positive")
 
         num_sections = max(1, min(MAX_SECTIONS, round(target_words / WORDS_PER_SECTION)))
+        # The section COUNT is planned against the fixed WORDS_PER_SECTION
+        # chunking size, but each section's own word-count INSTRUCTION must
+        # scale to the real target - a short 90-word target still plans to
+        # exactly 1 section, but telling the model to "aim for about 900
+        # words" for it (the old behavior) overshoots by 10x. This was
+        # invisible on the original 10,000-word default (900 vs. ~909 is a
+        # rounding error) but broke badly on a short target.
+        words_per_section = max(40, round(target_words / num_sections))
         if progress:
             progress(f"Planning {num_sections} sections...")
         outline = self.generate_outline(topic, num_sections)
@@ -146,7 +154,7 @@ class BaseScriptWriter:
                 outline=outline_text,
                 section_title=section_title,
                 tail=tail,
-                words_per_section=WORDS_PER_SECTION,
+                words_per_section=words_per_section,
             )
             if progress:
                 progress(f"Writing section {index} ({total_words}/{target_words} words so far)...")
