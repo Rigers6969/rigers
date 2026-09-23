@@ -115,6 +115,22 @@ function finishPipeline(hasError) {
 }
 
 // ---------------------------------------------------------------------
+// Batch mode toggle - swaps the single topic box for "one per line" and
+// the pipeline tracker (which only makes sense for one video) for a
+// simple per-video status list.
+// ---------------------------------------------------------------------
+document.getElementById("batch-toggle").addEventListener("change", (e) => {
+  const isBatch = e.target.checked;
+  const topicEl = document.getElementById("topic-text");
+  document.getElementById("topic-label").innerText = isBatch ? "Topics (one per line)" : "Topic";
+  topicEl.rows = isBatch ? 8 : 3;
+  topicEl.placeholder = isBatch
+    ? "One topic per line, e.g.\nThe collapse of a company that faked its own revenue\nA hedge fund that hid losses for a decade\n..."
+    : "e.g. The collapse of a company that faked its own revenue for a decade";
+  document.getElementById("produce-btn").innerText = isBatch ? "Produce Batch" : "Produce Video";
+});
+
+// ---------------------------------------------------------------------
 // Produce
 // ---------------------------------------------------------------------
 // Editing style (pacing measured from a reference video via
@@ -123,7 +139,7 @@ function finishPipeline(hasError) {
 // default_style_slug() and POST /api/style/analyze if you want to analyze
 // a different reference video from a script instead.
 document.getElementById("produce-btn").addEventListener("click", async () => {
-  const topic = document.getElementById("topic-text").value.trim();
+  const isBatch = document.getElementById("batch-toggle").checked;
   const channel = document.getElementById("channel-input").value.trim() || "Paper Trail";
   const engine = document.getElementById("engine-select").value;
   const length = document.getElementById("length-select").value;
@@ -133,12 +149,66 @@ document.getElementById("produce-btn").addEventListener("click", async () => {
 
   const progressEl = document.getElementById("produce-progress");
   const resultEl = document.getElementById("produce-result");
+  const batchListEl = document.getElementById("batch-list");
   const btn = document.getElementById("produce-btn");
-
-  if (!topic) { progressEl.innerText = "Enter a topic first."; return; }
 
   btn.disabled = true;
   resultEl.innerHTML = "";
+
+  if (isBatch) {
+    const topics = document.getElementById("topic-text").value
+      .split("\n").map((t) => t.trim()).filter(Boolean);
+    if (!topics.length) { progressEl.innerText = "Enter at least one topic first."; btn.disabled = false; return; }
+
+    document.getElementById("pipeline-tracker").classList.add("hidden");
+    batchListEl.classList.remove("hidden");
+    batchListEl.innerHTML = topics.map((t, i) => `<div class="save-status" id="batch-row-${i}">Queued: ${escapeHtml(t)}</div>`).join("");
+    progressEl.innerText = "Starting batch...";
+
+    const resp = await fetch("/api/auto/produce/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topics, channel, engine, length, voice, ollama_host, anthropic_key }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      progressEl.innerText = data.error || "Failed to start.";
+      btn.disabled = false;
+      return;
+    }
+
+    pollJob(data.job_id, {
+      onProgress: (msg) => {
+        progressEl.innerText = msg;
+        const match = msg.match(/^Video (\d+)\/(\d+) \(([^)]*)\): (.*)$/);
+        if (match) {
+          const row = document.getElementById(`batch-row-${Number(match[1]) - 1}`);
+          if (row) row.innerText = `${match[1]}/${match[2]} - ${match[3]}: ${match[4]}`;
+        }
+      },
+      onDone: (result) => {
+        progressEl.innerText = "Batch done.";
+        (result.videos || []).forEach((v, i) => {
+          const row = document.getElementById(`batch-row-${i}`);
+          if (!row) return;
+          row.innerText = v.error ? `Failed: ${v.topic} - ${v.error}` : `Done: ${v.slug}`;
+          row.style.color = v.error ? "var(--red)" : "var(--gold)";
+        });
+        btn.disabled = false;
+        loadVideos();
+      },
+      onError: (err) => {
+        progressEl.innerText = "Error: " + err;
+        btn.disabled = false;
+      },
+    });
+    return;
+  }
+
+  const topic = document.getElementById("topic-text").value.trim();
+  if (!topic) { progressEl.innerText = "Enter a topic first."; btn.disabled = false; return; }
+
+  batchListEl.classList.add("hidden");
   progressEl.innerText = "Starting...";
   resetPipeline();
 

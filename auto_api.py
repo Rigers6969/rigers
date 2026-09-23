@@ -54,6 +54,62 @@ def produce():
     return jsonify({"job_id": job_id}), 202
 
 
+MAX_BATCH_TOPICS = 15
+
+
+@bp.route("/api/auto/produce/batch", methods=["POST"])
+def produce_batch():
+    """Same as /api/auto/produce, but for a list of topics run one after
+    another in a single background job - so a phone can kick off "make
+    these 5-10 videos" and walk away, instead of needing one click (and
+    one wait) per topic."""
+    data = request.get_json(silent=True) or {}
+    raw_topics = data.get("topics")
+    if not isinstance(raw_topics, list):
+        return jsonify({"error": "topics must be a list of strings."}), 400
+    topics = [str(t).strip() for t in raw_topics if str(t).strip()]
+    if not topics:
+        return jsonify({"error": "topics must contain at least one non-empty topic."}), 400
+    if len(topics) > MAX_BATCH_TOPICS:
+        return jsonify({"error": f"Too many topics - {MAX_BATCH_TOPICS} max per batch."}), 400
+
+    channel = str(data.get("channel", "")).strip() or "Paper Trail"
+    voice = str(data.get("voice", "en-GB-RyanNeural"))
+    target_words = resolve_target_words(data.get("length"), data.get("target_words"))
+    style_slug = (str(data.get("style_slug", "")).strip() or None)
+
+    try:
+        writer = make_writer(data.get("engine", "ollama"), data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    def task(job_id):
+        from jobs import set_progress
+
+        results = []
+        for i, topic in enumerate(topics, start=1):
+            def report(msg: str, i=i) -> None:
+                set_progress(job_id, f"Video {i}/{len(topics)} ({topic[:40]}): {msg}")
+
+            report("Starting...")
+            try:
+                result = produce_video(
+                    topic, channel, writer, voice=voice, target_words=target_words,
+                    style_slug=style_slug, progress=report,
+                )
+                result["error"] = None
+            except Exception as exc:
+                # One bad topic (a flaky model call, a network hiccup)
+                # shouldn't take the rest of an unattended overnight batch
+                # down with it - record the failure and keep going.
+                result = {"topic": topic, "slug": None, "error": str(exc)}
+            results.append(result)
+        return {"videos": results}
+
+    job_id = start_job(task)
+    return jsonify({"job_id": job_id, "count": len(topics)}), 202
+
+
 def _safe_content_path(slug: str, *parts: str) -> Optional[Path]:
     if not SLUG_RE.match(slug):
         return None
