@@ -7,5 +7,6 @@ schedule.json
 content/
 .shotsource_cache/
 token_analytics.json
+token_upload_*.json
 client_secret.json
 token.json

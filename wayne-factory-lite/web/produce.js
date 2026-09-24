@@ -312,6 +312,13 @@ async function selectVideo(slug) {
     </div>
   `).join("") || "<p class='hint'>No media found yet.</p>";
 
+  const publish = data.publish;
+  const publishHtml = publish
+    ? `<p class="hint" style="margin:-8px 0 20px;">Published to YouTube: <a href="${publish.url}" target="_blank" rel="noopener" style="color:var(--gold);">${publish.url}</a></p>`
+    : data.video_url
+      ? `<p class="hint" style="margin:-8px 0 20px;">Not published yet - either this channel isn't connected (run youtube_publish_auth_setup.py) or publishing failed. Check the terminal running web_server.py for the reason.</p>`
+      : "";
+
   const review = data.review;
   const reviewHtml = review ? `
     <h4 style="margin-top:24px;">AI Review</h4>
@@ -335,8 +342,7 @@ async function selectVideo(slug) {
       ? `<video controls src="${data.video_url}" style="width:100%; max-width:640px; background:#000; margin-bottom:10px;"></video>
          <div><a href="${data.video_url}" download class="btn-ghost" style="display:inline-block; margin:6px 0 20px;">Download .mp4</a>
          <button id="reassemble-btn" class="btn-ghost" style="margin-left:8px;">Re-assemble</button></div>
-         ${yt.title ? `<p class="hint" style="margin:-8px 0 20px;">Suggested thumbnail headline: <b style="color:var(--gold);">${escapeHtml(yt.title)}</b> &mdash;
-           <a href="/edit.html?slug=${encodeURIComponent(slug)}">generate it &rarr;</a></p>` : ""}`
+         ${publishHtml}`
       : `<p class="hint">Not assembled yet${data.manifest && data.manifest.length ? "" : " - no media found yet, so there's nothing to build a video from"}.</p>
          <button id="assemble-btn" class="btn-primary" ${data.manifest && data.manifest.length ? "" : "disabled"}>Assemble Video</button>
          <div id="assemble-progress" class="save-status"></div>`

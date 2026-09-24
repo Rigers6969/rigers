@@ -395,6 +395,35 @@ def produce_video(
         # it's feedback for future videos, not something this one depends on.
         report(f"Review failed ({exc}) - continuing without it.")
 
+    publish = None
+    if video_error is None:
+        try:
+            from thumbnail_generator import generate_thumbnail
+
+            report("Generating thumbnail for publishing...")
+            yt_title = (metadata.get("youtube") or {}).get("title") or topic
+            # Always 16:9 for the thumbnails.set() call regardless of
+            # Short/Long - YouTube's documented custom-thumbnail format,
+            # even for Shorts (which crop/frame it for the vertical player
+            # on their own).
+            generate_thumbnail(headline=yt_title, brand=channel, aspect="16:9", out_path=video_dir / "thumbnail.jpg")
+        except Exception as exc:
+            report(f"Thumbnail generation failed ({exc}) - will publish without a custom thumbnail.")
+
+        try:
+            from youtube_publisher import publish_video
+
+            publish = publish_video(video_dir, channel, progress=lambda m: report(f"Publish: {m}"))
+        except Exception as exc:
+            # Same principle as review/auto-edit: a failed publish leaves a
+            # complete, usable video sitting in its folder rather than
+            # losing the whole production run over it.
+            report(f"Publish failed ({exc}) - the video is still saved locally.")
+
+        # Persisted so the Produce page can show publish status when you
+        # revisit this video later, not just in the one-time job progress.
+        (video_dir / "publish.json").write_text(json.dumps(publish), encoding="utf-8")
+
     report("Done.")
     return {
         "slug": slug,
@@ -405,4 +434,5 @@ def produce_video(
         "word_count": len(script.split()),
         "video_error": video_error,
         "review": review,
+        "publish": publish,
     }

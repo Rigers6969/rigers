@@ -168,6 +168,9 @@ def get_video(slug):
     review = None
     if (video_dir / "review.json").exists():
         review = json.loads((video_dir / "review.json").read_text(encoding="utf-8"))
+    publish = None
+    if (video_dir / "publish.json").exists():
+        publish = json.loads((video_dir / "publish.json").read_text(encoding="utf-8"))
 
     manifest = []
     manifest_path = video_dir / "media" / "manifest.csv"
@@ -189,6 +192,7 @@ def get_video(slug):
         "metadata": metadata,
         "shots": shots,
         "review": review,
+        "publish": publish,
         "manifest": manifest,
         "voiceover_url": f"/api/auto/videos/{slug}/voiceover" if (video_dir / "voiceover.mp3").exists() else None,
         "video_url": f"/api/auto/videos/{slug}/video" if (video_dir / "final.mp4").exists() else None,
