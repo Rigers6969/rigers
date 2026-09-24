@@ -316,7 +316,9 @@ async function selectVideo(slug) {
     ${data.video_url
       ? `<video controls src="${data.video_url}" style="width:100%; max-width:640px; background:#000; margin-bottom:10px;"></video>
          <div><a href="${data.video_url}" download class="btn-ghost" style="display:inline-block; margin:6px 0 20px;">Download .mp4</a>
-         <button id="reassemble-btn" class="btn-ghost" style="margin-left:8px;">Re-assemble</button></div>`
+         <button id="reassemble-btn" class="btn-ghost" style="margin-left:8px;">Re-assemble</button></div>
+         ${yt.title ? `<p class="hint" style="margin:-8px 0 20px;">Suggested thumbnail headline: <b style="color:var(--gold);">${escapeHtml(yt.title)}</b> &mdash;
+           <a href="/edit.html?slug=${encodeURIComponent(slug)}">generate it &rarr;</a></p>` : ""}`
       : `<p class="hint">Not assembled yet${data.manifest && data.manifest.length ? "" : " - no media found yet, so there's nothing to build a video from"}.</p>
          <button id="assemble-btn" class="btn-primary" ${data.manifest && data.manifest.length ? "" : "disabled"}>Assemble Video</button>
          <div id="assemble-progress" class="save-status"></div>`

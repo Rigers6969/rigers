@@ -185,6 +185,30 @@ Hashtags: {" ".join("#" + t.lstrip("#") for t in (fb.get("hashtags") or []))}
 """
 
 
+def _auto_pick_music(topic: str, video_dir: Path, report: ProgressCB) -> Optional[Path]:
+    """Searches Jamendo using the video's own topic as the query and
+    downloads the first commercial-safe match, so background music is
+    picked automatically instead of requiring a manual search on the
+    Edit page. Returns None (meaning "no music") rather than raising -
+    no Jamendo key, no results, or a failed download all just mean the
+    video ships without music, same as if you'd chosen that yourself."""
+    from music_finder import auto_pick_track, download_track
+
+    track = auto_pick_track(topic)
+    if not track:
+        report("No royalty-free music match found - continuing without music.")
+        return None
+
+    report(f'Adding background music: "{track["title"]}" by {track["artist"]}...')
+    dest = video_dir / "_auto_music.mp3"
+    try:
+        download_track(track, dest)
+    except Exception as exc:
+        report(f"Could not download background music ({exc}) - continuing without music.")
+        return None
+    return dest
+
+
 def produce_video(
     topic: str,
     channel: str,
@@ -192,6 +216,7 @@ def produce_video(
     voice: str = "en-GB-RyanNeural",
     target_words: int = 1500,
     style_slug: Optional[str] = None,
+    length: Optional[str] = None,
     progress: Optional[ProgressCB] = None,
 ) -> dict:
     """Runs the whole chain and writes everything to content/<slug>/.
@@ -200,9 +225,18 @@ def produce_video(
     style_slug, if given, names a profile saved under content/_styles/ by
     style_analyzer.py - its measured pacing (from a real reference video)
     is used for the final assembly step instead of a flat, uniform cut
-    rhythm."""
+    rhythm.
+
+    length is the Produce page's own "short"/"long" choice (the same
+    value resolve_target_words() turns into a word count) - passed
+    through separately because it also decides the finished video's
+    shape: "short" gets 9:16 vertical video with centered auto-captions,
+    "long" stays 16:9 with no captions. Both get automatic background
+    music, picked from the topic once the video is assembled."""
     if voice not in UK_MALE_VOICES.values():
         voice = "en-GB-RyanNeural"
+
+    is_short = (length or "").strip().lower() == "short"
 
     style = None
     effective_style_slug = style_slug or default_style_slug()
@@ -261,11 +295,33 @@ def produce_video(
         try:
             from video_assembler import AssemblyError, assemble_video
 
-            assemble_video(video_dir, progress=lambda m: report(f"Video: {m}"), style=style)
+            assemble_video(
+                video_dir, progress=lambda m: report(f"Video: {m}"), style=style,
+                aspect="9:16" if is_short else "16:9",
+            )
         except Exception as exc:
             # Script/voiceover/metadata are still real, useful output even if
             # assembly fails (e.g. ffmpeg missing) - don't fail the whole run.
             video_error = str(exc)
+
+        if video_error is None:
+            report("Finding background music...")
+            music_path = _auto_pick_music(topic, video_dir, report)
+            try:
+                from video_editor import apply_edits
+
+                apply_edits(
+                    video_dir,
+                    add_captions=is_short,
+                    caption_style="short-center",
+                    music_path=music_path,
+                    progress=lambda m: report(f"Auto-edit: {m}"),
+                )
+            except Exception as exc:
+                # The plain final.mp4 is still a complete, usable video even
+                # if auto-captioning/music fails (e.g. faster-whisper isn't
+                # installed) - this is a nice-to-have on top, not required.
+                report(f"Automatic captions/music failed ({exc}) - the plain video is still available.")
     else:
         video_error = "No media was kept, so there's nothing to build a video from."
 

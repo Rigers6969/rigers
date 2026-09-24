@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Optional
 
 import requests
@@ -106,3 +107,20 @@ def search_tracks(query: str, limit: int = 12, client_id: Optional[str] = None) 
             "license) and were excluded. Try a different search term."
         )
     return result
+
+
+def auto_pick_track(query: str, client_id: Optional[str] = None) -> Optional[dict]:
+    """Returns the first commercial-safe Jamendo track for this query, or
+    None if Jamendo isn't configured or has nothing usable - callers
+    should treat that as "no music available", not an error to raise."""
+    result = search_tracks(query, limit=5, client_id=client_id)
+    tracks = result.get("tracks") or []
+    return tracks[0] if tracks else None
+
+
+def download_track(track: dict, dest_path: Path) -> None:
+    resp = requests.get(track["download_url"], timeout=30, stream=True)
+    resp.raise_for_status()
+    with open(dest_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=65536):
+            f.write(chunk)

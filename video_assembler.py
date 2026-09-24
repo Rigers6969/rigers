@@ -27,6 +27,7 @@ from typing import Callable, Optional
 ProgressCB = Callable[[str], None]
 
 WIDTH, HEIGHT, FPS = 1920, 1080, 30
+ASPECT_SIZES = {"16:9": (1920, 1080), "9:16": (1080, 1920)}
 MAX_ZOOM = 1.15  # 15% zoom over a segment's full duration
 MIN_SHOT_SECONDS = 1.5  # a shot slice shorter than this looks like a flicker cut
 MAX_SHOT_SECONDS = 12.0  # never hold one static image longer than this, however few were found
@@ -68,6 +69,22 @@ def get_duration_seconds(path: Path) -> float:
     return float(result.stdout.strip())
 
 
+def get_video_dimensions(path: Path) -> tuple[int, int]:
+    """Real (width, height) of an already-rendered video file - used
+    instead of trusting the module's own WIDTH/HEIGHT constants, which
+    are only the 16:9 default and wrong for a 9:16 short."""
+    result = _run_ffmpeg(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+         "-of", "csv=s=x:p=0", str(path)],
+        timeout=30, error_prefix=f"Could not read dimensions of {path}",
+    )
+    try:
+        w, h = result.stdout.strip().split("x")
+        return int(w), int(h)
+    except ValueError:
+        raise AssemblyError(f"Could not parse dimensions of {path}: {result.stdout!r}")
+
+
 def top_image_per_shot(manifest_path: Path) -> list[tuple[str, Path]]:
     """Returns [(shot_id, image_path), ...] - each shot's best-ranked
     surviving image, in the order shots were first seen in the manifest
@@ -89,7 +106,10 @@ def top_image_per_shot(manifest_path: Path) -> list[tuple[str, Path]]:
     return [(shot_id, best_path[shot_id]) for shot_id in order]
 
 
-def _make_ken_burns_segment(image_path: Path, duration: float, out_path: Path, reverse: bool = False) -> None:
+def _make_ken_burns_segment(
+    image_path: Path, duration: float, out_path: Path, reverse: bool = False,
+    width: int = WIDTH, height: int = HEIGHT,
+) -> None:
     """reverse=True zooms out instead of in - used to give repeated
     occurrences of the same image (when there are fewer images than the
     runtime needs) some visual variety instead of looking like an
@@ -105,9 +125,9 @@ def _make_ken_burns_segment(image_path: Path, duration: float, out_path: Path, r
     else:
         zoom_expr = f"min(zoom+{zoom_step:.6f},{MAX_ZOOM})"
     vf = (
-        f"scale={WIDTH * 2}:{HEIGHT * 2}:force_original_aspect_ratio=increase,"
-        f"crop={WIDTH * 2}:{HEIGHT * 2},"
-        f"zoompan=z='{zoom_expr}':d={n_frames}:s={WIDTH}x{HEIGHT}:fps={FPS},"
+        f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
+        f"crop={width * 2}:{height * 2},"
+        f"zoompan=z='{zoom_expr}':d={n_frames}:s={width}x{height}:fps={FPS},"
         f"format=yuv420p"
     )
     _run_ffmpeg(
@@ -133,7 +153,8 @@ def _dynamic_durations(n: int, avg_seconds: float, short_range: tuple[float, flo
 
 
 def assemble_video(
-    video_dir: Path, progress: Optional[ProgressCB] = None, style: Optional[dict] = None
+    video_dir: Path, progress: Optional[ProgressCB] = None, style: Optional[dict] = None,
+    aspect: str = "16:9",
 ) -> Path:
     """Builds video_dir/final.mp4 from video_dir/voiceover.mp3 and the best
     image per shot in video_dir/media/manifest.csv. Raises AssemblyError
@@ -143,11 +164,15 @@ def assemble_video(
     from a reference video) - when given, segment durations vary around
     its avg_shot_seconds instead of every shot getting an identical flat
     share of the runtime, and its avg_shot_seconds substitutes for
-    MAX_SHOT_SECONDS as the per-image cap."""
+    MAX_SHOT_SECONDS as the per-image cap.
+
+    `aspect` is "16:9" (the default, for full-length videos) or "9:16"
+    (vertical, for Shorts/Reels) - see ASPECT_SIZES."""
     def report(msg: str) -> None:
         if progress:
             progress(msg)
 
+    width, height = ASPECT_SIZES.get(aspect, ASPECT_SIZES["16:9"])
     _require_ffmpeg()
 
     audio_path = video_dir / "voiceover.mp3"
@@ -209,7 +234,7 @@ def assemble_video(
         for i, (image_path, duration, reverse) in enumerate(segments, start=1):
             report(f"Rendering segment {i}/{len(segments)}...")
             seg_path = tmp_dir / f"seg_{i:03d}.mp4"
-            _make_ken_burns_segment(image_path, duration, seg_path, reverse=reverse)
+            _make_ken_burns_segment(image_path, duration, seg_path, reverse=reverse, width=width, height=height)
             segment_paths.append(seg_path)
 
         report("Combining shots...")

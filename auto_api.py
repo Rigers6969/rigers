@@ -32,7 +32,8 @@ def produce():
     # length ("short"/"long") drives target_words automatically - see
     # producer.VIDEO_LENGTH_PRESETS. An explicit target_words is still
     # honored if a caller passes one directly.
-    target_words = resolve_target_words(data.get("length"), data.get("target_words"))
+    length = data.get("length")
+    target_words = resolve_target_words(length, data.get("target_words"))
     style_slug = (str(data.get("style_slug", "")).strip() or None)
 
     if not topic:
@@ -47,7 +48,7 @@ def produce():
 
         return produce_video(
             topic, channel, writer, voice=voice, target_words=target_words,
-            style_slug=style_slug, progress=lambda m: set_progress(job_id, m),
+            style_slug=style_slug, length=length, progress=lambda m: set_progress(job_id, m),
         )
 
     job_id = start_job(task)
@@ -75,7 +76,8 @@ def produce_batch():
 
     channel = str(data.get("channel", "")).strip() or "Paper Trail"
     voice = str(data.get("voice", "en-GB-RyanNeural"))
-    target_words = resolve_target_words(data.get("length"), data.get("target_words"))
+    length = data.get("length")
+    target_words = resolve_target_words(length, data.get("target_words"))
     style_slug = (str(data.get("style_slug", "")).strip() or None)
 
     try:
@@ -95,7 +97,7 @@ def produce_batch():
             try:
                 result = produce_video(
                     topic, channel, writer, voice=voice, target_words=target_words,
-                    style_slug=style_slug, progress=report,
+                    style_slug=style_slug, length=length, progress=report,
                 )
                 result["error"] = None
             except Exception as exc:

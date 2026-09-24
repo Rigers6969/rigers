@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 from typing import Callable, Optional
 
-from video_assembler import HEIGHT, WIDTH, AssemblyError, _require_ffmpeg, _run_ffmpeg
+from video_assembler import HEIGHT, WIDTH, AssemblyError, _require_ffmpeg, _run_ffmpeg, get_video_dimensions
 
 ProgressCB = Callable[[str], None]
 
@@ -32,6 +32,7 @@ CAPTION_STYLES = {
         "bold": -1,
         "outline": 4,
         "shadow": 1,
+        "alignment": 2,  # ASS: bottom-center
         "margin_v": 90,
     },
     "gold-highlight": {
@@ -43,7 +44,25 @@ CAPTION_STYLES = {
         "bold": -1,
         "outline": 4,
         "shadow": 1,
+        "alignment": 2,
         "margin_v": 90,
+    },
+    "short-center": {
+        "label": "Centered (Shorts)",
+        "fontname": "Arial",
+        # No fixed fontsize - Shorts are 9:16 (1080x1920) while a fixed
+        # pixel size tuned for 16:9 would read too small (relative to the
+        # taller canvas) or too big (relative to the narrower one), so
+        # this scales with the real video's width instead - see
+        # build_ass_subtitles's fontsize_ratio fallback.
+        "fontsize_ratio": 0.075,
+        "primary": "&H00FFFFFF",
+        "outline_color": "&H00000000",
+        "bold": -1,
+        "outline": 5,
+        "shadow": 1,
+        "alignment": 5,  # ASS: middle-center
+        "margin_v": 0,
     },
 }
 DEFAULT_CAPTION_STYLE = "bold-white"
@@ -113,17 +132,26 @@ def _ass_time(seconds: float) -> str:
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 
-def build_ass_subtitles(captions: list[dict], out_path: Path, style_name: str) -> None:
+def build_ass_subtitles(
+    captions: list[dict], out_path: Path, style_name: str, width: int = WIDTH, height: int = HEIGHT,
+) -> None:
+    """width/height should be the real dimensions of the video these
+    captions are burned into - PlayResX/Y (and short-center's fontsize,
+    which has no fixed value) have to match the actual canvas, not just
+    the 16:9 default, or a 9:16 short gets captions sized/positioned for
+    the wrong resolution."""
     style = CAPTION_STYLES.get(style_name, CAPTION_STYLES[DEFAULT_CAPTION_STYLE])
+    fontsize = style.get("fontsize") or round(width * style.get("fontsize_ratio", 0.0667))
+    alignment = style.get("alignment", 2)
     header = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: {WIDTH}
-PlayResY: {HEIGHT}
+PlayResX: {width}
+PlayResY: {height}
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{style['fontname']},{style['fontsize']},{style['primary']},&H000000FF,{style['outline_color']},&H00000000,{style['bold']},0,0,0,100,100,0,0,1,{style['outline']},{style['shadow']},2,60,60,{style['margin_v']},1
+Style: Caption,{style['fontname']},{fontsize},{style['primary']},&H000000FF,{style['outline_color']},&H00000000,{style['bold']},0,0,0,100,100,0,0,1,{style['outline']},{style['shadow']},{alignment},60,60,{style['margin_v']},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -190,7 +218,8 @@ def apply_edits(
             else:
                 captions = _group_words_into_captions(words)
                 ass_path = work_dir / "captions.ass"
-                build_ass_subtitles(captions, ass_path, caption_style)
+                real_width, real_height = get_video_dimensions(base_path)
+                build_ass_subtitles(captions, ass_path, caption_style, width=real_width, height=real_height)
 
                 report("Burning in captions...")
                 captioned_path = work_dir / "captioned.mp4"
