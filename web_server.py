@@ -41,6 +41,7 @@ from jobs import bp as jobs_bp
 from news_api import bp as news_bp
 from editor_api import bp as editor_bp
 from grammar_guide_api import bp as grammar_guide_bp
+from thumbnail_api import bp as thumbnail_bp
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -54,6 +55,7 @@ app.register_blueprint(jobs_bp)
 app.register_blueprint(news_bp)
 app.register_blueprint(grammar_guide_bp)
 app.register_blueprint(editor_bp)
+app.register_blueprint(thumbnail_bp)
 
 
 def load_config() -> dict:

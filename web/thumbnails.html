@@ -3,14 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>English Guide &mdash; The Wayne Factory</title>
+<title>Thumbnails &mdash; The Wayne Factory</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="videos.css">
-<link rel="stylesheet" href="english.css">
 </head>
 <body>
   <header>
@@ -39,38 +38,35 @@
 
   <section class="videos-hero">
     <div class="wrap">
-      <span class="section-label">Advanced Grammar</span>
-      <h1>English Guide</h1>
-      <p>Real grammar chapters pulled straight from two open-license Wikibooks &mdash; "English in Use" and "English Grammar" (CC BY-SA) &mdash; going past the basics into sentence structure, punctuation, register, and the finer points serious learners need. Not an official CEFR-certified textbook (those are commercial), just the deepest real, free material we could find.</p>
+      <span class="section-label">No Logos, No Faces</span>
+      <h1>Thumbnails</h1>
+      <p>Generate a bold, headline-driven thumbnail for anything &mdash; not tied to a specific produced video. Works for both YouTube (16:9) and Instagram/Reels/Shorts (9:16).</p>
     </div>
   </section>
 
   <section class="wrap">
-    <div class="panel news-toolbar">
-      <div>
-        <span id="guide-updated" class="hint">Loading...</span>
+    <div class="panel" style="max-width:640px;">
+      <h3>Generate Thumbnail</h3>
+      <p class="hint" style="margin-bottom:14px;">Bold headline, gold highlight, abstract icon &mdash; no real logos or faces used.</p>
+      <textarea id="thumb-headline" rows="2" placeholder="Big bold headline text" style="margin-bottom:10px;"></textarea>
+      <div class="form-row" style="margin-bottom:14px;">
+        <input type="text" id="thumb-kicker" placeholder="Kicker (optional, small text above)">
+        <input type="text" id="thumb-tag" placeholder="Tag (optional, red pill text)">
+        <input type="text" id="thumb-brand" placeholder="Brand (optional, corner label)">
+        <select id="thumb-aspect">
+          <option value="16:9">YouTube (16:9)</option>
+          <option value="9:16">Instagram / Reels / Shorts (9:16)</option>
+        </select>
       </div>
-      <button id="refresh-btn" class="btn-ghost">Refresh from Source</button>
-    </div>
-
-    <div id="guide-progress" class="hint hidden"></div>
-    <div id="guide-error" class="error-line hidden"></div>
-
-    <div id="guide-empty" class="panel hidden">
-      <p>No chapters yet &mdash; click "Refresh from Source" to fetch them. This needs a real internet connection to en.wikibooks.org.</p>
-    </div>
-
-    <div class="english-layout">
-      <div class="panel english-toc">
-        <div id="toc-list"></div>
-      </div>
-
-      <div class="panel english-reader" id="reader-panel">
-        <span class="hint">Select a chapter to read.</span>
+      <button id="thumb-generate-btn" class="btn-ghost">Generate Thumbnail</button>
+      <div id="thumb-progress" class="save-status"></div>
+      <div id="thumb-preview-wrap" class="hidden" style="margin-top:14px;">
+        <img id="thumb-preview" style="max-width:100%; max-height:480px; border-radius:2px; display:block;">
+        <a id="thumb-download-link" href="#" download="thumbnail.jpg" class="btn-ghost" style="display:inline-block; margin-top:10px;">Download Thumbnail</a>
       </div>
     </div>
   </section>
 
-  <script src="english.js"></script>
+  <script src="thumbnails.js"></script>
 </body>
 </html>
