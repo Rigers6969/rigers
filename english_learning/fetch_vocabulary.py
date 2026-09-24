@@ -19,6 +19,11 @@ WORDS_FILE = Path(__file__).resolve().parent / "common_words.txt"
 
 ProgressCB = Callable[[str], None]
 
+# Some hosts behind Cloudflare (this one included) reject requests's
+# default "python-requests/x.y" agent - see fetch_idioms.py/fetch_grammar.py
+# for the same fix against Wikimedia's own, explicit User-Agent policy.
+_HEADERS = {"User-Agent": "EnglishLearningGuide/1.0 (personal content-automation project)"}
+
 
 def load_word_list(limit: Optional[int] = None) -> list[str]:
     words = []
@@ -36,7 +41,7 @@ def fetch_word(word: str, timeout: float = 10.0) -> Optional[dict]:
     entry for it (a real, expected outcome for some words - not every
     common word is in every dictionary)."""
     try:
-        resp = requests.get(API_URL.format(word=word), timeout=timeout)
+        resp = requests.get(API_URL.format(word=word), headers=_HEADERS, timeout=timeout)
     except requests.RequestException:
         return None
     if resp.status_code != 200:

@@ -31,6 +31,12 @@ BOOKS = ["English in Use", "English Grammar"]
 CACHE_PATH = CONTENT_ROOT / "_grammar_guide" / "chapters.json"
 ProgressCB = Callable[[str], None]
 
+# Wikimedia's own User-Agent policy (meta.wikimedia.org/wiki/User-Agent_policy)
+# rejects requests carrying the default "python-requests/x.y" agent with a
+# 403, regardless of rate - every call here needs a real one identifying
+# this app (same fix already used by shotsource/cache.py for Commons).
+_HEADERS = {"User-Agent": "TheWayneFactory-EnglishGuide/1.0 (personal content-automation project)"}
+
 
 def _list_chapter_titles(book_title: str, limit: int = 60) -> list[str]:
     resp = requests.get(API_URL, params={
@@ -40,7 +46,7 @@ def _list_chapter_titles(book_title: str, limit: int = 60) -> list[str]:
         "apnamespace": 0,
         "aplimit": min(100, limit),
         "format": "json",
-    }, timeout=15)
+    }, headers=_HEADERS, timeout=15)
     resp.raise_for_status()
     pages = ((resp.json().get("query") or {}).get("allpages")) or []
     # Keep the book's own page and its "Book/Chapter" subpages; drop
@@ -56,7 +62,7 @@ def _fetch_extract(title: str) -> str:
         "explaintext": 1,
         "titles": title,
         "format": "json",
-    }, timeout=20)
+    }, headers=_HEADERS, timeout=20)
     resp.raise_for_status()
     pages = ((resp.json().get("query") or {}).get("pages")) or {}
     for page in pages.values():

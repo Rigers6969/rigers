@@ -18,6 +18,11 @@ import requests
 API_URL = "https://en.wiktionary.org/w/api.php"
 ProgressCB = Callable[[str], None]
 
+# Wikimedia's User-Agent policy (meta.wikimedia.org/wiki/User-Agent_policy)
+# rejects requests carrying the default "python-requests/x.y" agent with a
+# 403 - every call here needs a real one identifying this app.
+_HEADERS = {"User-Agent": "EnglishLearningGuide/1.0 (personal content-automation project)"}
+
 
 def _list_idiom_titles(limit: int) -> list[str]:
     titles: list[str] = []
@@ -32,7 +37,7 @@ def _list_idiom_titles(limit: int) -> list[str]:
         }
         if cmcontinue:
             params["cmcontinue"] = cmcontinue
-        resp = requests.get(API_URL, params=params, timeout=15)
+        resp = requests.get(API_URL, params=params, headers=_HEADERS, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         members = (data.get("query") or {}).get("categorymembers", [])
@@ -51,7 +56,7 @@ def _fetch_extract(title: str) -> str:
         "explaintext": 1,
         "titles": title,
         "format": "json",
-    }, timeout=15)
+    }, headers=_HEADERS, timeout=15)
     resp.raise_for_status()
     pages = ((resp.json().get("query") or {}).get("pages")) or {}
     for page in pages.values():

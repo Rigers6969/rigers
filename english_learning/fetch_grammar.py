@@ -17,6 +17,11 @@ API_URL = "https://en.wikibooks.org/w/api.php"
 BOOK_TITLE = "English in Use"
 ProgressCB = Callable[[str], None]
 
+# Wikimedia's User-Agent policy (meta.wikimedia.org/wiki/User-Agent_policy)
+# rejects requests carrying the default "python-requests/x.y" agent with a
+# 403 - every call here needs a real one identifying this app.
+_HEADERS = {"User-Agent": "EnglishLearningGuide/1.0 (personal content-automation project)"}
+
 
 def _list_chapter_titles(limit: int) -> list[str]:
     resp = requests.get(API_URL, params={
@@ -26,7 +31,7 @@ def _list_chapter_titles(limit: int) -> list[str]:
         "apnamespace": 0,
         "aplimit": min(100, limit),
         "format": "json",
-    }, timeout=15)
+    }, headers=_HEADERS, timeout=15)
     resp.raise_for_status()
     pages = ((resp.json().get("query") or {}).get("allpages")) or []
     # Keep the book's own page and its "Book/Chapter" subpages; drop
@@ -42,7 +47,7 @@ def _fetch_extract(title: str) -> str:
         "explaintext": 1,
         "titles": title,
         "format": "json",
-    }, timeout=20)
+    }, headers=_HEADERS, timeout=20)
     resp.raise_for_status()
     pages = ((resp.json().get("query") or {}).get("pages")) or {}
     for page in pages.values():
