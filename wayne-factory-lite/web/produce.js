@@ -378,3 +378,104 @@ async function runAssemble(slug) {
 }
 
 loadVideos();
+
+// ---------------------------------------------------------------------
+// Schedule panel - unattended per-channel daily production windows
+// ---------------------------------------------------------------------
+async function loadScheduleVoices() {
+  const resp = await fetch("/api/studio/voices");
+  const data = await resp.json();
+  document.getElementById("sched-voice").innerHTML =
+    data.voices.map((v) => `<option value="${v.id}">${escapeHtml(v.label)}</option>`).join("");
+}
+loadScheduleVoices();
+
+document.getElementById("sched-engine").addEventListener("change", (e) => {
+  const isClaude = e.target.value === "claude";
+  document.getElementById("sched-anthropic-key").classList.toggle("hidden", !isClaude);
+  document.getElementById("sched-ollama-host").classList.toggle("hidden", isClaude);
+});
+
+function isWindowActiveNow(entry) {
+  const now = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(new Date());
+  return entry.start <= now && now < entry.end;
+}
+
+async function loadSchedule() {
+  const resp = await fetch("/api/schedule");
+  const data = await resp.json();
+  const listEl = document.getElementById("sched-list");
+
+  if (!data.entries || data.entries.length === 0) {
+    listEl.innerHTML = '<p class="empty-note">No scheduled windows yet.</p>';
+    return;
+  }
+
+  listEl.innerHTML = data.entries.map((entry) => `
+    <div class="save-status" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
+      <span>
+        <b style="color:var(--gold);">${escapeHtml(entry.channel)}</b>
+        &mdash; ${escapeHtml(entry.start)}&ndash;${escapeHtml(entry.end)}
+        &middot; ${entry.engine === "claude" ? "Claude" : "Ollama"} &middot; ${entry.length === "short" ? "Short" : "Long"}
+        ${isWindowActiveNow(entry) && entry.enabled ? '<span style="color:var(--gold);">&middot; running now</span>' : ""}
+        ${entry.enabled ? "" : '<span style="opacity:0.6;"> &middot; disabled</span>'}
+      </span>
+      <span>
+        <button class="btn-ghost sched-toggle-btn" data-id="${entry.id}" data-enabled="${entry.enabled}" style="padding:4px 10px; font-size:12px;">${entry.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn-ghost sched-delete-btn" data-id="${entry.id}" style="padding:4px 10px; font-size:12px;">Delete</button>
+      </span>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".sched-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const entry = data.entries.find((e) => e.id === btn.dataset.id);
+      await fetch(`/api/schedule/${btn.dataset.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...entry, enabled: btn.dataset.enabled !== "true" }),
+      });
+      loadSchedule();
+    });
+  });
+  listEl.querySelectorAll(".sched-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await fetch(`/api/schedule/${btn.dataset.id}`, { method: "DELETE" });
+      loadSchedule();
+    });
+  });
+}
+loadSchedule();
+
+document.getElementById("sched-add-btn").addEventListener("click", async () => {
+  const errorEl = document.getElementById("sched-error");
+  errorEl.classList.add("hidden");
+
+  const body = {
+    channel: document.getElementById("sched-channel").value.trim(),
+    start: document.getElementById("sched-start").value,
+    end: document.getElementById("sched-end").value,
+    engine: document.getElementById("sched-engine").value,
+    length: document.getElementById("sched-length").value,
+    voice: document.getElementById("sched-voice").value,
+    ollama_host: document.getElementById("sched-ollama-host").value.trim(),
+    anthropic_key: document.getElementById("sched-anthropic-key").value.trim(),
+    enabled: true,
+  };
+
+  const resp = await fetch("/api/schedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    errorEl.innerText = data.error || "Failed to add.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  document.getElementById("sched-channel").value = "";
+  loadSchedule();
+});

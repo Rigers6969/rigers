@@ -33,6 +33,8 @@ from auto_api import bp as auto_bp
 from jobs import bp as jobs_bp
 from editor_api import bp as editor_bp
 from thumbnail_api import bp as thumbnail_bp
+from scheduler_api import bp as scheduler_bp
+from scheduler import start_scheduler_thread
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -41,6 +43,7 @@ CONFIG_PATH = APP_DIR / "config.json"
 app = Flask(__name__, static_folder=None)
 app.register_blueprint(studio_bp)
 app.register_blueprint(auto_bp)
+app.register_blueprint(scheduler_bp)
 app.register_blueprint(jobs_bp)
 app.register_blueprint(editor_bp)
 app.register_blueprint(thumbnail_bp)
@@ -143,4 +146,5 @@ def api_revenue():
 
 
 if __name__ == "__main__":
+    start_scheduler_thread()
     app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

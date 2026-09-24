@@ -89,6 +89,40 @@
       <div id="produce-result"></div>
     </div>
 
+    <div class="panel">
+      <h3>Schedule</h3>
+      <p class="hint" style="margin-bottom:14px;">
+        Produce videos for a channel automatically every day during a time window - it invents its own topics
+        (steered away from ones already covered) and keeps going until the window closes.
+        <b>The app has to actually be running</b> (python web_server.py) during that window - this can't turn your PC on by itself.
+      </p>
+
+      <div class="form-row" style="margin-bottom:10px;">
+        <input id="sched-channel" placeholder="Channel (e.g. History, Science)">
+        <input id="sched-start" type="time" value="14:00">
+        <input id="sched-end" type="time" value="16:00">
+      </div>
+      <div class="form-row" style="margin-bottom:14px;">
+        <select id="sched-engine">
+          <option value="ollama">Ollama (local)</option>
+          <option value="claude">Claude API</option>
+        </select>
+        <select id="sched-length">
+          <option value="short">Short &mdash; 30&ndash;40 seconds</option>
+          <option value="long" selected>Long &mdash; full documentary</option>
+        </select>
+        <select id="sched-voice"></select>
+      </div>
+      <div class="form-row" id="sched-engine-extra" style="margin-bottom:14px;">
+        <input id="sched-ollama-host" placeholder="Ollama host" value="http://localhost:11434">
+        <input id="sched-anthropic-key" type="password" placeholder="Anthropic API key (Claude engine only)" class="hidden">
+      </div>
+      <button id="sched-add-btn" class="btn-ghost">Add to Schedule</button>
+      <div id="sched-error" class="error-line hidden" style="margin-top:10px;"></div>
+
+      <div id="sched-list" style="margin-top:20px;"></div>
+    </div>
+
     <div id="video-list" class="videos-grid"></div>
 
     <div id="detail" class="panel hidden">

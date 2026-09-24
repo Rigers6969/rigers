@@ -80,6 +80,16 @@ Rules:
 - facebook.hashtags: 3-6 hashtags without the # symbol.
 """
 
+TOPIC_IDEA_PROMPT = """You are the head writer for a documentary-style YouTube channel called "{channel}".
+
+Come up with ONE new video topic for this channel - specific, factual, and interesting to a general audience. It should be a single real subject a short documentary could be made about (a specific event, discovery, place, person, or phenomenon), not a vague theme.
+
+Do not repeat or closely overlap with any of these topics already covered on this channel:
+{avoid_list}
+
+Respond with ONLY the topic as one sentence - no numbering, no quotation marks, no other text.
+"""
+
 
 # Duration presets for the Produce page, so a Ollama-technical "target
 # words" number never has to be typed by hand - pick a length, the word
@@ -150,6 +160,39 @@ def generate_metadata(writer, topic: str, channel: str, script: str) -> dict:
     for platform in ("youtube", "instagram", "facebook"):
         metadata.setdefault(platform, {})
     return metadata
+
+
+def list_covered_topics(channel: str) -> list[str]:
+    """Scans every produced video's notes.txt for this channel's own
+    "{channel} - {topic}" header line (format_notes() below always
+    writes one) - used to stop the scheduler from generating the same
+    topic twice, without needing a separate topic-history file to keep
+    in sync."""
+    if not CONTENT_ROOT.exists():
+        return []
+    prefix = f"{channel} - "
+    topics = []
+    for notes_path in CONTENT_ROOT.glob("*/notes.txt"):
+        try:
+            first_line = notes_path.read_text(encoding="utf-8").splitlines()[0]
+        except (OSError, IndexError):
+            continue
+        if first_line.startswith(prefix):
+            topics.append(first_line[len(prefix):])
+    return topics
+
+
+def generate_topic_idea(writer, channel: str, avoid_topics: Optional[list[str]] = None) -> str:
+    """Has the writer's own model brainstorm one new topic for `channel`,
+    steered away from whatever list_covered_topics() already found -
+    used by the scheduler, which produces videos unattended and has no
+    human picking a topic each time."""
+    avoid_list = "\n".join(f"- {t}" for t in (avoid_topics or [])) or "(none yet)"
+    topic = writer._call_model(TOPIC_IDEA_PROMPT.format(channel=channel, avoid_list=avoid_list), max_tokens=200)
+    topic = topic.strip().strip('"').strip()
+    if not topic:
+        raise RuntimeError("Model did not return a usable topic idea.")
+    return topic
 
 
 def format_notes(topic: str, channel: str, metadata: dict) -> str:
