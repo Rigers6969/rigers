@@ -10,7 +10,7 @@ frontend calls GET /api/stats and never sees the credentials themselves.
 
 Run with:
     python web_server.py
-Then open http://localhost:5000
+Then open http://localhost:5001
 
 Configure credentials by copying config.example.json to config.json and
 filling in your values (see analytics.py's docstring for exactly how to
@@ -159,4 +159,4 @@ def api_revenue():
 if __name__ == "__main__":
     # threaded=True so a slow pipeline run (media search, whisper transcription)
     # doesn't block the stats dashboard from loading in another tab.
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+    app.run(host="127.0.0.1", port=5001, debug=False, threaded=True)

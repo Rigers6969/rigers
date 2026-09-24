@@ -34,9 +34,8 @@ the same repo.
 python web_server.py
 ```
 
-Open http://localhost:5000. Note: this uses the *same* port (5000) as
-the main Wayne Factory app, so don't run both at the same time unless
-you change one of their ports.
+Open http://localhost:5000. The main Wayne Factory app runs on 5001, so
+both can run at the same time without a port conflict.
 
 On the Produce page, type the channel name (e.g. "History") each time -
 there's no separate app per channel, just this one app used for
