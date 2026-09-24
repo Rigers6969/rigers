@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+config.json
+content/
+.shotsource_cache/
+token_analytics.json
+client_secret.json
+token.json

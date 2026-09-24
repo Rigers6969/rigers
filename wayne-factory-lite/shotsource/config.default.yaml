@@ -1,0 +1,127 @@
+# Default configuration for shotsource. Copy this file, edit the copy, and
+# pass it with --config to override any of these values - anything you
+# don't override falls back to what's here.
+
+# Where the per-shot folders and manifest.csv are written.
+output_dir: "./shot_media_output"
+
+# Where cached API responses and downloaded images are kept, so re-running
+# the tool while tuning thresholds below doesn't re-hit the source APIs or
+# re-download the same files.
+cache_dir: "./.shotsource_cache"
+cache_ttl_hours: 168 # 1 week - how long a cached *API search* response is trusted
+
+# How many of the best-scoring survivors to keep per shot.
+top_n_per_shot: 5
+
+# Each source's max_results_per_shot was 30 (20 for archive_org) - with up
+# to 8 sources enabled, that's up to ~230 candidates downloaded and
+# scored (image fetch + hash + sharpness + caption similarity) per shot,
+# to keep only the best 5. That fixed per-shot cost doesn't shrink for a
+# short video with only 1-2 shots, so it dominated total runtime there.
+# Dropped to 10/source - still a healthy pool (~50-80 candidates/shot
+# across a typical set of enabled sources) without the waste.
+sources:
+  openverse:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 10
+  wikimedia:
+    enabled: true
+    requests_per_minute: 30
+    max_results_per_shot: 10
+  loc:
+    enabled: true
+    # LOC's own documented limit for this API is 20 requests/minute, with
+    # a 1-HOUR block if you go over it (https://www.loc.gov/apis/json-and-yaml/working-within-limits/).
+    # This was set to exactly 20 with no safety margin, so any small burst
+    # (multiple shots queued close together) could trip it - and once
+    # tripped, every request fails with 403 for the next hour regardless
+    # of pacing after that. Kept comfortably under the ceiling instead.
+    requests_per_minute: 12
+    max_results_per_shot: 10
+  archive_org:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 10
+  pexels:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 10
+    # Name of the environment variable holding your Pexels API key.
+    # Get a free key at https://www.pexels.com/api/ - without it this
+    # source is silently skipped.
+    api_key_env: "PEXELS_API_KEY"
+  pixabay:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 10
+    # Get a free key at https://pixabay.com/api/docs/ - without it this
+    # source is silently skipped.
+    api_key_env: "PIXABAY_API_KEY"
+  unsplash:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 10
+    # Get a free "Access Key" at https://unsplash.com/developers - without
+    # it this source is silently skipped.
+    api_key_env: "UNSPLASH_ACCESS_KEY"
+  flickr:
+    enabled: true
+    requests_per_minute: 20
+    max_results_per_shot: 10
+    # Unlike the sources above, Flickr is NOT free: getting a key at all
+    # requires a paid Flickr Pro subscription (~$82/year), and commercial
+    # use needs a separate staff-approved commercial key. Only worth
+    # setting up if you already have Flickr Pro - leave FLICKR_API_KEY
+    # blank otherwise and this source just silently skips, no downside.
+    api_key_env: "FLICKR_API_KEY"
+
+quality:
+  hard_reject:
+    min_width_px: 1920
+    aspect_ratio_min: 1.2
+    aspect_ratio_max: 2.4
+    # Perceptual-hash Hamming distance at or below which two images in the
+    # same shot are treated as duplicates (0 = identical, ~5 = near-dupe).
+    dedup_hamming_threshold: 5
+    # Case-insensitive substrings in a candidate's title/caption that mark
+    # it as a stock-watermarked preview.
+    watermark_keywords:
+      - shutterstock
+      - getty
+      - istock
+      - alamy
+      - watermark
+      - "123rf"
+      - dreamstime
+    # Image-based watermark heuristic (Canny edge density in the likely
+    # watermark bands vs. the image average). This is a heuristic, not a
+    # trained detector - raise it if it's flagging clean photos, lower it
+    # if visibly watermarked stock previews are slipping through.
+    watermark_edge_density_multiplier: 2.5
+
+  scoring:
+    weights:
+      resolution: 0.3
+      sharpness: 0.3
+      caption_similarity: 0.4
+    # Width (px) that scores a full 1.0 on resolution; linear below that.
+    resolution_reference_width_px: 3840
+    # Laplacian variance that scores a full 1.0 on sharpness; linear below
+    # that. Tune this against a few known-sharp vs. known-blurry images.
+    sharpness_reference_variance: 800.0
+    # Any sentence-transformers model name.
+    embedding_model: "all-MiniLM-L6-v2"
+    # Hard floor on caption similarity (0-1), checked before scoring. A
+    # sharp, high-resolution but totally unrelated image (a random office
+    # photo, a company logo, an old map) can still score well under the
+    # weighted blend above since resolution+sharpness make up 60% of
+    # final_score - this rejects it outright regardless of those two.
+    # Raise it if irrelevant images are still slipping through; lower it
+    # if too many shots are coming back empty.
+    min_caption_similarity: 0.15
+
+http:
+  user_agent: "shotsource-cli/1.0 (open media finder for a shot list; contact: set-your-email-here)"
+  timeout_seconds: 30

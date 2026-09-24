@@ -1,0 +1,13 @@
+streamlit
+yt-dlp
+faster-whisper
+anthropic
+requests
+Pillow
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+flask
+edge-tts
+python-dotenv
+feedparser
