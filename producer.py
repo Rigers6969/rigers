@@ -14,6 +14,7 @@ shared between videos except the on-disk media cache.
 from __future__ import annotations
 
 import json
+import os
 import re
 import tempfile
 from pathlib import Path
@@ -23,7 +24,12 @@ from json_utils import extract_json_items
 from studio import UK_MALE_VOICES, synthesize_speech
 
 APP_DIR = Path(__file__).resolve().parent
-CONTENT_ROOT = APP_DIR / "content"
+# WAYNE_CONTENT_DIR lets a second site (web_server_lite.py, for a second
+# YouTube channel) keep its own separate videos/Obsidian vault instead of
+# mixing into this one - set as an env var before this module is first
+# imported, since every other module that needs it does `from producer
+# import CONTENT_ROOT` and captures whatever value this resolves to once.
+CONTENT_ROOT = APP_DIR / os.environ.get("WAYNE_CONTENT_DIR", "content")
 
 ProgressCB = Callable[[str], None]
 

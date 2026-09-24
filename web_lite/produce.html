@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produce &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/thumbnails.html">Thumbnails</a>
+      </div>
+      <div class="nav-right">
+        <div id="header-clock" class="nav-clock"></div>
+      </div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">One Prompt, One Finished Video</span>
+      <h1>Produce</h1>
+      <p>Give it a topic. It writes the script, plans the shots, writes YouTube/Instagram/Facebook metadata, generates the voiceover, and finds matching stock media &mdash; all into one folder, with nothing to copy-paste by hand.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="panel">
+      <h3>New Video</h3>
+
+      <label class="radio-label" style="margin-bottom:10px;">
+        <input type="checkbox" id="batch-toggle">
+        Batch mode &mdash; produce multiple videos unattended (one topic per line, up to 15)
+      </label>
+
+      <h4 id="topic-label">Topic</h4>
+      <textarea id="topic-text" rows="3" spellcheck="false" placeholder="e.g. The collapse of a company that faked its own revenue for a decade"></textarea>
+
+      <div class="form-row" style="margin-top:12px;">
+        <input id="channel-input" placeholder="Channel (e.g. History, Science)" value="">
+        <select id="engine-select">
+          <option value="ollama">Ollama (local)</option>
+          <option value="claude">Claude API</option>
+        </select>
+        <select id="length-select">
+          <option value="short">Short &mdash; 30&ndash;40 seconds</option>
+          <option value="long" selected>Long &mdash; full documentary</option>
+        </select>
+        <select id="voice-select"></select>
+      </div>
+      <div class="form-row" id="engine-extra" style="margin-top:10px;">
+        <input id="ollama-host" placeholder="Ollama host" value="http://localhost:11434">
+        <input id="anthropic-key" type="password" placeholder="Anthropic API key (Claude engine only)" class="hidden">
+      </div>
+
+      <button id="produce-btn" class="btn-primary" style="margin-top:16px;">Produce Video</button>
+
+      <div id="pipeline-tracker" class="pipeline-tracker hidden">
+        <div class="pipeline-step" data-stage="script"><span class="pipeline-dot"></span>Script</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="shots"><span class="pipeline-dot"></span>Shots</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="metadata"><span class="pipeline-dot"></span>Metadata</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="voiceover"><span class="pipeline-dot"></span>Voiceover</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="media"><span class="pipeline-dot"></span>Media</div>
+        <div class="pipeline-connector"></div>
+        <div class="pipeline-step" data-stage="assemble"><span class="pipeline-dot"></span>Assemble</div>
+      </div>
+      <div id="batch-list" class="hidden" style="margin-top:14px;"></div>
+      <div id="produce-progress" class="save-status"></div>
+      <div id="produce-result"></div>
+    </div>
+
+    <div id="video-list" class="videos-grid"></div>
+
+    <div id="detail" class="panel hidden">
+      <div class="detail-head">
+        <h3 id="detail-title"></h3>
+      </div>
+      <div id="detail-body"></div>
+    </div>
+  </section>
+
+  <script src="produce.js"></script>
+</body>
+</html>

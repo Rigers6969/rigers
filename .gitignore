@@ -6,12 +6,14 @@ transcripts/
 branding_output/
 assets/
 config.json
+config_lite.json
 .venv/
 .env
 .shotsource_cache/
 shot_media_output/
 voiceover_output/
 content/
+content_lite/
 files/videos/
 files/.cache/
 client_secret.json
