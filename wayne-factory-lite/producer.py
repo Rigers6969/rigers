@@ -52,7 +52,7 @@ ALWAYS write short, common, easy-to-find scenes (2-6 words), e.g.:
 - "courthouse exterior"
 - "handcuffs close up"
 - "newspaper front page"
-
+{extra_guidance}
 Respond with ONLY a JSON array of short visual descriptions (strings), each 2-6 words, in the same order the script flows. No other text, no markdown fences.
 """
 
@@ -62,7 +62,7 @@ Channel: {channel}
 Topic: {topic}
 Script (for context - do not repeat it verbatim):
 {script_excerpt}
-
+{extra_guidance}
 Write metadata for three platforms. Respond with ONLY a JSON object shaped exactly like this, no other text, no markdown fences:
 {{
   "youtube": {{"title": "...", "description": "...", "tags": ["...", "..."]}},
@@ -141,17 +141,18 @@ def unique_slug(base: str) -> str:
     return slug
 
 
-def generate_shot_list(writer, script: str) -> list[str]:
-    raw = writer._call_model(SHOTLIST_PROMPT.format(script=script[:6000]), max_tokens=1024)
+def generate_shot_list(writer, script: str, extra_guidance: str = "") -> list[str]:
+    raw = writer._call_model(SHOTLIST_PROMPT.format(script=script[:6000], extra_guidance=extra_guidance), max_tokens=1024)
     items = extract_json_items(raw)
     if not items:
         raise RuntimeError("Model did not return a usable shot list.")
     return [str(item).strip() for item in items if str(item).strip()]
 
 
-def generate_metadata(writer, topic: str, channel: str, script: str) -> dict:
+def generate_metadata(writer, topic: str, channel: str, script: str, extra_guidance: str = "") -> dict:
     raw = writer._call_model(
-        METADATA_PROMPT.format(channel=channel, topic=topic, script_excerpt=script[:4000]), max_tokens=1500
+        METADATA_PROMPT.format(channel=channel, topic=topic, script_excerpt=script[:4000], extra_guidance=extra_guidance),
+        max_tokens=1500,
     )
     items = extract_json_items(raw)
     if not items:
@@ -298,16 +299,21 @@ def produce_video(
     video_dir.mkdir(parents=True)
     media_dir = video_dir / "media"
 
+    from video_reviewer import format_guidance, load_recent_lessons
+    guidance = format_guidance(load_recent_lessons(channel))
+
     report("Writing script...")
-    script = writer.generate_script(topic, target_words=target_words, progress=lambda m: report(f"Script: {m}"))
+    script = writer.generate_script(
+        topic, target_words=target_words, extra_guidance=guidance, progress=lambda m: report(f"Script: {m}"),
+    )
     (video_dir / "script.txt").write_text(script, encoding="utf-8")
 
     report("Planning shots...")
-    shots = generate_shot_list(writer, script)
+    shots = generate_shot_list(writer, script, extra_guidance=guidance)
     (video_dir / "shots.json").write_text(json.dumps(shots, indent=2), encoding="utf-8")
 
     report("Writing YouTube/Instagram/Facebook metadata...")
-    metadata = generate_metadata(writer, topic, channel, script)
+    metadata = generate_metadata(writer, topic, channel, script, extra_guidance=guidance)
     (video_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     (video_dir / "notes.txt").write_text(format_notes(topic, channel, metadata), encoding="utf-8")
 
@@ -374,6 +380,21 @@ def produce_video(
     write_video_note(video_dir, slug, topic, channel, script, shots, metadata)
     update_index(CONTENT_ROOT)
 
+    review = None
+    try:
+        from video_reviewer import review_video
+
+        report("Reviewing this video for the next one's benefit...")
+        review = review_video(
+            video_dir, writer, channel, topic,
+            ollama_host=getattr(writer, "host", None) or "http://localhost:11434",
+            progress=lambda m: report(f"Review: {m}"),
+        )
+    except Exception as exc:
+        # A failed review shouldn't fail an otherwise-successful production -
+        # it's feedback for future videos, not something this one depends on.
+        report(f"Review failed ({exc}) - continuing without it.")
+
     report("Done.")
     return {
         "slug": slug,
@@ -383,4 +404,5 @@ def produce_video(
         "media_kept": kept,
         "word_count": len(script.split()),
         "video_error": video_error,
+        "review": review,
     }

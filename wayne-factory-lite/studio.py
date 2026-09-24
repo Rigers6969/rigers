@@ -70,16 +70,16 @@ def _word_count(text: str) -> int:
 # target word count is reached.
 # --------------------------------------------------------------------------
 
-OUTLINE_PROMPT_TEMPLATE = """You are a psychology educator planning a long-form spoken-word script for a voiceover video.
+OUTLINE_PROMPT_TEMPLATE = """You are a documentary writer planning a long-form spoken-word script for a voiceover video.
 
 Topic: "{topic}"
-
+{extra_guidance}
 Produce a numbered outline of exactly {num_sections} sections that together give a thorough, well-organized tour of this topic for a general audience - covering distinct sub-themes, concepts, or angles with a logical progression (no repetition between sections).
 
 Respond with ONLY the outline, one short section title per line, formatted as "1. Title", "2. Title", etc. No other prose.
 """
 
-SECTION_PROMPT_TEMPLATE = """You are writing section {index} of {total} of a long-form spoken-word script about psychology.
+SECTION_PROMPT_TEMPLATE = """You are writing section {index} of {total} of a long-form spoken-word documentary script.
 
 Topic: "{topic}"
 
@@ -87,7 +87,7 @@ Full outline:
 {outline}
 
 This section's focus: "{section_title}"
-
+{extra_guidance}
 Previously written script (tail end, for continuity - do not repeat or summarize it, just continue naturally from it):
 {tail}
 
@@ -99,8 +99,8 @@ class BaseScriptWriter:
     def _call_model(self, prompt: str, max_tokens: int) -> str:
         raise NotImplementedError
 
-    def generate_outline(self, topic: str, num_sections: int) -> list[str]:
-        prompt = OUTLINE_PROMPT_TEMPLATE.format(topic=topic, num_sections=num_sections)
+    def generate_outline(self, topic: str, num_sections: int, extra_guidance: str = "") -> list[str]:
+        prompt = OUTLINE_PROMPT_TEMPLATE.format(topic=topic, num_sections=num_sections, extra_guidance=extra_guidance)
         raw = self._call_model(prompt, max_tokens=1024)
         lines = [re.sub(r"^\s*\d+[\.\)]\s*", "", line).strip() for line in raw.splitlines()]
         lines = [line for line in lines if line]
@@ -109,10 +109,16 @@ class BaseScriptWriter:
         return lines[:num_sections]
 
     def generate_script(
-        self, topic: str, target_words: int = DEFAULT_TARGET_WORDS, progress: Optional[ProgressCB] = None
+        self, topic: str, target_words: int = DEFAULT_TARGET_WORDS, extra_guidance: str = "",
+        progress: Optional[ProgressCB] = None,
     ) -> str:
-        """Writes a spoken-word psychology script of roughly `target_words` words
-        on `topic`, section by section, and returns the joined text."""
+        """Writes a spoken-word documentary script of roughly `target_words` words
+        on `topic`, section by section, and returns the joined text.
+
+        extra_guidance, if given, is spliced into the outline and every
+        section prompt as-is - video_reviewer.py's format_guidance()
+        builds it from that channel's own past-video feedback, so future
+        scripts are steered away from mistakes the last ones made."""
         if not topic.strip():
             raise ValueError("topic must not be empty")
         if target_words <= 0:
@@ -129,7 +135,7 @@ class BaseScriptWriter:
         words_per_section = max(40, round(target_words / num_sections))
         if progress:
             progress(f"Planning {num_sections} sections...")
-        outline = self.generate_outline(topic, num_sections)
+        outline = self.generate_outline(topic, num_sections, extra_guidance=extra_guidance)
         outline_text = "\n".join(f"{i + 1}. {title}" for i, title in enumerate(outline))
 
         sections: list[str] = []
@@ -144,7 +150,7 @@ class BaseScriptWriter:
             if index <= len(section_titles):
                 section_title = section_titles[index - 1]
             else:
-                section_title = f"A further, related psychological insight about {topic} not yet covered"
+                section_title = f"A further, related insight about {topic} not yet covered"
 
             tail = " ".join(sections[-1].split()[-120:]) if sections else "(this is the start of the script)"
             prompt = SECTION_PROMPT_TEMPLATE.format(
@@ -155,6 +161,7 @@ class BaseScriptWriter:
                 section_title=section_title,
                 tail=tail,
                 words_per_section=words_per_section,
+                extra_guidance=extra_guidance,
             )
             if progress:
                 progress(f"Writing section {index} ({total_words}/{target_words} words so far)...")

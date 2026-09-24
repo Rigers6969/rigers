@@ -312,6 +312,23 @@ async function selectVideo(slug) {
     </div>
   `).join("") || "<p class='hint'>No media found yet.</p>";
 
+  const review = data.review;
+  const reviewHtml = review ? `
+    <h4 style="margin-top:24px;">AI Review</h4>
+    <p class="hint" style="margin-bottom:10px;">Feeds forward into this channel's future videos - see video_reviewer.py.</p>
+    <div class="save-status" style="margin-bottom:8px;">
+      <b>Script:</b> ${review.script_rating != null ? `${review.script_rating}/10` : "n/a"} &mdash; ${escapeHtml(review.script_notes || "")}
+    </div>
+    <div class="save-status" style="margin-bottom:8px;">
+      <b>Title:</b> ${review.title_rating != null ? `${review.title_rating}/10` : "n/a"} &mdash; ${escapeHtml(review.title_notes || "")}
+    </div>
+    <div class="save-status" style="margin-bottom:8px;">
+      <b>Photos:</b> ${review.visual_rating != null ? `${review.visual_rating}/10 average match` : "not reviewed"}
+      ${(review.weak_shots || []).length ? `<br>${review.weak_shots.map((s) => `&middot; ${escapeHtml(s)}`).join("<br>")}` : ""}
+    </div>
+    ${(review.lessons || []).length ? `<div class="save-status"><b>Lessons carried into future videos:</b><br>${review.lessons.map((l) => `&middot; ${escapeHtml(l)}`).join("<br>")}</div>` : ""}
+  ` : "";
+
   document.getElementById("detail-body").innerHTML = `
     <h4>Final Video</h4>
     ${data.video_url
@@ -324,6 +341,8 @@ async function selectVideo(slug) {
          <button id="assemble-btn" class="btn-primary" ${data.manifest && data.manifest.length ? "" : "disabled"}>Assemble Video</button>
          <div id="assemble-progress" class="save-status"></div>`
     }
+
+    ${reviewHtml}
 
     ${data.voiceover_url ? `<h4 style="margin-top:24px;">Voiceover</h4><audio controls src="${data.voiceover_url}" style="width:100%; margin-bottom:20px;"></audio>` : ""}
 
