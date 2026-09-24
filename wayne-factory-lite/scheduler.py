@@ -35,6 +35,7 @@ MAX_CONSECUTIVE_FAILURES = 3
 FAILURE_BACKOFF_SECONDS = 30
 
 _last_run_date: dict[str, str] = {}
+_entry_job_id: dict[str, str] = {}
 _lock = threading.Lock()
 
 
@@ -121,7 +122,16 @@ def _start_window_job(entry: dict) -> None:
     def task(job_id: str):
         return run_scheduled_window(entry, progress=lambda m: set_progress(job_id, m))
 
-    start_job(task)
+    job_id = start_job(task)
+    _entry_job_id[entry["id"]] = job_id
+
+
+def get_entry_job_id(entry_id: str) -> Optional[str]:
+    """The job_id of the most recent (today's) run this entry has
+    started, or None if it hasn't started one yet - lets the Schedule
+    panel show whether a window actually fired and, if so, its live
+    progress or final error, instead of leaving that invisible."""
+    return _entry_job_id.get(entry_id)
 
 
 def _tick() -> None:

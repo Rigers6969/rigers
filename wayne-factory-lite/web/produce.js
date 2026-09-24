@@ -403,6 +403,33 @@ function isWindowActiveNow(entry) {
   return entry.start <= now && now < entry.end;
 }
 
+async function updateEntryStatus(entryId) {
+  const statusEl = document.getElementById(`sched-status-${entryId}`);
+  if (!statusEl) return;
+
+  const jobResp = await fetch(`/api/schedule/${entryId}/job`);
+  const jobData = await jobResp.json();
+  if (!jobData.job_id) {
+    statusEl.innerText = "Hasn't started today yet - waiting for the window to open.";
+    return;
+  }
+
+  const resp = await fetch(`/api/jobs/${jobData.job_id}`);
+  if (!resp.ok) {
+    statusEl.innerText = "Lost track of today's job.";
+    return;
+  }
+  const job = await resp.json();
+  if (job.status === "running") {
+    statusEl.innerHTML = `<span style="color:var(--gold);">&#9679; Producing:</span> ${escapeHtml(job.progress || "starting...")}`;
+  } else if (job.status === "error") {
+    statusEl.innerHTML = `<span style="color:var(--red, #e05252);">Failed:</span> ${escapeHtml(job.error || "unknown error")}`;
+  } else if (job.status === "done") {
+    const count = (job.result && job.result.videos || []).length;
+    statusEl.innerText = `Done for today - produced ${count} video(s).`;
+  }
+}
+
 async function loadSchedule() {
   const resp = await fetch("/api/schedule");
   const data = await resp.json();
@@ -414,18 +441,21 @@ async function loadSchedule() {
   }
 
   listEl.innerHTML = data.entries.map((entry) => `
-    <div class="save-status" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
-      <span>
-        <b style="color:var(--gold);">${escapeHtml(entry.channel)}</b>
-        &mdash; ${escapeHtml(entry.start)}&ndash;${escapeHtml(entry.end)}
-        &middot; ${entry.engine === "claude" ? "Claude" : "Ollama"} &middot; ${entry.length === "short" ? "Short" : "Long"}
-        ${isWindowActiveNow(entry) && entry.enabled ? '<span style="color:var(--gold);">&middot; running now</span>' : ""}
-        ${entry.enabled ? "" : '<span style="opacity:0.6;"> &middot; disabled</span>'}
-      </span>
-      <span>
-        <button class="btn-ghost sched-toggle-btn" data-id="${entry.id}" data-enabled="${entry.enabled}" style="padding:4px 10px; font-size:12px;">${entry.enabled ? "Disable" : "Enable"}</button>
-        <button class="btn-ghost sched-delete-btn" data-id="${entry.id}" style="padding:4px 10px; font-size:12px;">Delete</button>
-      </span>
+    <div class="save-status" style="margin-bottom:8px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <span>
+          <b style="color:var(--gold);">${escapeHtml(entry.channel)}</b>
+          &mdash; ${escapeHtml(entry.start)}&ndash;${escapeHtml(entry.end)}
+          &middot; ${entry.engine === "claude" ? "Claude" : "Ollama"} &middot; ${entry.length === "short" ? "Short" : "Long"}
+          ${isWindowActiveNow(entry) && entry.enabled ? '<span style="color:var(--gold);">&middot; window is open now</span>' : ""}
+          ${entry.enabled ? "" : '<span style="opacity:0.6;"> &middot; disabled</span>'}
+        </span>
+        <span>
+          <button class="btn-ghost sched-toggle-btn" data-id="${entry.id}" data-enabled="${entry.enabled}" style="padding:4px 10px; font-size:12px;">${entry.enabled ? "Disable" : "Enable"}</button>
+          <button class="btn-ghost sched-delete-btn" data-id="${entry.id}" style="padding:4px 10px; font-size:12px;">Delete</button>
+        </span>
+      </div>
+      ${entry.enabled ? `<div class="hint" id="sched-status-${entry.id}" style="margin-top:6px;">Checking status...</div>` : ""}
     </div>
   `).join("");
 
@@ -446,8 +476,13 @@ async function loadSchedule() {
       loadSchedule();
     });
   });
+
+  for (const entry of data.entries) {
+    if (entry.enabled) updateEntryStatus(entry.id);
+  }
 }
 loadSchedule();
+setInterval(loadSchedule, 15000); // live-ish without needing a manual refresh
 
 document.getElementById("sched-add-btn").addEventListener("click", async () => {
   const errorEl = document.getElementById("sched-error");

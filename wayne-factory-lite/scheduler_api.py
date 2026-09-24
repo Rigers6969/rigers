@@ -7,7 +7,7 @@ from typing import Optional
 
 from flask import Blueprint, jsonify, request
 
-from scheduler import load_schedule, new_entry_id, save_schedule
+from scheduler import get_entry_job_id, load_schedule, new_entry_id, save_schedule
 
 bp = Blueprint("scheduler_api", __name__)
 
@@ -50,6 +50,15 @@ def _validate_entry(data: dict) -> tuple[Optional[dict], Optional[str]]:
 @bp.route("/api/schedule")
 def get_schedule():
     return jsonify({"entries": load_schedule()})
+
+
+@bp.route("/api/schedule/<entry_id>/job")
+def get_schedule_entry_job(entry_id):
+    """The job_id of today's run for this entry, if the scheduler has
+    started one - null otherwise (window hasn't opened yet today, or
+    the entry is disabled). The Schedule panel polls this + the regular
+    GET /api/jobs/<job_id> to show whether a window actually fired."""
+    return jsonify({"job_id": get_entry_job_id(entry_id)})
 
 
 @bp.route("/api/schedule", methods=["POST"])
