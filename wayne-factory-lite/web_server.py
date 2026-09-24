@@ -47,6 +47,11 @@ app.register_blueprint(thumbnail_bp)
 
 
 def load_config() -> dict:
+    """Config here is one shared YOUTUBE_API_KEY (a key isn't tied to a
+    single channel - the same one can look up any channel by ID) plus a
+    CHANNELS list, each just a display name + channel ID - this site is
+    meant to run more than one channel (History, Science, whatever's
+    next) side by side on one Dashboard."""
     file_config: dict = {}
     if CONFIG_PATH.exists():
         try:
@@ -60,18 +65,25 @@ def load_config() -> dict:
         if not isinstance(file_config, dict):
             raise RuntimeError(
                 "config.json must contain a JSON object like "
-                '{"YOUTUBE_CHANNEL_ID": "...", ...} - '
+                '{"YOUTUBE_API_KEY": "...", "CHANNELS": [...]} - '
                 f"got a {type(file_config).__name__} instead"
             )
 
-    def get(key: str) -> str:
-        value = file_config.get(key) or os.environ.get(key, "")
-        return value.strip() if isinstance(value, str) else value
+    api_key = file_config.get("YOUTUBE_API_KEY") or os.environ.get("YOUTUBE_API_KEY", "")
+    api_key = api_key.strip() if isinstance(api_key, str) else api_key
 
-    return {
-        "YOUTUBE_CHANNEL_ID": get("YOUTUBE_CHANNEL_ID"),
-        "YOUTUBE_API_KEY": get("YOUTUBE_API_KEY"),
-    }
+    raw_channels = file_config.get("CHANNELS")
+    channels = []
+    if isinstance(raw_channels, list):
+        for entry in raw_channels:
+            if not isinstance(entry, dict):
+                continue
+            channel_id = str(entry.get("YOUTUBE_CHANNEL_ID", "")).strip()
+            name = str(entry.get("name", "")).strip() or channel_id
+            if channel_id:
+                channels.append({"name": name, "channel_id": channel_id})
+
+    return {"YOUTUBE_API_KEY": api_key, "CHANNELS": channels}
 
 
 @app.route("/")
@@ -86,7 +98,7 @@ def static_files(filename):
 
 @app.route("/api/stats")
 def api_stats():
-    result: dict = {"youtube": None, "errors": []}
+    result: dict = {"channels": [], "errors": []}
 
     try:
         config = load_config()
@@ -94,15 +106,21 @@ def api_stats():
         result["errors"].append(str(exc))
         return jsonify(result)
 
-    if config["YOUTUBE_CHANNEL_ID"] and config["YOUTUBE_API_KEY"]:
+    if not config["YOUTUBE_API_KEY"]:
+        result["errors"].append("YouTube not configured: set YOUTUBE_API_KEY in config.json")
+        return jsonify(result)
+    if not config["CHANNELS"]:
+        result["errors"].append("No channels configured: add at least one to CHANNELS in config.json")
+        return jsonify(result)
+
+    for channel in config["CHANNELS"]:
+        entry = {"name": channel["name"], "youtube": None, "error": None}
         try:
-            result["youtube"] = fetch_youtube_stats(config["YOUTUBE_CHANNEL_ID"], config["YOUTUBE_API_KEY"])
+            entry["youtube"] = fetch_youtube_stats(channel["channel_id"], config["YOUTUBE_API_KEY"])
         except Exception as exc:
-            result["errors"].append(f"YouTube: {exc}")
-    else:
-        result["errors"].append(
-            "YouTube not configured: set YOUTUBE_CHANNEL_ID and YOUTUBE_API_KEY in config.json"
-        )
+            entry["error"] = str(exc)
+            result["errors"].append(f"{channel['name']}: {exc}")
+        result["channels"].append(entry)
 
     return jsonify(result)
 

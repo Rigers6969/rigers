@@ -128,8 +128,7 @@ function animateValue(el, target, duration = 1500) {
   requestAnimationFrame(tick);
 }
 
-function setCard(cardId, value, note) {
-  const card = document.getElementById(cardId);
+function setCard(card, value, note) {
   const valueEl = card.querySelector(".stat-value");
   const noteEl = card.querySelector(".stat-note");
   noteEl.innerText = note || "";
@@ -151,24 +150,76 @@ function setTicker(elId, value) {
   }
 }
 
+function makeStatCard(num, label) {
+  const card = document.createElement("div");
+  card.className = "div-card stat-card";
+  card.innerHTML = `
+    <div class="div-num">${num}</div>
+    <h3 class="stat-value" data-target="0">0</h3>
+    <p class="div-label"></p>
+    <p class="stat-note"></p>
+  `;
+  card.querySelector(".div-label").innerText = label;
+  return card;
+}
+
+function renderChannel(channel) {
+  const block = document.createElement("div");
+  block.className = "channel-block";
+
+  const heading = document.createElement("h3");
+  heading.className = "channel-heading";
+  heading.innerText = channel.name;
+  block.appendChild(heading);
+
+  const grid = document.createElement("div");
+  grid.className = "div-grid";
+
+  const subsCard = makeStatCard("01 — YouTube", "Subscribers");
+  const viewsCard = makeStatCard("02 — YouTube", "Total Views");
+  const videosCard = makeStatCard("03 — YouTube", "Videos Published");
+  const statusCard = makeStatCard("04 — Status", "Connection status");
+  grid.append(subsCard, viewsCard, videosCard, statusCard);
+  block.appendChild(grid);
+
+  const yt = channel.youtube;
+  if (yt) {
+    setCard(subsCard, yt.subscriber_count_hidden ? null : yt.subscriber_count, yt.subscriber_count_hidden ? "hidden by channel owner" : "");
+    setCard(viewsCard, yt.view_count, "");
+    setCard(videosCard, yt.video_count, "");
+    statusCard.querySelector(".stat-value").innerText = channel.error ? "Partial" : "Live";
+    statusCard.querySelector(".stat-note").innerText = "YouTube connected";
+  } else {
+    statusCard.querySelector(".stat-value").innerText = "Error";
+    statusCard.querySelector(".stat-note").innerText = channel.error || "";
+  }
+
+  return block;
+}
+
 async function loadStats() {
   const errorsEl = document.getElementById("errors");
+  const sectionsEl = document.getElementById("channel-sections");
   errorsEl.innerHTML = "";
+  sectionsEl.innerHTML = "";
   try {
     const resp = await fetch("/api/stats");
     const data = await resp.json();
 
-    if (data.youtube) {
-      setCard(
-        "card-subscribers",
-        data.youtube.subscriber_count_hidden ? null : data.youtube.subscriber_count,
-        data.youtube.subscriber_count_hidden ? "hidden by channel owner" : ""
-      );
-      setCard("card-views", data.youtube.view_count, "");
-      setCard("card-videos", data.youtube.video_count, "");
-      setTicker("ticker-subs", data.youtube.subscriber_count_hidden ? null : data.youtube.subscriber_count);
-      setTicker("ticker-views", data.youtube.view_count);
+    let totalSubs = 0, totalViews = 0, anyYoutube = false;
+    for (const channel of data.channels || []) {
+      sectionsEl.appendChild(renderChannel(channel));
+      if (channel.youtube) {
+        anyYoutube = true;
+        totalViews += channel.youtube.view_count || 0;
+        if (!channel.youtube.subscriber_count_hidden) {
+          totalSubs += channel.youtube.subscriber_count || 0;
+        }
+      }
     }
+
+    setTicker("ticker-subs", anyYoutube ? totalSubs : null);
+    setTicker("ticker-views", anyYoutube ? totalViews : null);
     document.getElementById("ticker-updated").innerText = new Intl.DateTimeFormat("en-GB", {
       timeZone: TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false,
     }).format(new Date());
@@ -178,19 +229,6 @@ async function loadStats() {
       div.className = "error-line";
       div.innerText = err;
       errorsEl.appendChild(div);
-    }
-
-    const statusTile = document.getElementById("status-tile");
-    const statusNote = document.getElementById("status-note");
-    if (!data.youtube) {
-      statusTile.innerText = "Not configured";
-      statusNote.innerText = "add credentials to config.json";
-    } else if ((data.errors || []).length > 0) {
-      statusTile.innerText = "Partial";
-      statusNote.innerText = "YouTube connected";
-    } else {
-      statusTile.innerText = "Live";
-      statusNote.innerText = "YouTube connected";
     }
   } catch (exc) {
     const div = document.createElement("div");
