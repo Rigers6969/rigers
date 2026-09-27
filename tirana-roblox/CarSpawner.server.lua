@@ -15,8 +15,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local CarBuilder = require(script.Parent:WaitForChild("CarBuilder"))
-
 local MAX_SPEED = 70 -- studs/second (~1 stud = 1 meter, so ~250 km/h top speed)
 local MAX_REVERSE = 25
 local ACCELERATION = 30
@@ -25,11 +23,29 @@ local COASTING = 12
 local TURN_RATE = math.rad(90) -- degrees/second at full steer and speed
 local SPAWN_COOLDOWN = 2
 
+-- Created before anything that could fail, so the Spawn Car button can
+-- always reach the server and report a problem instead of hanging.
 local spawnEvent = ReplicatedStorage:FindFirstChild("SpawnTiranaCar")
 if not spawnEvent then
 	spawnEvent = Instance.new("RemoteEvent")
 	spawnEvent.Name = "SpawnTiranaCar"
 	spawnEvent.Parent = ReplicatedStorage
+end
+
+local builderModule = script.Parent:WaitForChild("CarBuilder", 10)
+local CarBuilder = nil
+if builderModule and builderModule:IsA("ModuleScript") then
+	local ok, result = pcall(require, builderModule)
+	if ok then
+		CarBuilder = result
+	else
+		warn("[TiranaCars] CarBuilder has an error: " .. tostring(result))
+	end
+else
+	warn("[TiranaCars] No ModuleScript named exactly 'CarBuilder' next to CarSpawner in " .. script.Parent:GetFullName())
+end
+if CarBuilder then
+	print("[TiranaCars] Car system ready - press C in game to spawn a car.")
 end
 
 local carsFolder = Workspace:FindFirstChild("TiranaCars")
@@ -103,6 +119,10 @@ local function onSeatTriggered(car, who)
 end
 
 spawnEvent.OnServerEvent:Connect(function(player)
+	if not CarBuilder then
+		warn("[TiranaCars] Can't spawn a car - CarBuilder isn't set up (see the warning above).")
+		return
+	end
 	local now = os.clock()
 	if lastSpawn[player] and now - lastSpawn[player] < SPAWN_COOLDOWN then
 		return
