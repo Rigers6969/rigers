@@ -8,6 +8,30 @@ outbound access to OpenStreetMap/Google Maps/etc. - see the note in
 the top of `TiranaRoads.server.lua`). Treat the layout as "recognizable and
 correctly arranged," not survey-precise coordinates.
 
+## Babrru - the exact real map (recommended)
+
+`BabrruMap.server.lua` / `BabrruMap.rbxmx` build **Babrru only**, from
+real OpenStreetMap data: all 781 roads with their real names and
+surfaces (asphalt, concrete, dirt, paths), all 2,651 buildings with
+their real outlines, the 79 real zebra crossings, stop signs, traffic
+lights, bus stops, the Tirana river and water, woods, street lamps,
+blue street-name signs, and floating name labels for real places
+(shops, schools, the church, the health centre, fuel stations). Scale:
+2.5 studs = 1 real meter.
+
+Setup: in the Explorer, right-click **ServerScriptService** ->
+**Insert from File...** -> pick `tirana-roblox/BabrruMap.rbxmx`. That's
+it - no copy/paste. Delete the old `TiranaRoads` script (the two maps
+would overlap) and the default `Baseplate`. Press Play; it builds in a
+few seconds and you spawn on a real Babrru street.
+
+To rebuild it from a newer or bigger OpenStreetMap export:
+
+    python tools/osm_to_babrru.py data/babrru.osm BabrruMap.server.lua
+
+Map data (c) OpenStreetMap contributors, ODbL - the game shows this
+credit on a sign next to the spawn point, which the license requires.
+
 ## What's here
 
 - **`TiranaRoads.server.lua`** - ONE Script: the road data (every road
