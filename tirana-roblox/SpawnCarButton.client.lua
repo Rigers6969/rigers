@@ -272,11 +272,87 @@ spawnButton.Activated:Connect(function()
 	spawnCar(nil)
 end)
 
+---------------------------------------------------------------------
+-- Inside view: V while driving switches to first person from the
+-- driver's seat (zoom locked all the way in), V again switches back.
+---------------------------------------------------------------------
+
+local viewHint = Instance.new("TextLabel")
+viewHint.Size = UDim2.new(0, 320, 0, 32)
+viewHint.AnchorPoint = Vector2.new(0.5, 1)
+viewHint.Position = UDim2.new(0.5, 0, 1, -24)
+viewHint.BackgroundColor3 = PANEL
+viewHint.BackgroundTransparency = 0.25
+viewHint.TextColor3 = Color3.fromRGB(255, 255, 255)
+viewHint.Font = Enum.Font.GothamBold
+viewHint.TextSize = 15
+viewHint.Text = "V - inside view   |   Space - get out"
+viewHint.Visible = false
+viewHint.Parent = gui
+corner(viewHint)
+
+local insideView = false
+local savedMinZoom, savedMaxZoom = nil, nil
+
+local function setInsideView(on)
+	if on == insideView then
+		return
+	end
+	insideView = on
+	if on then
+		savedMinZoom, savedMaxZoom = player.CameraMinZoomDistance, player.CameraMaxZoomDistance
+		player.CameraMaxZoomDistance = 0.5
+		player.CameraMinZoomDistance = 0.5
+		viewHint.Text = "V - outside view   |   Space - get out"
+	else
+		player.CameraMaxZoomDistance = savedMaxZoom or 128
+		player.CameraMinZoomDistance = savedMinZoom or 0.5
+		viewHint.Text = "V - inside view   |   Space - get out"
+	end
+end
+
+local function drivingSeat()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	if seat and seat:IsA("VehicleSeat") then
+		return seat
+	end
+	return nil
+end
+
+local function onCharacter(character)
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	if not humanoid then
+		return
+	end
+	humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+		local driving = drivingSeat() ~= nil
+		viewHint.Visible = driving
+		if not driving then
+			setInsideView(false)
+		end
+	end)
+end
+
+player.CharacterAdded:Connect(function(character)
+	setInsideView(false)
+	viewHint.Visible = false
+	onCharacter(character)
+end)
+if player.Character then
+	task.spawn(onCharacter, player.Character)
+end
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then
 		return
 	end
-	if input.KeyCode == Enum.KeyCode.G then
+	if input.KeyCode == Enum.KeyCode.V then
+		if drivingSeat() then
+			setInsideView(not insideView)
+		end
+	elseif input.KeyCode == Enum.KeyCode.G then
 		if panel.Visible then
 			panel.Visible = false
 		else

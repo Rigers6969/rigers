@@ -47,6 +47,9 @@ local SPAWN_COOLDOWN = 2
 local AUTO_SPAWN_DELAY = 2
 local AUTOSAVE_SECONDS = 60
 local STARTER_CAR = "mercedes190e"
+-- Real 3D models are scaled to this many times the block car's length.
+-- Bigger = roomier to drive and easier to see; 1 = block-car size.
+local MODEL_SIZE_SCALE = 1.35
 
 -- id, real name, made-up name, approx price (USD), body class, top speed (km/h), 0-100 km/h (s), color
 local CATALOG = {
@@ -245,6 +248,9 @@ end
 local function buildCar(car, rootCFrame)
 	local shape = CLASSES[car.class] or CLASSES.sedan
 	local L, W = shape.L, shape.W
+	local template = getCustomBody(car.id)
+	-- Model cars are drawn bigger than block cars; the physics box grows to match.
+	local sizeScale = template and MODEL_SIZE_SCALE or 1
 	local bodyTop = shape.clearance + shape.bodyH
 	local paint = car.color
 
@@ -253,7 +259,7 @@ local function buildCar(car, rootCFrame)
 
 	local root = Instance.new("Part")
 	root.Name = "Root"
-	root.Size = Vector3.new(W - 0.4, 1, L - 1)
+	root.Size = Vector3.new(W * sizeScale - 0.4, 1, L * sizeScale - 1)
 	root.CFrame = rootCFrame
 	root.Transparency = 1
 	root.CanCollide = true
@@ -287,16 +293,16 @@ local function buildCar(car, rootCFrame)
 
 	local seatX, seatHeight, seatZ = -(W / 2 - 1.6), bodyTop - 0.3, shape.cabinZ
 	local usedCustom = false
-	local template = getCustomBody(car.id)
 	if template then
-		local ok, result = pcall(attachCustomBody, template, rootCFrame, L, model, parts)
+		local ok, result = pcall(attachCustomBody, template, rootCFrame, L * sizeScale, model, parts)
 		if ok then
 			usedCustom = true
 			-- Rough driver position inside an arbitrary model: left of center,
 			-- about a third of the way up, just behind the middle.
-			seatX, seatHeight, seatZ = -result.X * 0.18, result.Y * 0.3, L * 0.05
+			seatX, seatHeight, seatZ = -result.X * 0.18, result.Y * 0.3, result.Z * 0.05
 		else
 			warn("[TiranaCars] Couldn't use the 3D model for " .. car.id .. " (using the block body instead): " .. tostring(result))
+			root.Size = Vector3.new(W - 0.4, 1, L - 1)
 		end
 	end
 

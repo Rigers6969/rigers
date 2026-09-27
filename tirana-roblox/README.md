@@ -81,6 +81,7 @@ Then press Play:
 - **C** respawns your current car in front of you.
 - Walk up to a car and press **E**. **W/S** gas/brake/reverse,
   **A/D** steer, **Space** to get out.
+- While driving, **V** switches to the inside (driver's seat) view and back.
 - Driving earns cash (faster cars earn more per second).
 - In Studio every car is free, for testing.
 
