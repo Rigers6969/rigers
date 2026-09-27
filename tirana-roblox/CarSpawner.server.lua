@@ -28,6 +28,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 -- Real brand names are fine for a private/test game, but a PUBLIC game
@@ -145,6 +146,99 @@ end
 -- Building a car
 ---------------------------------------------------------------------
 
+-- Real 3D models: put a Model (e.g. from the Toolbox) in
+-- ServerStorage > CarModels, named exactly a car's id ("chiron",
+-- "urus", ...). It replaces that car's block body; cars without one keep
+-- the block body. If a model drives backwards or sideways, give it a
+-- Number attribute "YawOffset" (e.g. 180 or 90).
+local function getCustomBody(carId)
+	local folder = ServerStorage:FindFirstChild("CarModels")
+	local template = folder and folder:FindFirstChild(carId)
+	if template and (template:IsA("Model") or template:IsA("BasePart")) then
+		return template
+	end
+	return nil
+end
+
+-- Anything that would fight our driving system or let players sit in
+-- the wrong place: Toolbox cars often ship with their own chassis
+-- scripts, seats, joints and physics movers.
+local STRIP_CLASSES = {
+	"BaseScript", "ModuleScript", "Seat", "VehicleSeat", "JointInstance", "Constraint",
+	"WeldConstraint", "NoCollisionConstraint", "BodyMover", "ProximityPrompt", "ClickDetector", "Humanoid",
+}
+
+-- Clones `template`, strips it, scales it to `targetLength` studs long,
+-- turns its long side along the car's length, sets its wheels on the
+-- ground, and adds its parts to `model`/`parts`. Returns its final size
+-- as (width, height, length).
+local function attachCustomBody(template, rootCFrame, targetLength, model, parts)
+	local clone = template:Clone()
+	if clone:IsA("BasePart") then
+		local wrapper = Instance.new("Model")
+		wrapper.Name = template.Name
+		clone.Parent = wrapper
+		clone = wrapper
+	end
+
+	local toRemove = {}
+	for _, descendant in ipairs(clone:GetDescendants()) do
+		for _, className in ipairs(STRIP_CLASSES) do
+			if descendant:IsA(className) then
+				table.insert(toRemove, descendant)
+				break
+			end
+		end
+	end
+	for _, instance in ipairs(toRemove) do
+		instance:Destroy()
+	end
+
+	local bodyParts = {}
+	for _, descendant in ipairs(clone:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			table.insert(bodyParts, descendant)
+		end
+	end
+	if #bodyParts == 0 then
+		error("the model has no parts")
+	end
+
+	local boxCFrame, size = clone:GetBoundingBox()
+	local longest = math.max(size.X, size.Z)
+	if longest <= 0 then
+		error("the model has no size")
+	end
+	local scaled = pcall(function()
+		clone:ScaleTo(clone:GetScale() * (targetLength / longest))
+	end)
+	if not scaled then
+		warn("[TiranaCars] Couldn't resize " .. template.Name .. " - using it at its original size.")
+	end
+	boxCFrame, size = clone:GetBoundingBox()
+
+	local alongX = size.X > size.Z
+	local alignLong = alongX and CFrame.Angles(0, math.rad(90), 0) or CFrame.new()
+	local yaw = tonumber(template:GetAttribute("YawOffset")) or 0
+	local target = rootCFrame * CFrame.new(0, size.Y / 2 - 0.5, 0) * CFrame.Angles(0, math.rad(yaw), 0) * alignLong
+	clone:PivotTo(target * boxCFrame:Inverse() * clone:GetPivot())
+
+	for _, p in ipairs(bodyParts) do
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.Massless = true
+		table.insert(parts, p)
+	end
+	clone.Name = "Body"
+	clone.Parent = model
+
+	if alongX then
+		return Vector3.new(size.Z, size.Y, size.X)
+	end
+	return size
+end
+
 -- rootCFrame is where the invisible physics box sits: its center is 0.5
 -- studs above the ground, so a part at height h above the ground is at
 -- y = h - 0.5 relative to the root.
@@ -191,64 +285,81 @@ local function buildCar(car, rootCFrame)
 		return p
 	end
 
-	local body = add("Part", "Body", Vector3.new(W, shape.bodyH, L), 0, shape.clearance + shape.bodyH / 2, 0, paint, Enum.Material.SmoothPlastic)
-	body.Reflectance = 0.12
-
-	-- Glasshouse. A WedgePart is full height at its +Z side and slopes
-	-- down to -Z, so unrotated in front of the cabin it's a windshield.
-	local cabinY = bodyTop + shape.cabinH / 2
-	local cabinW = W - 0.6
-	local cabin = add("Part", "Cabin", Vector3.new(cabinW, shape.cabinH, shape.cabinL), 0, cabinY, shape.cabinZ, GLASS_COLOR, Enum.Material.Glass)
-	cabin.Transparency = 0.25
-	local frontZ = shape.cabinZ - shape.cabinL / 2 - shape.wedgeL / 2
-	local rearZ = shape.cabinZ + shape.cabinL / 2 + shape.wedgeL / 2
-	local windshield = add("WedgePart", "Windshield", Vector3.new(cabinW, shape.cabinH, shape.wedgeL), 0, cabinY, frontZ, GLASS_COLOR, Enum.Material.Glass)
-	windshield.Transparency = 0.25
-	local rearWindow = add("WedgePart", "RearWindow", Vector3.new(cabinW, shape.cabinH, shape.wedgeL), 0, cabinY, rearZ, GLASS_COLOR, Enum.Material.Glass, CFrame.Angles(0, math.pi, 0))
-	rearWindow.Transparency = 0.25
-	add("Part", "Roof", Vector3.new(cabinW + 0.2, 0.3, shape.cabinL - 0.2), 0, bodyTop + shape.cabinH + 0.15, shape.cabinZ, paint, Enum.Material.SmoothPlastic)
-
-	-- Front and back
-	local bumperH = shape.clearance + 0.35
-	add("Part", "FrontBumper", Vector3.new(W + 0.2, 0.6, 0.5), 0, bumperH, -L / 2 - 0.2, TRIM_COLOR, Enum.Material.SmoothPlastic)
-	add("Part", "RearBumper", Vector3.new(W + 0.2, 0.6, 0.5), 0, bumperH, L / 2 + 0.2, TRIM_COLOR, Enum.Material.SmoothPlastic)
-	local lightH = shape.clearance + shape.bodyH * 0.65
-	local grilleColor = shape.chrome and CHROME_COLOR or TRIM_COLOR
-	local grilleW = shape.chrome and 2.6 or 2.2
-	local grilleH = shape.chrome and shape.bodyH * 0.6 or 0.5
-	add("Part", "Grille", Vector3.new(grilleW, grilleH, 0.12), 0, shape.clearance + shape.bodyH * 0.45, -L / 2 - 0.05, grilleColor, Enum.Material.Metal)
-	for _, side in ipairs({ -1, 1 }) do
-		local lx = side * (W / 2 - 0.9)
-		add("Part", "Headlight", Vector3.new(1.3, 0.45, 0.15), lx, lightH, -L / 2 - 0.05, Color3.fromRGB(255, 244, 214), Enum.Material.Neon)
-		add("Part", "Taillight", Vector3.new(1.3, 0.45, 0.15), lx, lightH, L / 2 + 0.05, Color3.fromRGB(210, 20, 20), Enum.Material.Neon)
-		if shape.intakes then
-			add("Part", "SideIntake", Vector3.new(0.15, shape.bodyH * 0.5, 2.2), side * (W / 2 + 0.05), shape.clearance + shape.bodyH * 0.5, L * 0.12, TRIM_COLOR, Enum.Material.SmoothPlastic)
-		end
-		if shape.chrome then
-			add("Part", "ChromeStrip", Vector3.new(0.1, 0.18, L * 0.8), side * (W / 2 + 0.03), shape.clearance + shape.bodyH * 0.35, 0, CHROME_COLOR, Enum.Material.Metal)
+	local seatX, seatHeight, seatZ = -(W / 2 - 1.6), bodyTop - 0.3, shape.cabinZ
+	local usedCustom = false
+	local template = getCustomBody(car.id)
+	if template then
+		local ok, result = pcall(attachCustomBody, template, rootCFrame, L, model, parts)
+		if ok then
+			usedCustom = true
+			-- Rough driver position inside an arbitrary model: left of center,
+			-- about a third of the way up, just behind the middle.
+			seatX, seatHeight, seatZ = -result.X * 0.18, result.Y * 0.3, L * 0.05
+		else
+			warn("[TiranaCars] Couldn't use the 3D model for " .. car.id .. " (using the block body instead): " .. tostring(result))
 		end
 	end
 
-	if shape.spoiler == "lip" then
-		add("Part", "Spoiler", Vector3.new(W - 0.8, 0.2, 0.9), 0, bodyTop + 0.2, L / 2 - 0.5, paint, Enum.Material.SmoothPlastic)
-	elseif shape.spoiler == "wing" then
+	if not usedCustom then
+		local body = add("Part", "Body", Vector3.new(W, shape.bodyH, L), 0, shape.clearance + shape.bodyH / 2, 0, paint, Enum.Material.SmoothPlastic)
+		body.Reflectance = 0.12
+
+		-- Glasshouse. A WedgePart is full height at its +Z side and slopes
+		-- down to -Z, so unrotated in front of the cabin it's a windshield.
+		local cabinY = bodyTop + shape.cabinH / 2
+		local cabinW = W - 0.6
+		local cabin = add("Part", "Cabin", Vector3.new(cabinW, shape.cabinH, shape.cabinL), 0, cabinY, shape.cabinZ, GLASS_COLOR, Enum.Material.Glass)
+		cabin.Transparency = 0.25
+		local frontZ = shape.cabinZ - shape.cabinL / 2 - shape.wedgeL / 2
+		local rearZ = shape.cabinZ + shape.cabinL / 2 + shape.wedgeL / 2
+		local windshield = add("WedgePart", "Windshield", Vector3.new(cabinW, shape.cabinH, shape.wedgeL), 0, cabinY, frontZ, GLASS_COLOR, Enum.Material.Glass)
+		windshield.Transparency = 0.25
+		local rearWindow = add("WedgePart", "RearWindow", Vector3.new(cabinW, shape.cabinH, shape.wedgeL), 0, cabinY, rearZ, GLASS_COLOR, Enum.Material.Glass, CFrame.Angles(0, math.pi, 0))
+		rearWindow.Transparency = 0.25
+		add("Part", "Roof", Vector3.new(cabinW + 0.2, 0.3, shape.cabinL - 0.2), 0, bodyTop + shape.cabinH + 0.15, shape.cabinZ, paint, Enum.Material.SmoothPlastic)
+
+		-- Front and back
+		local bumperH = shape.clearance + 0.35
+		add("Part", "FrontBumper", Vector3.new(W + 0.2, 0.6, 0.5), 0, bumperH, -L / 2 - 0.2, TRIM_COLOR, Enum.Material.SmoothPlastic)
+		add("Part", "RearBumper", Vector3.new(W + 0.2, 0.6, 0.5), 0, bumperH, L / 2 + 0.2, TRIM_COLOR, Enum.Material.SmoothPlastic)
+		local lightH = shape.clearance + shape.bodyH * 0.65
+		local grilleColor = shape.chrome and CHROME_COLOR or TRIM_COLOR
+		local grilleW = shape.chrome and 2.6 or 2.2
+		local grilleH = shape.chrome and shape.bodyH * 0.6 or 0.5
+		add("Part", "Grille", Vector3.new(grilleW, grilleH, 0.12), 0, shape.clearance + shape.bodyH * 0.45, -L / 2 - 0.05, grilleColor, Enum.Material.Metal)
 		for _, side in ipairs({ -1, 1 }) do
-			add("Part", "WingPost", Vector3.new(0.25, 1.2, 0.5), side * (W / 2 - 1.4), bodyTop + 0.6, L / 2 - 0.9, TRIM_COLOR, Enum.Material.SmoothPlastic)
+			local lx = side * (W / 2 - 0.9)
+			add("Part", "Headlight", Vector3.new(1.3, 0.45, 0.15), lx, lightH, -L / 2 - 0.05, Color3.fromRGB(255, 244, 214), Enum.Material.Neon)
+			add("Part", "Taillight", Vector3.new(1.3, 0.45, 0.15), lx, lightH, L / 2 + 0.05, Color3.fromRGB(210, 20, 20), Enum.Material.Neon)
+			if shape.intakes then
+				add("Part", "SideIntake", Vector3.new(0.15, shape.bodyH * 0.5, 2.2), side * (W / 2 + 0.05), shape.clearance + shape.bodyH * 0.5, L * 0.12, TRIM_COLOR, Enum.Material.SmoothPlastic)
+			end
+			if shape.chrome then
+				add("Part", "ChromeStrip", Vector3.new(0.1, 0.18, L * 0.8), side * (W / 2 + 0.03), shape.clearance + shape.bodyH * 0.35, 0, CHROME_COLOR, Enum.Material.Metal)
+			end
 		end
-		add("Part", "Wing", Vector3.new(W - 0.4, 0.2, 1.3), 0, bodyTop + 1.25, L / 2 - 0.9, TRIM_COLOR, Enum.Material.SmoothPlastic)
-	end
 
-	-- Wheels: a Cylinder's round faces are on its local X axis, already
-	-- the car's side-to-side axis, so they need no rotation.
-	local axleZ = L / 2 - shape.wheelR - 1
-	local wheelX = W / 2 - 0.35
-	for _, x in ipairs({ -wheelX, wheelX }) do
-		for _, z in ipairs({ -axleZ, axleZ }) do
-			local d = shape.wheelR * 2
-			local tire = add("Part", "Tire", Vector3.new(1.1, d, d), x, shape.wheelR, z, Color3.fromRGB(22, 22, 24), RUBBER)
-			tire.Shape = Enum.PartType.Cylinder
-			local rim = add("Part", "Rim", Vector3.new(1.15, d * 0.6, d * 0.6), x, shape.wheelR, z, RIM_COLOR, Enum.Material.Metal)
-			rim.Shape = Enum.PartType.Cylinder
+		if shape.spoiler == "lip" then
+			add("Part", "Spoiler", Vector3.new(W - 0.8, 0.2, 0.9), 0, bodyTop + 0.2, L / 2 - 0.5, paint, Enum.Material.SmoothPlastic)
+		elseif shape.spoiler == "wing" then
+			for _, side in ipairs({ -1, 1 }) do
+				add("Part", "WingPost", Vector3.new(0.25, 1.2, 0.5), side * (W / 2 - 1.4), bodyTop + 0.6, L / 2 - 0.9, TRIM_COLOR, Enum.Material.SmoothPlastic)
+			end
+			add("Part", "Wing", Vector3.new(W - 0.4, 0.2, 1.3), 0, bodyTop + 1.25, L / 2 - 0.9, TRIM_COLOR, Enum.Material.SmoothPlastic)
+		end
+
+		-- Wheels: a Cylinder's round faces are on its local X axis, already
+		-- the car's side-to-side axis, so they need no rotation.
+		local axleZ = L / 2 - shape.wheelR - 1
+		local wheelX = W / 2 - 0.35
+		for _, x in ipairs({ -wheelX, wheelX }) do
+			for _, z in ipairs({ -axleZ, axleZ }) do
+				local d = shape.wheelR * 2
+				local tire = add("Part", "Tire", Vector3.new(1.1, d, d), x, shape.wheelR, z, Color3.fromRGB(22, 22, 24), RUBBER)
+				tire.Shape = Enum.PartType.Cylinder
+				local rim = add("Part", "Rim", Vector3.new(1.15, d * 0.6, d * 0.6), x, shape.wheelR, z, RIM_COLOR, Enum.Material.Metal)
+				rim.Shape = Enum.PartType.Cylinder
+			end
 		end
 	end
 
@@ -256,7 +367,7 @@ local function buildCar(car, rootCFrame)
 	local seat = Instance.new("VehicleSeat")
 	seat.Name = "DriverSeat"
 	seat.Size = Vector3.new(2, 0.6, 2)
-	seat.CFrame = rootCFrame * CFrame.new(-(W / 2 - 1.6), bodyTop - 0.3 - 0.5, shape.cabinZ)
+	seat.CFrame = rootCFrame * CFrame.new(seatX, seatHeight - 0.5, seatZ)
 	seat.Transparency = 1
 	seat.CanCollide = false
 	seat.Massless = true
@@ -545,6 +656,7 @@ local function catalogFor(player)
 			topSpeed = car.topSpeed,
 			zeroTo100 = car.zeroTo100,
 			owned = ownsCar(player, car.id),
+			hasModel = getCustomBody(car.id) ~= nil,
 		})
 	end
 	return list

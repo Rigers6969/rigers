@@ -84,6 +84,34 @@ Then press Play:
 - Driving earns cash (faster cars earn more per second).
 - In Studio every car is free, for testing.
 
+### Real car shapes (3D models)
+
+Cars built from blocks can't look like the real thing - that needs a 3D
+model. Any car can use one:
+
+1. In the Explorer, right-click **ServerStorage** -> Insert Object ->
+   **Folder**, name it exactly `CarModels`.
+2. Open the **Toolbox** (View -> Toolbox), Models tab, search the car
+   (e.g. "Bugatti Chiron"). Click one to insert it.
+3. Drag it from Workspace into the `CarModels` folder and rename it to
+   that car's id (below - the dealership also shows each car's id).
+4. Play and spawn it. The game resizes it, points it forward, puts its
+   wheels on the road, and removes any scripts/seats it came with.
+5. If it drives backwards: select the model in `CarModels` ->
+   Properties -> Attributes -> **+** -> name `YawOffset`, type Number,
+   value `180` (or `90` if it drives sideways).
+
+Car ids: `mercedes190e`, `sandero`, `corolla`, `civic`, `golfgti`,
+`mustang`, `cclass`, `bmwm3`, `teslaplaid`, `rangerover`, `porsche911`,
+`g63`, `urus`, `ferrari296`, `cullinan`, `mclaren765`, `phantom`,
+`revuelto`, `senna`, `laferrari`, `huayra`, `chiron`, `jesko`, `divo`,
+`centodieci`.
+
+Toolbox models vary a lot in quality - pick ones with good ratings and
+a sensible part count (a few hundred parts per car at most, or the game
+lags with many cars). You can also import your own .fbx/.obj/.glb files
+(File -> Import 3D), as long as their license allows it.
+
 **Saving** (cash + owned cars) uses DataStores. To test it in Studio:
 Game Settings -> Security -> turn on "Enable Studio Access to API
 Services". Without that the game still works, it just won't save.

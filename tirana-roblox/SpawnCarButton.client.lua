@@ -210,7 +210,8 @@ renderList = function(catalog, free)
 		specs.Font = Enum.Font.Gotham
 		specs.TextSize = 13
 		specs.TextColor3 = Color3.fromRGB(170, 175, 185)
-		specs.Text = string.format("%s  |  %d km/h  |  0-100 in %.1fs", formatMoney(car.price), car.topSpeed, car.zeroTo100)
+		specs.Text = string.format("%s  |  %d km/h  |  0-100 in %.1fs  |  %s", formatMoney(car.price), car.topSpeed, car.zeroTo100,
+			car.hasModel and "3D model" or ("block body - model id: " .. car.id))
 		specs.Parent = row
 
 		local actionButton
