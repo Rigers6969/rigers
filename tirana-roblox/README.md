@@ -5,17 +5,15 @@ districts, for a Roblox driving game - real street names and real
 relative geography, laid out from general knowledge of the city rather
 than pulled from a live mapping API (this dev environment has no
 outbound access to OpenStreetMap/Google Maps/etc. - see the note in
-`RoadData.lua`'s docstring). Treat the layout as "recognizable and
+the top of `TiranaRoads.server.lua`). Treat the layout as "recognizable and
 correctly arranged," not survey-precise coordinates.
 
 ## What's here
 
-- **`RoadData.lua`** - a ModuleScript with every road (name, type,
-  width, and its path as a list of points) and every landmark. This is
-  the only file you'd ever hand-edit to add/move roads.
-- **`RoadBuilder.server.lua`** - a Script that reads `RoadData.lua` and
-  builds it: a Part per road segment, a glowing pillar + floating name
-  label per landmark, and a grass baseplate underneath everything.
+- **`TiranaRoads.server.lua`** - ONE Script: the road data (every road
+  and landmark, at the top of the file - edit it there) plus the code
+  that builds it - a Part per road piece, a glowing pillar + name label
+  per landmark, and grass ground under the whole map.
 
 ## Covers
 
@@ -29,25 +27,16 @@ its real street plan. The map is about 10 x 9 km at 1 stud = 1 meter.
 
 ## Setup (in Roblox Studio, on your PC)
 
-1. Open Roblox Studio, create a new empty place (Baseplate template is
-   fine - `RoadBuilder.server.lua` adds its own ground).
-2. In the Explorer, find **ServerScriptService**.
-3. Right-click it -> **Insert Object** -> **ModuleScript**. Rename it
-   exactly `RoadData`. Delete its default content, paste in everything
-   from `RoadData.lua`.
-4. Right-click ServerScriptService again -> **Insert Object** ->
-   **Script**. Rename it anything you like (e.g. `RoadBuilder`).
-   Delete its default content, paste in everything from
-   `RoadBuilder.server.lua`. It must be a **sibling** of the
-   `RoadData` ModuleScript (both directly inside ServerScriptService)
-   - the script `require`s it by that relationship.
-5. Press **Play** once. Check the Output window for
-   `RoadBuilder: built N road segments and M landmarks.` - then stop
-   Play. The roads/landmarks/ground are now permanent parts of your
-   place (Play just triggers the Script to run once; you don't need to
-   keep re-running it, and re-running it after editing `RoadData.lua`
-   safely rebuilds from scratch instead of duplicating anything).
-6. Fly around in Studio (right-click drag + WASD) to see the layout.
+1. In the Explorer, click **ServerScriptService** once.
+2. Home tab -> the arrow under **Script** -> **Script**. Name it
+   `TiranaRoads`, open it, delete what's in it, paste in everything from
+   `TiranaRoads.server.lua`.
+3. Press **Play**. Output shows `[TiranaRoads] Built ...` and the roads,
+   landmarks and ground appear.
+
+The roads only exist while the game is running - they're built fresh on
+every Play and vanish when you press Stop. That's normal: the script is
+what's saved, and it rebuilds everything each time.
 
 ## Better buildings (replaces the city template's generator)
 
