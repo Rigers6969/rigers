@@ -11,4 +11,3 @@ flask
 edge-tts
 python-dotenv
 feedparser
-pytrends

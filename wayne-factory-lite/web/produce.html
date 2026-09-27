@@ -126,20 +126,22 @@
     <div class="panel">
       <h3>Trend Scout</h3>
       <p class="hint" style="margin-bottom:14px;">
-        Free, no-API-key signal for topic invention: watch a few competitor channels in this niche via their
-        public YouTube RSS feed, and their recent titles get fed to the scheduler's topic ideas as context
-        (it won't copy them, just gets a sense of what's current). To get a channel ID: open the channel's
-        page, click "Share" &rarr; "Copy channel ID", or view page source and search for "channel_id=".
+        Automatic signal for topic invention: give it a few niche search keywords (e.g. "ancient history",
+        "space discovery") and it searches all of YouTube itself for whatever's getting the most views on
+        that topic in the last 14 days, then feeds those titles to the scheduler's topic ideas as context
+        (it won't copy them, just gets a sense of what's currently resonating). Uses the same
+        <code>YOUTUBE_API_KEY</code> as the Dashboard's stats - set that in config.json first. Each keyword
+        costs 100 of your 10,000 daily quota units, so a handful of keywords is plenty; don't add dozens.
       </p>
 
       <div class="form-row" style="margin-bottom:10px;">
         <input id="scout-channel" placeholder="Channel (must match Schedule's channel name exactly)">
       </div>
       <div class="form-row" style="margin-bottom:14px;">
-        <textarea id="scout-competitor-ids" rows="3" style="width:100%;" placeholder="One competitor channel ID per line, e.g. UCxxxxxxxxxxxxxxxxxxxxxx"></textarea>
+        <textarea id="scout-keywords" rows="3" style="width:100%;" placeholder="One search keyword per line, e.g.&#10;ancient history&#10;lost civilizations"></textarea>
       </div>
       <button id="scout-save-btn" class="btn-ghost">Save</button>
-      <button id="scout-preview-btn" class="btn-ghost">Preview Their Recent Titles</button>
+      <button id="scout-preview-btn" class="btn-ghost">Preview Current Top Titles</button>
       <div id="scout-error" class="error-line hidden" style="margin-top:10px;"></div>
       <div id="scout-preview" style="margin-top:14px;"></div>
 

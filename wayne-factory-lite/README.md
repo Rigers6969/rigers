@@ -44,30 +44,30 @@ whichever channel you're currently producing for.
 Videos land in this folder's own `content/` directory - entirely
 separate from the main app's, including its own Obsidian vault.
 
-## Trend Scout (optional, free)
+## Trend Scout (optional)
 
 On the Produce page, the **Trend Scout** panel lets the scheduler's
-topic invention take a hint from what other channels in your niche are
-actually posting right now, at no cost - it just reads a competitor
-channel's public YouTube RSS feed (official, free, no API key), and
-feeds their recent titles into the topic-idea prompt as context (not
-copied, just informed by).
+topic invention take a hint from what's actually getting views right
+now in a channel's niche, fully automatically - you give it a few
+search keywords, not specific channels to track, and it searches all
+of YouTube itself.
 
 To use it:
-1. Find a competitor channel's ID: open their channel page, click
-   "Share" -> "Copy channel ID" (or view page source and search for
-   `channel_id=`).
+1. Make sure `YOUTUBE_API_KEY` is set in `config.json` (same key used
+   for the Dashboard's stats - see `analytics.py`'s docstring for how
+   to get one).
 2. On the Produce page's Trend Scout panel, type your channel's exact
-   name (matching what you use in the Schedule panel) and paste one or
-   more competitor channel IDs, one per line -> Save.
-3. Click "Preview Their Recent Titles" any time to see exactly what
+   name (matching what you use in the Schedule panel) and a few niche
+   search keywords, one per line (e.g. "ancient history", "lost
+   civilizations") -> Save.
+3. Click "Preview Current Top Titles" any time to see exactly what
    it's currently pulling, with no production job involved.
 
-This is free but limited: a channel's RSS feed only shows their ~15
-most recent uploads and no view counts, so it can't discover trending
-videos across all of YouTube by keyword the way the paid YouTube Data
-API's search endpoint could - it only sees channels you've explicitly
-added. If you skip this entirely, topic invention works exactly as
+**Quota cost:** each keyword costs 100 of your project's 10,000 daily
+quota units (shared with YouTube uploads at 1,600 units each - see
+"Auto-publishing to YouTube" above) - a handful of keywords per channel
+is plenty; don't add dozens, and don't hit Preview repeatedly for no
+reason. If you skip this entirely, topic invention works exactly as
 before, just without the extra context.
 
 ## Auto-publishing to YouTube (optional)

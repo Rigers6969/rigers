@@ -541,24 +541,24 @@ document.getElementById("sched-add-btn").addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------
-// Trend Scout - free, no-API-key competitor RSS titles fed into the
+// Trend Scout - automatic YouTube-search-based signal fed into the
 // scheduler's topic invention (see trend_scout.py / scout_api.py).
 // ---------------------------------------------------------------------
 async function loadScoutList() {
-  const resp = await fetch("/api/scout/competitors");
+  const resp = await fetch("/api/scout/config");
   const data = await resp.json();
   const listEl = document.getElementById("scout-list");
 
-  const withCompetitors = (data.channels || []).filter((c) => c.competitor_channel_ids.length > 0);
-  if (withCompetitors.length === 0) {
-    listEl.innerHTML = '<p class="empty-note">No channels set up yet - add competitor IDs above.</p>';
+  const withKeywords = (data.channels || []).filter((c) => c.search_keywords.length > 0);
+  if (withKeywords.length === 0) {
+    listEl.innerHTML = '<p class="empty-note">No channels set up yet - add search keywords above.</p>';
     return;
   }
 
-  listEl.innerHTML = withCompetitors.map((c) => `
+  listEl.innerHTML = withKeywords.map((c) => `
     <div class="save-status" style="margin-bottom:8px;">
       <b style="color:var(--gold);">${escapeHtml(c.name)}</b>
-      &mdash; ${c.competitor_channel_ids.length} competitor channel(s) watched
+      &mdash; keywords: ${c.search_keywords.map(escapeHtml).join(", ")}
     </div>
   `).join("");
 }
@@ -569,7 +569,7 @@ document.getElementById("scout-save-btn").addEventListener("click", async () => 
   errorEl.classList.add("hidden");
 
   const channel = document.getElementById("scout-channel").value.trim();
-  const ids = document.getElementById("scout-competitor-ids").value
+  const keywords = document.getElementById("scout-keywords").value
     .split("\n").map((s) => s.trim()).filter(Boolean);
 
   if (!channel) {
@@ -578,10 +578,10 @@ document.getElementById("scout-save-btn").addEventListener("click", async () => 
     return;
   }
 
-  const resp = await fetch("/api/scout/competitors", {
+  const resp = await fetch("/api/scout/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ channel, competitor_channel_ids: ids }),
+    body: JSON.stringify({ channel, search_keywords: keywords }),
   });
   const data = await resp.json();
   if (!resp.ok) {
@@ -598,23 +598,29 @@ document.getElementById("scout-preview-btn").addEventListener("click", async () 
   errorEl.classList.add("hidden");
   previewEl.innerHTML = "Loading...";
 
-  const ids = document.getElementById("scout-competitor-ids").value
+  const keywords = document.getElementById("scout-keywords").value
     .split("\n").map((s) => s.trim()).filter(Boolean);
-  if (ids.length === 0) {
+  if (keywords.length === 0) {
     previewEl.innerHTML = "";
-    errorEl.innerText = "Add at least one competitor channel ID first.";
+    errorEl.innerText = "Add at least one search keyword first.";
     errorEl.classList.remove("hidden");
     return;
   }
 
   const allTitles = [];
-  for (const id of ids) {
-    const resp = await fetch(`/api/scout/preview?channel_id=${encodeURIComponent(id)}`);
+  for (const keyword of keywords) {
+    const resp = await fetch(`/api/scout/preview?keyword=${encodeURIComponent(keyword)}`);
     const data = await resp.json();
+    if (!resp.ok) {
+      errorEl.innerText = data.error || "Preview failed.";
+      errorEl.classList.remove("hidden");
+      previewEl.innerHTML = "";
+      return;
+    }
     if (data.titles && data.titles.length) allTitles.push(...data.titles);
   }
 
   previewEl.innerHTML = allTitles.length
     ? "<ul class='shot-list'>" + allTitles.map((t) => `<li>${escapeHtml(t)}</li>`).join("") + "</ul>"
-    : '<p class="empty-note">No titles found - double-check the channel ID(s), or the feed may be unreachable right now.</p>';
+    : '<p class="empty-note">No titles found - check the API key/quota, or nothing matched in the last 14 days.</p>';
 });
