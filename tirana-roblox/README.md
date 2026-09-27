@@ -63,17 +63,14 @@ the middle of the map like a real downtown.
 
 ## Cars
 
-Four files, each goes in a specific place:
-
 | File | What to insert | Where |
 |---|---|---|
-| `CarBuilder.lua` | **ModuleScript** named `CarBuilder` | ServerScriptService |
-| `CarSpawner.server.lua` | **Script** (any name) | ServerScriptService |
-| `SpawnCarButton.client.lua` | **LocalScript** (any name) | StarterPlayer > StarterPlayerScripts |
+| `CarSpawner.server.lua` | **Script** (any name) - this one file is the whole car system | ServerScriptService |
+| `SpawnCarButton.client.lua` | **LocalScript** (optional - adds the button/C key) | StarterPlayer > StarterPlayerScripts |
 
 Then press Play:
-- Click **Spawn Car (C)** (top right) or press **C** - a car appears
-  next to you, facing the way you're looking.
+- A car appears next to you automatically ~2 seconds after you spawn.
+- Click **Spawn Car (C)** or press **C** for a fresh one in front of you.
 - Walk up to it and press **E** ("Drive").
 - **W/S** gas/brake/reverse, **A/D** steer, **Space** to get out.
 
