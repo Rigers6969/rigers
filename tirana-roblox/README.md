@@ -107,6 +107,21 @@ Car ids: `mercedes190e`, `sandero`, `corolla`, `civic`, `golfgti`,
 `revuelto`, `senna`, `laferrari`, `huayra`, `chiron`, `jesko`, `divo`,
 `centodieci`.
 
+**Automatic import (all cars at once):** put `CarImporter.lua` in
+ServerStorage as a **ModuleScript** named `CarImporter`, then - NOT
+during Play - run this in the Command Bar (the "Execute a command" line
+at the bottom of Studio):
+
+    require(game.ServerStorage.CarImporter)()
+
+It searches the free models for every car, keeps the first good match
+per car (name matches, sane part count), deletes every script inside it
+(free models are a common way backdoor scripts sneak into games), and
+drops it into `CarModels` with the right id. Output lists what it
+picked and which cars need a manual pick. Then **save the place**.
+Didn't like a pick? `require(game.ServerStorage.CarImporter)({ only =
+{ "chiron" }, replace = true, skip = 1 })` takes the next match.
+
 Toolbox models vary a lot in quality - pick ones with good ratings and
 a sensible part count (a few hundred parts per car at most, or the game
 lags with many cars). You can also import your own .fbx/.obj/.glb files
