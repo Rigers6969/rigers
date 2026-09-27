@@ -87,6 +87,8 @@ Come up with ONE new video topic for this channel - specific, factual, and inter
 Do not repeat or closely overlap with any of these topics already covered on this channel:
 {avoid_list}
 
+{scout_guidance}
+
 Respond with ONLY the topic as one sentence - no numbering, no quotation marks, no other text.
 """
 
@@ -187,9 +189,23 @@ def generate_topic_idea(writer, channel: str, avoid_topics: Optional[list[str]] 
     """Has the writer's own model brainstorm one new topic for `channel`,
     steered away from whatever list_covered_topics() already found -
     used by the scheduler, which produces videos unattended and has no
-    human picking a topic each time."""
+    human picking a topic each time.
+
+    Also steered by trend_scout.py's free "what are other channels in
+    this niche posting right now" signal, if any competitor channels
+    are configured for `channel` - a best-effort fetch that never
+    blocks topic generation if it fails or finds nothing."""
     avoid_list = "\n".join(f"- {t}" for t in (avoid_topics or [])) or "(none yet)"
-    topic = writer._call_model(TOPIC_IDEA_PROMPT.format(channel=channel, avoid_list=avoid_list), max_tokens=200)
+    try:
+        from trend_scout import build_scout_guidance
+        scout_guidance = build_scout_guidance(channel)
+    except Exception:
+        scout_guidance = ""
+    if not scout_guidance:
+        scout_guidance = "(no competitor-channel scouting data available)"
+
+    prompt = TOPIC_IDEA_PROMPT.format(channel=channel, avoid_list=avoid_list, scout_guidance=scout_guidance)
+    topic = writer._call_model(prompt, max_tokens=200)
     topic = topic.strip().strip('"').strip()
     if not topic:
         raise RuntimeError("Model did not return a usable topic idea.")

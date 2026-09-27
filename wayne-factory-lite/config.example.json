@@ -1,7 +1,7 @@
 {
   "YOUTUBE_API_KEY": "",
   "CHANNELS": [
-    {"name": "Deep Field", "YOUTUBE_CHANNEL_ID": ""},
-    {"name": "The Archive", "YOUTUBE_CHANNEL_ID": ""}
+    {"name": "Deep Field", "YOUTUBE_CHANNEL_ID": "", "COMPETITOR_CHANNEL_IDS": []},
+    {"name": "The Archive", "YOUTUBE_CHANNEL_ID": "", "COMPETITOR_CHANNEL_IDS": []}
   ]
 }

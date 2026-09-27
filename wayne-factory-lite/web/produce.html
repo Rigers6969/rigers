@@ -123,6 +123,29 @@
       <div id="sched-list" style="margin-top:20px;"></div>
     </div>
 
+    <div class="panel">
+      <h3>Trend Scout</h3>
+      <p class="hint" style="margin-bottom:14px;">
+        Free, no-API-key signal for topic invention: watch a few competitor channels in this niche via their
+        public YouTube RSS feed, and their recent titles get fed to the scheduler's topic ideas as context
+        (it won't copy them, just gets a sense of what's current). To get a channel ID: open the channel's
+        page, click "Share" &rarr; "Copy channel ID", or view page source and search for "channel_id=".
+      </p>
+
+      <div class="form-row" style="margin-bottom:10px;">
+        <input id="scout-channel" placeholder="Channel (must match Schedule's channel name exactly)">
+      </div>
+      <div class="form-row" style="margin-bottom:14px;">
+        <textarea id="scout-competitor-ids" rows="3" style="width:100%;" placeholder="One competitor channel ID per line, e.g. UCxxxxxxxxxxxxxxxxxxxxxx"></textarea>
+      </div>
+      <button id="scout-save-btn" class="btn-ghost">Save</button>
+      <button id="scout-preview-btn" class="btn-ghost">Preview Their Recent Titles</button>
+      <div id="scout-error" class="error-line hidden" style="margin-top:10px;"></div>
+      <div id="scout-preview" style="margin-top:14px;"></div>
+
+      <div id="scout-list" style="margin-top:20px;"></div>
+    </div>
+
     <div id="video-list" class="videos-grid"></div>
 
     <div id="detail" class="panel hidden">

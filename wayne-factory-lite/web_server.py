@@ -35,6 +35,7 @@ from editor_api import bp as editor_bp
 from thumbnail_api import bp as thumbnail_bp
 from scheduler_api import bp as scheduler_bp
 from scheduler import start_scheduler_thread
+from scout_api import bp as scout_bp
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -47,6 +48,7 @@ app.register_blueprint(scheduler_bp)
 app.register_blueprint(jobs_bp)
 app.register_blueprint(editor_bp)
 app.register_blueprint(thumbnail_bp)
+app.register_blueprint(scout_bp)
 
 
 def load_config() -> dict:
