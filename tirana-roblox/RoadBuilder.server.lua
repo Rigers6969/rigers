@@ -64,9 +64,19 @@ local function buildSegment(road, startPoint, endPoint)
 	part.Parent = roadsFolder
 end
 
+-- Roblox caps a Part at 2048 studs on any side, so a longer stretch would
+-- silently come out too short - long stretches are built in pieces.
+local MAX_PIECE = 1000
+
 for _, road in ipairs(RoadData.Roads) do
 	for i = 1, #road.points - 1 do
-		buildSegment(road, road.points[i], road.points[i + 1])
+		local a, b = road.points[i], road.points[i + 1]
+		local dx, dz = b[1] - a[1], b[2] - a[2]
+		local pieces = math.max(1, math.ceil(math.sqrt(dx * dx + dz * dz) / MAX_PIECE))
+		for k = 1, pieces do
+			local t0, t1 = (k - 1) / pieces, k / pieces
+			buildSegment(road, { a[1] + dx * t0, a[2] + dz * t0 }, { a[1] + dx * t1, a[2] + dz * t1 })
+		end
 	end
 end
 
@@ -105,16 +115,40 @@ for _, landmark in ipairs(RoadData.Landmarks) do
 	label.Parent = billboard
 end
 
--- A big flat baseplate under everything so there's visible ground
--- between roads instead of the Studio void - resize/replace freely.
-local ground = Instance.new("Part")
-ground.Name = "TiranaGround"
-ground.Anchored = true
-ground.CanCollide = true
-ground.Material = Enum.Material.Grass
-ground.Color = Color3.fromRGB(96, 120, 74)
-ground.Size = Vector3.new(4000, 1, 4000)
-ground.CFrame = CFrame.new(0, -1, 0)
-ground.Parent = Workspace
+-- Grass ground under the whole map, tiled because a single Part can't be
+-- bigger than 2048 studs. Covers every road and landmark plus a margin.
+local groundFolder = clearFolder("TiranaGround")
+local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+local function include(point)
+	minX, maxX = math.min(minX, point[1]), math.max(maxX, point[1])
+	minZ, maxZ = math.min(minZ, point[2]), math.max(maxZ, point[2])
+end
+for _, road in ipairs(RoadData.Roads) do
+	for _, point in ipairs(road.points) do
+		include(point)
+	end
+end
+for _, landmark in ipairs(RoadData.Landmarks) do
+	include(landmark.position)
+end
+
+local TILE = 2000
+local MARGIN = 400
+minX, maxX, minZ, maxZ = minX - MARGIN, maxX + MARGIN, minZ - MARGIN, maxZ + MARGIN
+local tilesX = math.ceil((maxX - minX) / TILE)
+local tilesZ = math.ceil((maxZ - minZ) / TILE)
+for ix = 0, tilesX - 1 do
+	for iz = 0, tilesZ - 1 do
+		local tile = Instance.new("Part")
+		tile.Name = "Ground"
+		tile.Anchored = true
+		tile.CanCollide = true
+		tile.Material = Enum.Material.Grass
+		tile.Color = Color3.fromRGB(96, 120, 74)
+		tile.Size = Vector3.new(TILE, 1, TILE)
+		tile.CFrame = CFrame.new(minX + (ix + 0.5) * TILE, -1, minZ + (iz + 0.5) * TILE)
+		tile.Parent = groundFolder
+	end
+end
 
 print(("RoadBuilder: built %d road segments and %d landmarks."):format(#roadsFolder:GetChildren(), #landmarksFolder:GetChildren()))

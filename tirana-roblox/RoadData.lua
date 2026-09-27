@@ -7,6 +7,13 @@
 	see the repo's README). Treat this as "recognizable layout", not
 	survey-precise coordinates.
 
+	The outer districts (Babrru, Kamëz, Laprakë, Kashar, Kombinat, Sauk)
+	ARE at their real positions: converted from their published
+	latitude/longitude relative to Skanderbeg Square (41.3275 N,
+	19.8187 E). The roads leading to them follow the right corridor but
+	their exact curves are approximate, and each district's small street
+	grid is a stand-in, not its real streets.
+
 	Scale: 1 stud = 1 meter (a common convention for Roblox driving
 	games - keeps car/building sizes sane without extra scaling math).
 	Axes: +X = East, -X = West, +Z = South, -Z = North. Skanderbeg
@@ -29,31 +36,80 @@ return {
 		},
 		{
 			name = "Rruga e Kavajës",
-			description = "Major artery heading west out of the center, towards Kavajë / the Kashar-Rinas direction. Extended further out than the tight city center - treat the outer stretch as approximate corridor direction, not a precise trace.",
+			description = "Major artery heading west-southwest out of the center to Kombinat (real position). The outer curve is approximate.",
 			type = "primary",
 			width = 16,
-			points = { {-50, 50}, {-700, 150}, {-1500, 250}, {-2200, 320} },
+			points = { {-50, 50}, {-700, 150}, {-1500, 250}, {-3000, 900}, {-4327, 1484} },
 		},
 		{
 			name = "Rruga e Durrësit",
-			description = "Major artery heading northwest out of the center, towards Durrës, passing the Kombinat/Laprakë area and on towards Kamëz. Outer stretch is approximate corridor direction, not a precise trace.",
+			description = "Major artery heading northwest past Laprakë, becoming the Tirana-Durrës road out to Kashar (both at real positions). The outer curve is approximate.",
 			type = "primary",
 			width = 16,
-			points = { {-50, -100}, {-700, -600}, {-1400, -1100}, {-2100, -1700} },
+			points = { {-50, -100}, {-700, -600}, {-1400, -1100}, {-2028, -1329}, {-4200, -1850}, {-8436, -2319} },
 		},
 		{
 			name = "Rruga e Elbasanit",
-			description = "Major artery heading east/southeast out of the center, towards Elbasan, passing the Selitë/Babrru area and on towards Sauk. Outer stretch is approximate corridor direction, not a precise trace.",
+			description = "Major artery heading southeast out of the center towards Sauk (real position) and Elbasan. The outer curve is approximate.",
 			type = "primary",
 			width = 16,
-			points = { {50, 100}, {700, 500}, {1400, 950}, {2100, 1500} },
+			points = { {50, 100}, {700, 500}, {1400, 950}, {1350, 2000}, {1195, 3061} },
 		},
 		{
-			name = "Rruga e Kombinatit",
-			description = "Short branch off Rruga e Durrësit into the Kombinat district (approximate placement). Starts at one of Rruga e Durrësit's own waypoints so the two roads actually connect.",
-			type = "secondary",
-			width = 10,
-			points = { {-700, -600}, {-1050, -400} },
+			name = "Rruga për Babrru",
+			description = "North from the old train station area to Babrru (real position, ~3.4 km north of Skanderbeg Square). Right direction, approximate curve.",
+			type = "primary",
+			width = 14,
+			points = { {0, -650}, {250, -1800}, {712, -3308} },
+		},
+		{
+			name = "Rruga Babrru - Kamëz",
+			description = "Northwest from Babrru to Kamëz (real position). Right direction, approximate curve.",
+			type = "primary",
+			width = 14,
+			points = { {712, -3308}, {-1500, -4800}, {-4322, -6178} },
+		},
+		{
+			name = "Babrru - Rruga 1 (E-W)",
+			description = "Babrru neighborhood street - a stand-in grid around Babrru's real center, not its real street plan.",
+			type = "local",
+			width = 8,
+			points = { {562, -3458}, {712, -3458}, {862, -3458} },
+		},
+		{
+			name = "Babrru - Rruga 2 (E-W)",
+			description = "Babrru neighborhood street - a stand-in grid around Babrru's real center, not its real street plan.",
+			type = "local",
+			width = 8,
+			points = { {562, -3308}, {712, -3308}, {862, -3308} },
+		},
+		{
+			name = "Babrru - Rruga 3 (E-W)",
+			description = "Babrru neighborhood street - a stand-in grid around Babrru's real center, not its real street plan.",
+			type = "local",
+			width = 8,
+			points = { {562, -3158}, {712, -3158}, {862, -3158} },
+		},
+		{
+			name = "Babrru - Rruga 4 (N-S)",
+			description = "Babrru neighborhood street - a stand-in grid around Babrru's real center, not its real street plan.",
+			type = "local",
+			width = 8,
+			points = { {562, -3458}, {562, -3308}, {562, -3158} },
+		},
+		{
+			name = "Babrru - Rruga 5 (N-S)",
+			description = "Babrru neighborhood street - a stand-in grid around Babrru's real center, not its real street plan.",
+			type = "local",
+			width = 8,
+			points = { {712, -3458}, {712, -3308}, {712, -3158} },
+		},
+		{
+			name = "Babrru - Rruga 6 (N-S)",
+			description = "Babrru neighborhood street - a stand-in grid around Babrru's real center, not its real street plan.",
+			type = "local",
+			width = 8,
+			points = { {862, -3458}, {862, -3308}, {862, -3158} },
 		},
 		{
 			name = "Rruga e Barrikadave",
@@ -144,14 +200,13 @@ return {
 		{ name = "Parku i Madh / Liqeni Artificial (Grand Park & Artificial Lake)", position = {0, 1400} },
 		{ name = "Blloku", position = {-200, 575} },
 		{ name = "Ish-Stacioni i Trenit (Old Train Station area)", position = {0, -650} },
-		-- Outer districts, added along the same real corridor directions
-		-- as the extended arterial roads above - approximate placement,
-		-- not survey-precise (see the module docstring and README).
-		{ name = "Kombinat", position = {-1050, -400} },
-		{ name = "Laprakë (drejtim / direction)", position = {-1600, -1300} },
-		{ name = "Kamëz (drejtim / direction)", position = {-2100, -1700} },
-		{ name = "Kashar / Rinas (drejtim / direction)", position = {-2200, 320} },
-		{ name = "Selitë (drejtim / direction)", position = {1400, 950} },
-		{ name = "Babrru (drejtim / direction)", position = {2100, 1500} },
+		-- Outer districts at their real positions (converted from their
+		-- published latitude/longitude - see the module docstring).
+		{ name = "Babrru", position = {712, -3308} },
+		{ name = "Kamëz", position = {-4322, -6178} },
+		{ name = "Laprakë", position = {-2028, -1329} },
+		{ name = "Kashar", position = {-8436, -2319} },
+		{ name = "Kombinat", position = {-4327, 1484} },
+		{ name = "Sauk", position = {1195, 3061} },
 	},
 }

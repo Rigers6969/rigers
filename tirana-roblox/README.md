@@ -20,10 +20,12 @@ correctly arranged," not survey-precise coordinates.
 ## Covers
 
 Central Tirana (Skanderbeg Square, the boulevard, Blloku, Mother Teresa
-Square, the Grand Park) plus the main arteries extending out towards
-Kombinat, Laprakë, Kamëz, Kashar/Rinas, Selitë, and Babrru - the outer
-stretches and district placements are approximate corridor directions,
-called out as such in `RoadData.lua`'s comments.
+Square, the Grand Park) plus roads out to **Babrru**, **Kamëz**,
+**Laprakë**, **Kashar**, **Kombinat** and **Sauk**. Those six districts
+sit at their real positions (converted from their published
+latitude/longitude); the roads to them follow the right direction with
+approximate curves, and Babrru's street grid is a stand-in rather than
+its real street plan. The map is about 10 x 9 km at 1 stud = 1 meter.
 
 ## Setup (in Roblox Studio, on your PC)
 
