@@ -65,20 +65,33 @@ the middle of the map like a real downtown.
 
 | File | What to insert | Where |
 |---|---|---|
-| `CarSpawner.server.lua` | **Script** (any name) - this one file is the whole car system | ServerScriptService |
-| `SpawnCarButton.client.lua` | **LocalScript** (optional - adds the button/C key) | StarterPlayer > StarterPlayerScripts |
+| `CarSpawner.server.lua` | **Script** (any name) - the whole car system | ServerScriptService |
+| `SpawnCarButton.client.lua` | **LocalScript** (any name) - the dealership UI | StarterPlayer > StarterPlayerScripts |
+
+25 real cars, from a free used Mercedes 190E up to the ~$9M Bugatti
+Centodieci. Each gets its real body type, signature color, and top
+speed / acceleration scaled from its real specs. Prices are
+approximate real new prices. Built from parts, so they're shaped like
+their class (hatchback, sedan, SUV, luxury, sports, supercar,
+hypercar) rather than exact replicas.
 
 Then press Play:
-- A car appears next to you automatically ~2 seconds after you spawn.
-- Click **Spawn Car (C)** or press **C** for a fresh one in front of you.
-- Walk up to it and press **E** ("Drive").
-- **W/S** gas/brake/reverse, **A/D** steer, **Space** to get out.
+- Your car appears next to you ~2 seconds after you spawn.
+- **G** opens the dealership - buy cars or spawn ones you own.
+- **C** respawns your current car in front of you.
+- Walk up to a car and press **E**. **W/S** gas/brake/reverse,
+  **A/D** steer, **Space** to get out.
+- Driving earns cash (faster cars earn more per second).
+- In Studio every car is free, for testing.
 
-The car is built from parts (painted body, tinted cabin, sloped
-windshield, headlights, taillights, wheels with rims) and drives
-arcade-style: smooth, can't flip over, doesn't get stuck. Tuning
-numbers (top speed, acceleration, turning) are at the top of
-`CarSpawner.server.lua`.
+**Saving** (cash + owned cars) uses DataStores. To test it in Studio:
+Game Settings -> Security -> turn on "Enable Studio Access to API
+Services". Without that the game still works, it just won't save.
+
+**Before publishing publicly:** set `USE_REAL_NAMES = false` at the top
+of `CarSpawner.server.lua` - real car brand names can get a public
+Roblox game taken down for trademark reasons. Economy tuning (starting
+cash, cash per stud, speed scale) is at the top of the same file.
 
 **Remove the template's old car spawner** so you don't have two
 "Spawn Car" buttons - find the script behind its button (probably in
