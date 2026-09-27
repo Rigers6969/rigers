@@ -34,6 +34,15 @@ its real street plan. The map is about 10 x 9 km at 1 stud = 1 meter.
 3. Press **Play**. Output shows `[TiranaRoads] Built ...` and the roads,
    landmarks and ground appear.
 
+What it builds: dark asphalt roads with lane markings (a double center
+line on the boulevard, dashed elsewhere), sidewalks, zebra crossings at
+intersections, street lights, trees and bushes, city buildings along the
+streets (taller toward the center, tall towers get neon edges and a red
+beacon) and small houses in the suburbs - plus night lighting with glow.
+Switches at the top of the builder part of the file (`NIGHT_MODE`,
+`BUILDINGS`, `TREES`) turn pieces off if it lags. For the best-looking
+lights, set **Lighting -> Technology** to **Future** in Studio.
+
 The roads only exist while the game is running - they're built fresh on
 every Play and vanish when you press Stop. That's normal: the script is
 what's saved, and it rebuilds everything each time.

@@ -190,17 +190,6 @@ local RoadData = {
 		},
 	},
 
-	-- Road width (studs) by type, matched to real relative proportions
-	-- (a boulevard is wider than a residential street) rather than
-	-- exact real measurements.
-	RoadTypeColors = {
-		boulevard = Color3.fromRGB(90, 90, 95),
-		primary = Color3.fromRGB(80, 80, 85),
-		secondary = Color3.fromRGB(75, 75, 80),
-		local_ = Color3.fromRGB(70, 70, 75), -- "local" is a Lua keyword-adjacent name to avoid confusion; the builder maps type "local" to this
-		ring = Color3.fromRGB(85, 85, 90),
-	},
-
 	Landmarks = {
 		{ name = "Sheshi Skënderbej (Skanderbeg Square)", position = {0, 0} },
 		{ name = "Sheshi Nënë Tereza (Mother Teresa Square)", position = {0, 700} },
@@ -218,7 +207,14 @@ local RoadData = {
 	},
 }
 
+local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
+
+-- Look settings - flip any of these off if the game gets laggy.
+local NIGHT_MODE = true -- night sky, glow, and street lamps that light the road
+local BUILDINGS = true -- city buildings along the roads (houses further out)
+local TREES = true -- trees and bushes along the roads
+local CITY_RADIUS = 2200 -- inside this distance from Skanderbeg Square: city blocks; outside: houses
 
 local function clearFolder(name)
 	local existing = Workspace:FindFirstChild(name)
@@ -232,58 +228,447 @@ local function clearFolder(name)
 end
 
 local roadsFolder = clearFolder("Roads")
+local markingsFolder = clearFolder("RoadMarkings")
+local sidewalksFolder = clearFolder("Sidewalks")
+local lightsFolder = clearFolder("StreetLights")
 local landmarksFolder = clearFolder("Landmarks")
 
+-- Roads are 1 stud thick with their top at y = 0.5; sidewalks are flush
+-- with them (so cars never catch on a curb), markings sit just on top.
+local ROAD_TOP = 0.5
+local MARK_Y = ROAD_TOP + 0.03
+local ASPHALT = Color3.fromRGB(52, 52, 56)
+local LINE_WHITE = Color3.fromRGB(235, 235, 230)
+local SIDEWALK_COLOR = Color3.fromRGB(168, 166, 160)
+local POLE_COLOR = Color3.fromRGB(60, 62, 68)
+local LAMP_COLOR = Color3.fromRGB(255, 226, 160)
+
+-- Roblox caps a Part at 2048 studs on any side, so a longer stretch would
+-- silently come out too short - long strips are built in pieces.
+local MAX_PIECE = 1000
+local DASH, GAP = 3, 9
+local LIGHT_SPACING = 45
+
+local STYLE = {
+	boulevard = { sidewalk = 5, center = "double", edges = true, lights = true, crosswalk = true },
+	primary = { sidewalk = 3.5, center = "dashed", edges = true, lights = true, crosswalk = true },
+	ring = { sidewalk = 3, center = "dashed", edges = true, lights = true, crosswalk = false },
+	secondary = { sidewalk = 3, center = "dashed", edges = false, lights = false, crosswalk = true },
+	["local"] = { sidewalk = 2.5, center = nil, edges = false, lights = false, crosswalk = false },
+}
+
+local built = 0
+local function newPart(parent, name, size, cframe, color, material, collide)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Anchored = true
+	p.Size = size
+	p.CFrame = cframe
+	p.Color = color
+	p.Material = material
+	p.CanCollide = collide
+	if not collide then
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+	end
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Parent = parent
+	built = built + 1
+	-- Yield now and then so building thousands of parts never trips
+	-- Roblox's "script ran too long" limit.
+	if built % 500 == 0 then
+		task.wait()
+	end
+	return p
+end
+
 local function toVector3(point)
-	-- RoadData points are {x, z}; roads sit flat on the ground at y = 0,
-	-- with the part's top surface at y = 0.5 (part center at y = 0,
-	-- thickness 1) so a car's wheels rest right at y ~= 0.5 + wheel radius.
 	return Vector3.new(point[1], 0, point[2])
 end
 
-local function colorForType(roadType)
-	local key = roadType == "local" and "local_" or roadType
-	return (RoadData.RoadTypeColors and RoadData.RoadTypeColors[key]) or Color3.fromRGB(80, 80, 80)
+-- A flat strip running from distance d0 to d1 along the a->b line,
+-- shifted sideways by `lateral` (positive = right of the a->b direction).
+local function strip(parent, name, a, b, d0, d1, lateral, width, yCenter, thickness, color, material, collide)
+	local dir = b - a
+	local len = dir.Magnitude
+	if len < 0.01 or d1 - d0 < 0.05 then
+		return
+	end
+	local unit = dir / len
+	local right = Vector3.new(-unit.Z, 0, unit.X)
+	local pieces = math.max(1, math.ceil((d1 - d0) / MAX_PIECE))
+	for k = 1, pieces do
+		local s0 = d0 + (d1 - d0) * (k - 1) / pieces
+		local s1 = d0 + (d1 - d0) * k / pieces
+		local mid = a + unit * ((s0 + s1) / 2) + right * lateral
+		local center = Vector3.new(mid.X, yCenter, mid.Z)
+		-- lookAt points the part's length (Z) along the road; its X axis is
+		-- then the road's sideways direction.
+		newPart(parent, name, Vector3.new(width, thickness, s1 - s0), CFrame.lookAt(center, center + unit), color, material, collide)
+	end
 end
 
-local function buildSegment(road, startPoint, endPoint)
-	local a = toVector3(startPoint)
-	local b = toVector3(endPoint)
-	local length = (b - a).Magnitude
-	if length < 0.01 then
-		return -- skip degenerate zero-length segments
+-- Where 2+ roads share a point is an intersection: sidewalks, lines and
+-- lights stop short of it by enough to clear the widest road there.
+local function pointKey(point)
+	return point[1] .. "," .. point[2]
+end
+local roadsAtPoint, widestAtPoint = {}, {}
+for _, road in ipairs(RoadData.Roads) do
+	local seen = {}
+	for _, point in ipairs(road.points) do
+		local k = pointKey(point)
+		if not seen[k] then
+			seen[k] = true
+			roadsAtPoint[k] = (roadsAtPoint[k] or 0) + 1
+			widestAtPoint[k] = math.max(widestAtPoint[k] or 0, road.width)
+		end
+	end
+end
+local function clearanceAt(point)
+	local k = pointKey(point)
+	if (roadsAtPoint[k] or 0) < 2 then
+		return 0
+	end
+	return widestAtPoint[k] / 2 + 6
+end
+
+local function buildCrosswalk(a, b, at, width)
+	local stripe, spacing = 0.8, 1.6
+	local lateral = -width / 2 + 1.2
+	while lateral <= width / 2 - 1.2 do
+		strip(markingsFolder, "Crosswalk", a, b, at, at + 3, lateral, stripe, MARK_Y, 0.05, LINE_WHITE, Enum.Material.SmoothPlastic, false)
+		lateral = lateral + spacing
+	end
+end
+
+local lampCount = 0
+local function buildStreetLight(a, b, at, side, road, style)
+	local dir = (b - a).Unit
+	local right = Vector3.new(-dir.Z, 0, dir.X)
+	local poleOffset = side * (road.width / 2 + style.sidewalk - 0.6)
+	local base = a + dir * at
+	local function place(lateral, y)
+		local pos = base + right * lateral
+		local center = Vector3.new(pos.X, y, pos.Z)
+		return CFrame.lookAt(center, center + dir)
+	end
+	newPart(lightsFolder, "Pole", Vector3.new(0.5, 12, 0.5), place(poleOffset, ROAD_TOP + 6), POLE_COLOR, Enum.Material.Metal, true)
+	-- The arm reaches from the pole back over the road (toward the center).
+	newPart(lightsFolder, "Arm", Vector3.new(3, 0.3, 0.3), place(poleOffset - side * 1.5, ROAD_TOP + 12), POLE_COLOR, Enum.Material.Metal, false)
+	local lamp = newPart(lightsFolder, "Lamp", Vector3.new(1.4, 0.35, 0.8), place(poleOffset - side * 3, ROAD_TOP + 11.8), LAMP_COLOR, Enum.Material.Neon, false)
+	lampCount = lampCount + 1
+	-- Every second lamp casts real light: looks the same at night for half the GPU cost.
+	if NIGHT_MODE and lampCount % 2 == 0 then
+		local light = Instance.new("SpotLight")
+		light.Face = Enum.NormalId.Bottom
+		light.Range = 28
+		light.Angle = 120
+		light.Brightness = 2.5
+		light.Color = LAMP_COLOR
+		light.Shadows = false
+		light.Parent = lamp
+	end
+end
+
+local function buildRoadSegment(road, pa, pb)
+	local style = STYLE[road.type] or STYLE["local"]
+	local a, b = toVector3(pa), toVector3(pb)
+	local len = (b - a).Magnitude
+	if len < 0.01 then
+		return
+	end
+	local w = road.width
+
+	strip(roadsFolder, road.name, a, b, 0, len, 0, w, 0, 1, ASPHALT, Enum.Material.Asphalt, true)
+
+	local startClear, endClear = clearanceAt(pa), clearanceAt(pb)
+	local t0, t1 = startClear, len - endClear
+	if t1 - t0 < 8 then
+		return -- too short between intersections for sidewalks/markings
 	end
 
-	local midpoint = a:Lerp(b, 0.5)
-	local part = Instance.new("Part")
-	part.Name = road.name
-	part.Anchored = true
-	part.CanCollide = true
-	part.Material = Enum.Material.Asphalt
-	part.Color = colorForType(road.type)
-	part.Size = Vector3.new(road.width, 1, length)
-	-- CFrame.lookAt orients the part's local Z axis along the a->b
-	-- direction, which is exactly what's needed for Size.Z (length) to
-	-- span the segment - which way is "front" vs "back" doesn't matter
-	-- for a symmetric flat road slab.
-	part.CFrame = CFrame.lookAt(midpoint, b)
-	part.Parent = roadsFolder
-end
+	local sw = style.sidewalk
+	for _, side in ipairs({ -1, 1 }) do
+		strip(sidewalksFolder, "Sidewalk", a, b, t0, t1, side * (w / 2 + sw / 2), sw, 0, 1, SIDEWALK_COLOR, Enum.Material.Concrete, true)
+		if style.edges then
+			strip(markingsFolder, "EdgeLine", a, b, t0, t1, side * (w / 2 - 0.7), 0.3, MARK_Y, 0.05, LINE_WHITE, Enum.Material.SmoothPlastic, false)
+		end
+	end
 
--- Roblox caps a Part at 2048 studs on any side, so a longer stretch would
--- silently come out too short - long stretches are built in pieces.
-local MAX_PIECE = 1000
+	local lineStart, lineEnd = t0, t1
+	if style.crosswalk then
+		if startClear > 0 then
+			buildCrosswalk(a, b, t0 + 1, w)
+			lineStart = t0 + 6
+		end
+		if endClear > 0 then
+			buildCrosswalk(a, b, t1 - 4, w)
+			lineEnd = t1 - 6
+		end
+	end
+
+	if style.center == "double" then
+		for _, lateral in ipairs({ -0.35, 0.35 }) do
+			strip(markingsFolder, "CenterLine", a, b, lineStart, lineEnd, lateral, 0.25, MARK_Y, 0.05, LINE_WHITE, Enum.Material.SmoothPlastic, false)
+		end
+	elseif style.center == "dashed" then
+		local d = lineStart + GAP / 2
+		while d + DASH <= lineEnd do
+			strip(markingsFolder, "CenterDash", a, b, d, d + DASH, 0, 0.3, MARK_Y, 0.05, LINE_WHITE, Enum.Material.SmoothPlastic, false)
+			d = d + DASH + GAP
+		end
+	end
+
+	if style.lights then
+		local side = 1
+		local d = t0 + 10
+		while d < t1 - 5 do
+			buildStreetLight(a, b, d, side, road, style)
+			side = -side
+			d = d + LIGHT_SPACING
+		end
+	end
+end
 
 for _, road in ipairs(RoadData.Roads) do
 	for i = 1, #road.points - 1 do
-		local a, b = road.points[i], road.points[i + 1]
-		local dx, dz = b[1] - a[1], b[2] - a[2]
-		local pieces = math.max(1, math.ceil(math.sqrt(dx * dx + dz * dz) / MAX_PIECE))
-		for k = 1, pieces do
-			local t0, t1 = (k - 1) / pieces, k / pieces
-			buildSegment(road, { a[1] + dx * t0, a[2] + dz * t0 }, { a[1] + dx * t1, a[2] + dz * t1 })
+		buildRoadSegment(road, road.points[i], road.points[i + 1])
+	end
+end
+
+---------------------------------------------------------------------
+-- Roadside: trees, bushes, city buildings, suburban houses
+---------------------------------------------------------------------
+
+local treesFolder = clearFolder("Trees")
+local buildingsFolder = clearFolder("Buildings")
+local rng = Random.new(2026) -- fixed seed: the city looks the same every time
+
+local FACADES = {
+	Color3.fromRGB(232, 93, 74), Color3.fromRGB(245, 178, 66), Color3.fromRGB(111, 176, 214),
+	Color3.fromRGB(142, 202, 128), Color3.fromRGB(206, 120, 186), Color3.fromRGB(240, 132, 58),
+	Color3.fromRGB(236, 228, 210), Color3.fromRGB(190, 190, 185),
+}
+local GLASS = { Color3.fromRGB(40, 60, 90), Color3.fromRGB(30, 45, 60), Color3.fromRGB(60, 85, 100) }
+local NEON_TRIMS = { Color3.fromRGB(255, 40, 220), Color3.fromRGB(40, 220, 255), Color3.fromRGB(255, 200, 60) }
+local WINDOW_LIT = Color3.fromRGB(255, 214, 140)
+local WINDOW_DARK = Color3.fromRGB(30, 38, 52)
+local GROUND_TOP = -0.5 -- top of the grass
+
+local function pick(list)
+	return list[rng:NextInteger(1, #list)]
+end
+
+-- Every road segment, for keeping buildings off the roads.
+local segments = {}
+for _, road in ipairs(RoadData.Roads) do
+	local style = STYLE[road.type] or STYLE["local"]
+	for i = 1, #road.points - 1 do
+		table.insert(segments, {
+			a = toVector3(road.points[i]),
+			b = toVector3(road.points[i + 1]),
+			reach = road.width / 2 + style.sidewalk,
+		})
+	end
+end
+
+local function distanceToSegment(p, a, b)
+	local ab = b - a
+	local lengthSq = ab.X * ab.X + ab.Z * ab.Z
+	local t = 0
+	if lengthSq > 0 then
+		t = math.clamp(((p.X - a.X) * ab.X + (p.Z - a.Z) * ab.Z) / lengthSq, 0, 1)
+	end
+	local cx, cz = a.X + ab.X * t, a.Z + ab.Z * t
+	return math.sqrt((p.X - cx) ^ 2 + (p.Z - cz) ^ 2)
+end
+
+local placed = {}
+local function spotIsFree(pos, radius)
+	for _, seg in ipairs(segments) do
+		if distanceToSegment(pos, seg.a, seg.b) < seg.reach + radius then
+			return false
 		end
 	end
+	for _, other in ipairs(placed) do
+		local dx, dz = pos.X - other.pos.X, pos.Z - other.pos.Z
+		if dx * dx + dz * dz < (radius + other.radius) ^ 2 then
+			return false
+		end
+	end
+	return true
+end
+
+-- A part standing on the ground at `pos`, turned to face along `dir`.
+local function standing(parent, name, size, pos, dir, color, material, collide)
+	local center = Vector3.new(pos.X, GROUND_TOP + size.Y / 2, pos.Z)
+	return newPart(parent, name, size, CFrame.lookAt(center, center + dir), color, material, collide)
+end
+
+local function buildTree(pos)
+	local trunkH = rng:NextNumber(5, 8)
+	local trunk = Vector3.new(pos.X, GROUND_TOP + trunkH / 2, pos.Z)
+	newPart(treesFolder, "Trunk", Vector3.new(0.8, trunkH, 0.8), CFrame.new(trunk), Color3.fromRGB(95, 70, 50), Enum.Material.Wood, true)
+	local size = rng:NextNumber(7, 11)
+	local leaves = newPart(treesFolder, "Leaves", Vector3.new(size, size, size),
+		CFrame.new(pos.X, GROUND_TOP + trunkH + size * 0.3, pos.Z), Color3.fromRGB(45, 110 + rng:NextInteger(0, 40), 45), Enum.Material.LeafyGrass, false)
+	leaves.Shape = Enum.PartType.Ball
+end
+
+local function buildBush(pos)
+	local size = rng:NextNumber(3, 5)
+	local bush = newPart(treesFolder, "Bush", Vector3.new(size, size, size),
+		CFrame.new(pos.X, GROUND_TOP + size * 0.35, pos.Z), Color3.fromRGB(50, 120 + rng:NextInteger(0, 30), 50), Enum.Material.LeafyGrass, false)
+	bush.Shape = Enum.PartType.Ball
+end
+
+local function buildCityBuilding(pos, dir, right, side, along, depth, centerDistance)
+	local closeness = 1 - math.clamp(centerDistance / CITY_RADIUS, 0, 1)
+	local h = rng:NextNumber(12, 24) + closeness * closeness * rng:NextNumber(10, 110)
+	local model = Instance.new("Model")
+	model.Name = "Building"
+	model.Parent = buildingsFolder
+
+	local glassTower = h > 45 and rng:NextNumber() < 0.5
+	local bodyColor = glassTower and pick(GLASS) or pick(FACADES)
+	local body = standing(model, "Body", Vector3.new(depth, h, along), pos, dir, bodyColor, glassTower and Enum.Material.Glass or Enum.Material.Concrete, true)
+	if glassTower then
+		body.Reflectance = 0.2
+	end
+
+	-- Window bands: lit and glowing at night, dark glass by day.
+	local step = math.max(8, h / 8)
+	local y = 5
+	while y < h - 3 do
+		local lit = NIGHT_MODE and rng:NextNumber() < 0.7
+		local band = newPart(model, "Windows", Vector3.new(depth + 0.3, 2.2, along + 0.3),
+			CFrame.lookAt(Vector3.new(pos.X, GROUND_TOP + y, pos.Z), Vector3.new(pos.X, GROUND_TOP + y, pos.Z) + dir),
+			lit and WINDOW_LIT or WINDOW_DARK, lit and Enum.Material.Neon or Enum.Material.Glass, false)
+		if lit then
+			band.Transparency = 0.35
+		end
+		y = y + step
+	end
+
+	local top = GROUND_TOP + h
+	newPart(model, "Roof", Vector3.new(depth + 0.6, 0.6, along + 0.6), CFrame.lookAt(Vector3.new(pos.X, top + 0.3, pos.Z), Vector3.new(pos.X, top + 0.3, pos.Z) + dir),
+		Color3.fromRGB(80, 80, 86), Enum.Material.Concrete, true)
+
+	-- Tall towers: neon edges on the street side and a red beacon on top.
+	if h > 50 then
+		local trim = pick(NEON_TRIMS)
+		local face = pos - right * side * (depth / 2)
+		for _, e in ipairs({ -1, 1 }) do
+			local edge = face + dir * (e * along / 2)
+			newPart(model, "NeonEdge", Vector3.new(0.5, h, 0.5), CFrame.new(edge.X, GROUND_TOP + h / 2, edge.Z), trim, Enum.Material.Neon, false)
+		end
+		local beacon = newPart(model, "Beacon", Vector3.new(1.6, 1.6, 1.6), CFrame.new(pos.X, top + 1.4, pos.Z), Color3.fromRGB(255, 40, 40), Enum.Material.Neon, false)
+		beacon.Shape = Enum.PartType.Ball
+	end
+end
+
+local function buildHouse(pos, dir, along, depth)
+	local h = rng:NextNumber(6, 10)
+	local model = Instance.new("Model")
+	model.Name = "House"
+	model.Parent = buildingsFolder
+	standing(model, "Walls", Vector3.new(depth, h, along), pos, dir, pick(FACADES), Enum.Material.Concrete, true)
+	local lit = NIGHT_MODE and rng:NextNumber() < 0.6
+	newPart(model, "Windows", Vector3.new(depth + 0.2, 1.8, along + 0.2),
+		CFrame.lookAt(Vector3.new(pos.X, GROUND_TOP + h * 0.55, pos.Z), Vector3.new(pos.X, GROUND_TOP + h * 0.55, pos.Z) + dir),
+		lit and WINDOW_LIT or WINDOW_DARK, lit and Enum.Material.Neon or Enum.Material.Glass, false)
+	newPart(model, "Roof", Vector3.new(depth + 1, 0.8, along + 1),
+		CFrame.lookAt(Vector3.new(pos.X, GROUND_TOP + h + 0.4, pos.Z), Vector3.new(pos.X, GROUND_TOP + h + 0.4, pos.Z) + dir),
+		Color3.fromRGB(170, 75, 55), Enum.Material.Slate, true)
+end
+
+local function dressSegment(road, pa, pb)
+	local style = STYLE[road.type] or STYLE["local"]
+	local a, b = toVector3(pa), toVector3(pb)
+	local len = (b - a).Magnitude
+	if len < 0.01 then
+		return
+	end
+	local dir = (b - a) / len
+	local right = Vector3.new(-dir.Z, 0, dir.X)
+	local t0, t1 = clearanceAt(pa), len - clearanceAt(pb)
+	local edge = road.width / 2 + style.sidewalk
+
+	if TREES and road.type ~= "local" then
+		local side = -1
+		local d = t0 + 22 -- offset from the street lights
+		while d < t1 - 5 do
+			local pos = a + dir * d + right * (side * (edge + 3))
+			if spotIsFree(pos, 1) then
+				buildTree(pos)
+			end
+			local bushPos = a + dir * (d + 20) + right * (-side * (edge + 2.5))
+			if d + 20 < t1 - 5 and spotIsFree(bushPos, 1) then
+				buildBush(bushPos)
+			end
+			side = -side
+			d = d + 40
+		end
+	end
+
+	if BUILDINGS then
+		local spacing = 34
+		for _, side in ipairs({ -1, 1 }) do
+			local d = t0 + spacing / 2
+			while d < t1 - spacing / 2 do
+				local along = rng:NextNumber(16, spacing - 6)
+				local depth = rng:NextNumber(14, 24)
+				local roadPoint = a + dir * d
+				local centerDistance = roadPoint.Magnitude
+				local inCity = centerDistance < CITY_RADIUS
+				if not inCity then
+					along, depth = rng:NextNumber(10, 14), rng:NextNumber(10, 14)
+				end
+				local pos = roadPoint + right * (side * (edge + 6 + depth / 2))
+				local radius = math.max(along, depth) / 2 + 1
+				-- Suburbs are sparser than the city.
+				if (inCity or rng:NextNumber() < 0.55) and spotIsFree(pos, radius) then
+					table.insert(placed, { pos = pos, radius = radius })
+					if inCity then
+						buildCityBuilding(pos, dir, right, side, along, depth, centerDistance)
+					else
+						buildHouse(pos, dir, along, depth)
+					end
+				end
+				d = d + spacing
+			end
+		end
+	end
+end
+
+for _, road in ipairs(RoadData.Roads) do
+	for i = 1, #road.points - 1 do
+		dressSegment(road, road.points[i], road.points[i + 1])
+	end
+end
+
+---------------------------------------------------------------------
+-- Night lighting
+---------------------------------------------------------------------
+
+if NIGHT_MODE then
+	Lighting.ClockTime = 21
+	Lighting.Brightness = 1
+	Lighting.Ambient = Color3.fromRGB(40, 40, 55)
+	Lighting.OutdoorAmbient = Color3.fromRGB(70, 70, 95)
+	local bloom = Lighting:FindFirstChildOfClass("BloomEffect") or Instance.new("BloomEffect")
+	bloom.Intensity = 0.9
+	bloom.Size = 32
+	bloom.Threshold = 0.85
+	bloom.Parent = Lighting
+	local color = Lighting:FindFirstChild("TiranaNightColor") or Instance.new("ColorCorrectionEffect")
+	color.Name = "TiranaNightColor"
+	color.Saturation = 0.15
+	color.Contrast = 0.1
+	color.Parent = Lighting
 end
 
 for _, landmark in ipairs(RoadData.Landmarks) do
@@ -297,7 +682,8 @@ for _, landmark in ipairs(RoadData.Landmarks) do
 	marker.Anchored = true
 	marker.CanCollide = false
 	marker.Size = Vector3.new(4, 20, 4)
-	marker.CFrame = CFrame.new(pos + Vector3.new(0, 10, 0))
+	-- Floats 8 studs up so cars drive underneath instead of through it.
+	marker.CFrame = CFrame.new(pos + Vector3.new(0, 18, 0))
 	marker.Material = Enum.Material.Neon
 	marker.Color = Color3.fromRGB(201, 162, 75) -- matches the Wayne Factory gold accent, purely cosmetic
 	marker.Transparency = 0.7
@@ -357,4 +743,4 @@ for ix = 0, tilesX - 1 do
 	end
 end
 
-print(("[TiranaRoads] Built %d road segments and %d landmarks."):format(#roadsFolder:GetChildren(), #landmarksFolder:GetChildren()))
+print(("[TiranaRoads] Built %d parts: roads, sidewalks, markings, crosswalks, street lights, trees, %d buildings and %d landmarks."):format(built, #buildingsFolder:GetChildren(), #landmarksFolder:GetChildren()))
