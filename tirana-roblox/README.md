@@ -47,20 +47,43 @@ called out as such in `RoadData.lua`'s comments.
    safely rebuilds from scratch instead of duplicating anything).
 6. Fly around in Studio (right-click drag + WASD) to see the layout.
 
-## Adding cars
+## Better buildings (replaces the city template's generator)
 
-This repo intentionally doesn't include a custom car physics script -
-**A-Chassis** (free, on the Roblox library/Toolbox) is the standard,
-battle-tested framework most Roblox driving games are built on, and
-duplicating that work here would just be a worse version of something
-that already exists and works well. The plan:
-1. In Studio's Toolbox, search "A-Chassis" and insert it.
-2. Search "car" in the Toolbox for free body meshes to attach to it.
-3. Roads sit with their top surface at **y = 0.5** (see
-   `RoadBuilder.server.lua`'s `toVector3` comment) - spawn cars a
-   little above that so they drop onto the road instead of clipping
-   through it.
+`BuildingGenerator.lua` is a drop-in replacement for the
+`BuildingGenerator` ModuleScript that came with the city template - same
+`Generate(parent)` function and same `CityConfiguration` settings, so
+nothing else needs to change. Open your existing `BuildingGenerator`,
+select all, delete, paste this file's contents in.
 
-Want me to also build a simple traffic-AI script next (NPC cars that
-follow `RoadData.lua`'s same waypoints)? That's a separate, addable
-piece once real cars are in the scene.
+Instead of identical square blocks you get five building types
+(colorful Tirana-style apartment blocks with balconies, stepped towers,
+glass towers, shops with awnings, small parks with trees), each with
+its own size and position inside its lot, and taller buildings toward
+the middle of the map like a real downtown.
+
+## Cars
+
+Four files, each goes in a specific place:
+
+| File | What to insert | Where |
+|---|---|---|
+| `CarBuilder.lua` | **ModuleScript** named `CarBuilder` | ServerScriptService |
+| `CarSpawner.server.lua` | **Script** (any name) | ServerScriptService |
+| `SpawnCarButton.client.lua` | **LocalScript** (any name) | StarterPlayer > StarterPlayerScripts |
+
+Then press Play:
+- Click **Spawn Car (C)** (top right) or press **C** - a car appears
+  next to you, facing the way you're looking.
+- Walk up to it and press **E** ("Drive").
+- **W/S** gas/brake/reverse, **A/D** steer, **Space** to get out.
+
+The car is built from parts (painted body, tinted cabin, sloped
+windshield, headlights, taillights, wheels with rims) and drives
+arcade-style: smooth, can't flip over, doesn't get stuck. Tuning
+numbers (top speed, acceleration, turning) are at the top of
+`CarSpawner.server.lua`.
+
+**Remove the template's old car spawner** so you don't have two
+"Spawn Car" buttons - find the script behind its button (probably in
+StarterGui or StarterPlayerScripts, near the "Admin Panel") and delete
+or disable it.
