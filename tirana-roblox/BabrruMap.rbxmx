@@ -22668,14 +22668,16 @@ end
 
 local STYLES = {}
 for i, s in ipairs(MAP.styles) do
-	local lit = s[11] == 1 -- only glows (Neon) at night
-	local material = (lit and NIGHT_MODE) and Enum.Material.Neon or safeMaterial(s[5])
+	-- Lit windows: a dim warm light at night (no glow - real homes don't
+	-- shine like neon from outside), plain dark glass by day.
+	local lit = s[11] == 1
+	local material = lit and Enum.Material.SmoothPlastic or safeMaterial(s[5])
 	STYLES[i] = {
 		name = s[1],
-		color = (lit and not NIGHT_MODE) and Color3.fromRGB(30, 38, 52) or Color3.fromRGB(s[2], s[3], s[4]),
+		color = lit and (NIGHT_MODE and Color3.fromRGB(150, 122, 78) or Color3.fromRGB(30, 38, 52)) or Color3.fromRGB(s[2], s[3], s[4]),
 		material = material,
 		collide = s[6] == 1,
-		transparency = s[7],
+		transparency = lit and 0 or s[7],
 		reflectance = s[8],
 		shadow = s[9] == 1,
 		folder = folder(s[10]),
@@ -22707,7 +22709,7 @@ for i = 1, #b, 8 do
 	finish(p, style)
 
 	-- Buildings get a band of windows on each of their first two floors;
-	-- about 60% are lit at night (a fixed pattern, same every time).
+	-- some have a light on at night (a fixed pattern, same every time).
 	if style.building then
 		local floors = math.floor(sy / FLOOR_HEIGHT + 0.5)
 		for f = 0, math.min(floors, 2) - 1 do
@@ -22715,7 +22717,7 @@ for i = 1, #b, 8 do
 			if bandY > sy - 0.5 * MAP.scale then
 				break
 			end
-			local lit = (math.floor(i / 8) * 7 + f * 3) % 10 < 6
+			local lit = (math.floor(i / 8) * 7 + f * 3) % 10 < 3 -- about 30% of homes have a light on
 			local band = Instance.new("Part")
 			band.Size = Vector3.new(sx + 0.12, 1.1 * MAP.scale, sz + 0.12)
 			band.CFrame = CFrame.new(b[i + 1], bandY, b[i + 3]) * rotation
@@ -22962,9 +22964,9 @@ if NIGHT_MODE then
 	Lighting.Ambient = Color3.fromRGB(40, 40, 55)
 	Lighting.OutdoorAmbient = Color3.fromRGB(70, 70, 95)
 	local bloom = Lighting:FindFirstChildOfClass("BloomEffect") or Instance.new("BloomEffect")
-	bloom.Intensity = 0.9
+	bloom.Intensity = 0.35
 	bloom.Size = 32
-	bloom.Threshold = 0.85
+	bloom.Threshold = 0.95
 	bloom.Parent = Lighting
 	local color = Lighting:FindFirstChild("BabrruNightColor") or Instance.new("ColorCorrectionEffect")
 	color.Name = "BabrruNightColor"
