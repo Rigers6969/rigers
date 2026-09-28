@@ -57,6 +57,65 @@ def _load_credentials(channel: str):
     return creds
 
 
+def _upload(creds, video_path: Path, title: str, description: str, tags: list, category_id: str,
+            privacy_status: str, channel: str, report: ProgressCB):
+    """Resumable upload of one file; returns (youtube client, video id)."""
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    youtube = build("youtube", "v3", credentials=creds)
+    body = {
+        "snippet": {"title": title, "description": description, "tags": tags, "categoryId": category_id},
+        "status": {"privacyStatus": privacy_status},
+    }
+    media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True)
+    request = youtube.videos().insert(part=",".join(body.keys()), body=body, media_body=media)
+
+    report(f'Uploading "{title}" to YouTube ({channel})...')
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            report(f"Upload {int(status.progress() * 100)}%...")
+    return youtube, response["id"]
+
+
+def publish_short(
+    video_dir: Path, channel: str, short: dict, privacy_status: str = "public",
+    category_id: str = DEFAULT_CATEGORY_ID, progress: Optional[ProgressCB] = None,
+) -> Optional[dict]:
+    """Uploads one Short made by shorts_maker (short = an entry of
+    shorts/shorts.json). YouTube treats a vertical video under 3 minutes
+    as a Short on its own; #Shorts in the title/description helps it get
+    picked up. Same per-channel login and quota as publish_video - each
+    upload costs 1,600 of the ~10,000 daily units. Returns {video_id, url}
+    or None if the channel isn't connected."""
+    def report(msg: str) -> None:
+        if progress:
+            progress(msg)
+
+    creds = _load_credentials(channel)
+    if creds is None:
+        report(f'YouTube not connected for "{channel}" - run youtube_publish_auth_setup.py first.')
+        return None
+    video_path = video_dir / "shorts" / short["file"]
+    if not video_path.exists():
+        raise PublishError(f"{short['file']} is missing - make the Shorts again.")
+
+    metadata_path = video_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
+    yt = metadata.get("youtube", {})
+    title = f"{short.get('title') or yt.get('title') or video_dir.name} #Shorts"[:100]
+    full_title = yt.get("title") or ""
+    description = (short.get("text", "") + (f"\n\nFull video: {full_title}" if full_title else "") + "\n\n#Shorts").strip()
+    tags = list(yt.get("tags", [])) + ["shorts"]
+
+    _, video_id = _upload(creds, video_path, title, description, tags, category_id, privacy_status, channel, report)
+    url = f"https://www.youtube.com/shorts/{video_id}"
+    report(f"Published: {url}")
+    return {"video_id": video_id, "url": url}
+
+
 def publish_video(
     video_dir: Path, channel: str, privacy_status: str = "public",
     category_id: str = DEFAULT_CATEGORY_ID, progress: Optional[ProgressCB] = None,
@@ -90,25 +149,7 @@ def publish_video(
     description = yt.get("description", "")
     tags = yt.get("tags", [])
 
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
-
-    youtube = build("youtube", "v3", credentials=creds)
-    body = {
-        "snippet": {"title": title, "description": description, "tags": tags, "categoryId": category_id},
-        "status": {"privacyStatus": privacy_status},
-    }
-    media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True)
-    request = youtube.videos().insert(part=",".join(body.keys()), body=body, media_body=media)
-
-    report(f'Uploading "{title}" to YouTube ({channel})...')
-    response = None
-    while response is None:
-        status, response = request.next_chunk()
-        if status:
-            report(f"Upload {int(status.progress() * 100)}%...")
-
-    video_id = response["id"]
+    youtube, video_id = _upload(creds, video_path, title, description, tags, category_id, privacy_status, channel, report)
 
     thumbnail_path = video_dir / "thumbnail.jpg"
     if thumbnail_path.exists():

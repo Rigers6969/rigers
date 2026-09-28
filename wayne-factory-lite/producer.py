@@ -104,6 +104,10 @@ VIDEO_LENGTH_PRESETS = {
 }
 DEFAULT_VIDEO_LENGTH = "long"
 
+# After each long video, automatically cut it into vertical Shorts too
+# (shorts_maker.py). Set False to only make them from the Produce page.
+AUTO_SHORTS = True
+
 
 def resolve_target_words(length: Optional[str], target_words: Optional[int] = None) -> int:
     """Turns the Produce page's length choice into a word count. An
@@ -440,6 +444,18 @@ def produce_video(
         # revisit this video later, not just in the one-time job progress.
         (video_dir / "publish.json").write_text(json.dumps(publish), encoding="utf-8")
 
+    # Long videos also get cut into vertical Shorts (made, not published -
+    # uploading 4 Shorts per video would use up most of YouTube's ~6
+    # uploads/day; they're published one by one from the Produce page).
+    shorts_made = 0
+    if video_error is None and not is_short and AUTO_SHORTS:
+        try:
+            from shorts_maker import make_shorts
+
+            shorts_made = len(make_shorts(video_dir, writer, progress=lambda m: report(f"Shorts: {m}")))
+        except Exception as exc:
+            report(f"Making Shorts failed ({exc}) - the full video is still fine; try 'Make Shorts' on the Produce page.")
+
     report("Done.")
     return {
         "slug": slug,
@@ -451,4 +467,5 @@ def produce_video(
         "video_error": video_error,
         "review": review,
         "publish": publish,
+        "shorts": shorts_made,
     }

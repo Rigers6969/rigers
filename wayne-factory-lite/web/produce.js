@@ -336,6 +336,28 @@ async function selectVideo(slug) {
     ${(review.lessons || []).length ? `<div class="save-status"><b>Lessons carried into future videos:</b><br>${review.lessons.map((l) => `&middot; ${escapeHtml(l)}`).join("<br>")}</div>` : ""}
   ` : "";
 
+  const shorts = data.shorts || [];
+  const isLong = !!data.video_url;
+  const shortsHtml = isLong ? `
+    <h4 style="margin-top:24px;">Shorts</h4>
+    <p class="hint" style="margin-bottom:10px;">Vertical clips cut from this video's best moments, with captions - for YouTube Shorts, Reels and TikTok.
+      Each YouTube upload uses about 1 of your ~6 uploads a day, so publish the best ones.</p>
+    <button id="make-shorts-btn" class="btn-ghost">${shorts.length ? "Remake Shorts" : "Make Shorts"}</button>
+    <div id="shorts-progress" class="save-status" style="margin-top:8px;"></div>
+    <div style="display:flex; flex-wrap:wrap; gap:14px; margin-top:12px;">
+      ${shorts.map((sh) => `
+        <div style="width:200px;">
+          <video controls preload="metadata" src="${sh.url}" style="width:200px; aspect-ratio:9/16; background:#000; border-radius:8px;"></video>
+          <p style="margin:6px 0 4px; font-weight:600;">${escapeHtml(sh.title)}</p>
+          <p class="hint" style="margin:0 0 6px;">${Math.round(sh.end - sh.start)}s &middot; from ${Math.floor(sh.start / 60)}:${String(Math.floor(sh.start % 60)).padStart(2, "0")}</p>
+          <a href="${sh.url}" download class="btn-ghost" style="display:inline-block; padding:4px 10px; font-size:12px;">Download</a>
+          ${sh.published
+            ? `<a href="${sh.published}" target="_blank" rel="noopener" style="color:var(--gold); font-size:12px; margin-left:6px;">Published</a>`
+            : `<button class="btn-ghost publish-short-btn" data-index="${sh.index}" style="padding:4px 10px; font-size:12px; margin-left:4px;">Publish</button>`}
+          <div class="hint short-status" data-index="${sh.index}" style="margin-top:4px;"></div>
+        </div>`).join("")}
+    </div>` : "";
+
   document.getElementById("detail-body").innerHTML = `
     <h4>Final Video</h4>
     ${data.video_url
@@ -347,6 +369,8 @@ async function selectVideo(slug) {
          <button id="assemble-btn" class="btn-primary" ${data.manifest && data.manifest.length ? "" : "disabled"}>Assemble Video</button>
          <div id="assemble-progress" class="save-status"></div>`
     }
+
+    ${shortsHtml}
 
     ${reviewHtml}
 
@@ -376,6 +400,59 @@ async function selectVideo(slug) {
   if (assembleBtn) {
     assembleBtn.addEventListener("click", () => runAssemble(slug));
   }
+  const shortsBtn = document.getElementById("make-shorts-btn");
+  if (shortsBtn) {
+    shortsBtn.addEventListener("click", () => runMakeShorts(slug));
+  }
+  document.querySelectorAll(".publish-short-btn").forEach((btn) => {
+    btn.addEventListener("click", () => runPublishShort(slug, btn.dataset.index, btn));
+  });
+}
+
+async function runMakeShorts(slug) {
+  const progressEl = document.getElementById("shorts-progress");
+  const btn = document.getElementById("make-shorts-btn");
+  btn.disabled = true;
+  progressEl.innerText = "Starting...";
+  // Same writer settings as the New Video form (used to pick the best moments).
+  const resp = await fetch(`/api/auto/videos/${encodeURIComponent(slug)}/shorts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      engine: document.getElementById("engine-select").value,
+      ollama_host: document.getElementById("ollama-host").value.trim(),
+      anthropic_key: document.getElementById("anthropic-key").value.trim(),
+    }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    progressEl.innerText = data.error || "Failed to start.";
+    btn.disabled = false;
+    return;
+  }
+  pollJob(data.job_id, {
+    onProgress: (msg) => { progressEl.innerText = msg; },
+    onDone: () => selectVideo(slug),
+    onError: (err) => { progressEl.innerText = "Error: " + err; btn.disabled = false; },
+  });
+}
+
+async function runPublishShort(slug, index, btn) {
+  const statusEl = document.querySelector(`.short-status[data-index="${index}"]`);
+  btn.disabled = true;
+  statusEl.innerText = "Starting upload...";
+  const resp = await fetch(`/api/auto/videos/${encodeURIComponent(slug)}/shorts/${index}/publish`, { method: "POST" });
+  const data = await resp.json();
+  if (!resp.ok) {
+    statusEl.innerText = data.error || "Failed to start.";
+    btn.disabled = false;
+    return;
+  }
+  pollJob(data.job_id, {
+    onProgress: (msg) => { statusEl.innerText = msg; },
+    onDone: () => selectVideo(slug),
+    onError: (err) => { statusEl.innerText = "Error: " + err; btn.disabled = false; },
+  });
 }
 
 async function runAssemble(slug) {

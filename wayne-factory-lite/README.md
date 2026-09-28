@@ -102,3 +102,20 @@ To connect a channel:
   If you want to check videos before they go live, don't run the auth
   setup for that channel (or delete its `token_upload_*.json`) and
   publish manually from YouTube Studio instead.
+
+## Shorts (automatic)
+
+After every **long** video, the app also cuts it into 3-4 vertical
+Shorts (1080x1920, under a minute each) for YouTube Shorts, Reels and
+TikTok: the writer model picks the most gripping self-contained moments
+from the transcript (if it's unavailable, clips are spread evenly), each
+clip keeps the full picture over a blurred background, with a title at
+the top and word-by-word captions at the bottom. They land in the
+video's `shorts/` folder.
+
+On the Produce page, open a video to watch/download its Shorts, remake
+them, or **Publish** one to YouTube. Shorts are made automatically but
+published only when you click - every upload costs 1,600 of your
+~10,000 daily YouTube API units (about 6 uploads a day), so 4 Shorts per
+video would use most of it. To stop making them automatically, set
+`AUTO_SHORTS = False` in `producer.py`.

@@ -171,6 +171,11 @@ def get_video(slug):
     publish = None
     if (video_dir / "publish.json").exists():
         publish = json.loads((video_dir / "publish.json").read_text(encoding="utf-8"))
+    from shorts_maker import load_shorts
+    shorts = [
+        {**sh, "url": f"/api/auto/videos/{slug}/shorts/{sh['file']}", "index": i}
+        for i, sh in enumerate(load_shorts(video_dir))
+    ]
 
     manifest = []
     manifest_path = video_dir / "media" / "manifest.csv"
@@ -193,6 +198,7 @@ def get_video(slug):
         "shots": shots,
         "review": review,
         "publish": publish,
+        "shorts": shorts,
         "manifest": manifest,
         "voiceover_url": f"/api/auto/videos/{slug}/voiceover" if (video_dir / "voiceover.mp3").exists() else None,
         "video_url": f"/api/auto/videos/{slug}/video" if (video_dir / "final.mp4").exists() else None,
@@ -213,6 +219,79 @@ def get_video_file(slug):
     if video_dir is None or not (video_dir / "final.mp4").exists():
         return jsonify({"error": "Not found."}), 404
     return send_from_directory(video_dir, "final.mp4")
+
+
+SHORT_FILE_RE = re.compile(r"^short_\d{1,2}\.mp4$")
+
+
+def _channel_of(video_dir: Path) -> str:
+    """The channel a video was produced for: notes.txt's first line is
+    always "{channel} - {topic}" (see producer.format_notes)."""
+    notes = video_dir / "notes.txt"
+    if notes.exists():
+        first = notes.read_text(encoding="utf-8").splitlines()[:1]
+        if first and " - " in first[0]:
+            return first[0].split(" - ", 1)[0]
+    return ""
+
+
+@bp.route("/api/auto/videos/<slug>/shorts", methods=["POST"])
+def make_video_shorts(slug):
+    video_dir = _safe_content_path(slug)
+    if video_dir is None or not video_dir.exists():
+        return jsonify({"error": f"No such video: {slug}"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        writer = make_writer(data.get("engine", "ollama"), data)
+    except ValueError:
+        writer = None  # clips still get made, just spread evenly instead of hand-picked
+
+    def task(job_id):
+        from jobs import set_progress
+        from shorts_maker import make_shorts
+
+        return {"shorts": make_shorts(video_dir, writer, progress=lambda m: set_progress(job_id, m))}
+
+    return jsonify({"job_id": start_job(task)}), 202
+
+
+@bp.route("/api/auto/videos/<slug>/shorts/<name>")
+def get_short_file(slug, name):
+    video_dir = _safe_content_path(slug)
+    if video_dir is None or not SHORT_FILE_RE.match(name) or not (video_dir / "shorts" / name).exists():
+        return jsonify({"error": "Not found."}), 404
+    return send_from_directory(video_dir / "shorts", name)
+
+
+@bp.route("/api/auto/videos/<slug>/shorts/<int:index>/publish", methods=["POST"])
+def publish_video_short(slug, index):
+    video_dir = _safe_content_path(slug)
+    if video_dir is None or not video_dir.exists():
+        return jsonify({"error": f"No such video: {slug}"}), 404
+    from shorts_maker import SHORTS_DIRNAME, load_shorts
+
+    shorts = load_shorts(video_dir)
+    if not (0 <= index < len(shorts)):
+        return jsonify({"error": "No such Short."}), 404
+    channel = _channel_of(video_dir)
+    if not channel:
+        return jsonify({"error": "Couldn't tell which channel this video belongs to."}), 400
+
+    def task(job_id):
+        from jobs import set_progress
+        from youtube_publisher import publish_short
+
+        result = publish_short(video_dir, channel, shorts[index], progress=lambda m: set_progress(job_id, m))
+        if result is None:
+            raise RuntimeError(f'YouTube isn\'t connected for "{channel}" - run youtube_publish_auth_setup.py "{channel}" first.')
+        # Remember it's published, so the page shows the link next time.
+        current = load_shorts(video_dir)
+        if index < len(current):
+            current[index]["published"] = result["url"]
+            (video_dir / SHORTS_DIRNAME / "shorts.json").write_text(json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8")
+        return result
+
+    return jsonify({"job_id": start_job(task)}), 202
 
 
 @bp.route("/api/auto/videos/<slug>/assemble", methods=["POST"])
