@@ -14,6 +14,7 @@ credit on a sign next to the spawn point.
 """
 from __future__ import annotations
 
+import json
 import math
 import sys
 import xml.etree.ElementTree as ET
@@ -57,6 +58,45 @@ FACADE_COLORS = [
 ]
 STYLES = []  # expanded list incl. one plaster style per facade color
 STYLE_INDEX = {}
+
+ROOF_TILE_COLORS = [(170, 72, 48), (158, 64, 44), (182, 88, 58), (140, 58, 42)]
+ROOF_PITCH_DEG = 28
+
+NAMED_COLORS = {
+    "white": (245, 245, 242), "black": (35, 35, 38), "grey": (150, 150, 150), "gray": (150, 150, 150),
+    "lightgrey": (200, 200, 198), "lightgray": (200, 200, 198), "darkgrey": (90, 90, 92), "darkgray": (90, 90, 92),
+    "red": (175, 55, 45), "darkred": (130, 40, 35), "maroon": (120, 35, 30), "brown": (120, 80, 55),
+    "orange": (235, 140, 60), "yellow": (240, 210, 110), "beige": (225, 210, 180), "cream": (240, 230, 205),
+    "tan": (210, 180, 140), "pink": (235, 180, 185), "blue": (90, 130, 190), "lightblue": (170, 200, 225),
+    "green": (110, 160, 100), "lightgreen": (175, 210, 160), "terracotta": (170, 72, 48), "silver": (190, 192, 196),
+}
+
+
+def parse_color(value):
+    """OSM colour tag (name or #rrggbb) -> rgb, or None."""
+    if not value:
+        return None
+    v = value.strip().lower().replace(" ", "")
+    if v.startswith("#") and len(v) in (4, 7):
+        if len(v) == 4:
+            v = "#" + "".join(ch * 2 for ch in v[1:])
+        try:
+            return tuple(int(v[i:i + 2], 16) for i in (1, 3, 5))
+        except ValueError:
+            return None
+    return NAMED_COLORS.get(v)
+
+
+def color_style(rgb, kind):
+    """A style for an arbitrary wall/roof colour, created on first use."""
+    key = f"{kind}_{rgb[0]}_{rgb[1]}_{rgb[2]}"
+    if key not in STYLE_INDEX:
+        STYLE_INDEX[key] = len(STYLES) + 1
+        if kind == "wall":
+            STYLES.append(("Building", rgb, "Plaster", 1, 0, 0, 1, "Buildings", 0))
+        else:
+            STYLES.append(("Roof", rgb, "Slate", 1, 0, 0, 1, "Buildings", 0))
+    return key
 
 
 def build_styles():
@@ -106,6 +146,7 @@ def rd(v, places=None):
 
 class Out:
     def __init__(self):
+        self.roofs = []  # WedgeParts, same 8-number layout as boxes
         self.boxes = []
         self.wedges = []
         self.balls = []
@@ -121,6 +162,29 @@ def yaw_for(dx, dz):
     """Yaw (degrees) for CFrame.Angles(0, yaw, 0) so a part's local X axis
     points along (dx, dz): Angles(0, t, 0) maps X to (cos t, 0, -sin t)."""
     return math.degrees(math.atan2(-dz, dx))
+
+
+def gabled_roof(out, style, cx, cz, lu, lv, c, s, wall_top):
+    """A pitched roof on a rectangular building: two WedgeParts leaning
+    against each other along the ridge (which runs along the longer side).
+    A WedgePart is full height at its +Z face and slopes down to -Z, so
+    each one's +Z face sits on the ridge."""
+    if lu >= lv:
+        rx, rz, length, width = c, s, lu, lv
+    else:
+        rx, rz, length, width = -s, c, lv, lu
+    overhang = 0.3 * SCALE
+    half = width / 2 + overhang
+    rise = math.tan(math.radians(ROOF_PITCH_DEG)) * (width / 2)
+    # For CFrame.Angles(0, t, 0) with local X along (rx, rz), local Z is (-rz, rx).
+    zx, zz = -rz, rx
+    y = wall_top + rise / 2
+    for sign in (1, -1):
+        # this half's local X is sign*(rx, rz), so its +Z is sign*(zx, zz),
+        # and it sits on the opposite side of the ridge from where +Z points
+        px, pz = cx - sign * zx * half / 2, cz - sign * zz * half / 2
+        out.roofs.extend([STYLE_INDEX[style], px, y, pz, length + 2 * overhang, rise, half, yaw_for(sign * rx, sign * rz)])
+    return rise
 
 
 def seg_box(out, style, a, b, width, y_top, thick, extend=0.0):
@@ -443,11 +507,20 @@ def main(osm_path, out_path):
         return any(dist_to_seg(p, a, b) < hw + margin for a, b, hw in road_grid.near(*p))
 
     # ---- buildings ---------------------------------------------------
+    # Per-building corrections (floors, colours, roof) - e.g. matched from
+    # the user's satellite / Street View screenshots - keyed by OSM way id.
+    overrides_path = Path(osm_path).with_name("babrru_overrides.json")
+    overrides = {}
+    if overrides_path.exists():
+        overrides = json.loads(overrides_path.read_text(encoding="utf-8")).get("buildings", {})
+
     building_grid = Grid()
-    rect_count = poly_count = 0
+    rect_count = poly_count = pitched_count = 0
     for wid, (tags, refs) in ways.items():
         if "building" not in tags or len(refs) < 4:
             continue
+        if wid in overrides:
+            tags = {**tags, **{k: str(v) for k, v in overrides[wid].items() if not k.startswith("_")}}
         ring = clean_ring([nodes[r] for r in refs])
         if len(ring) < 3:
             continue
@@ -489,7 +562,11 @@ def main(osm_path, out_path):
                     out.box("ShelterFrame", px, roof_y / 2, pz, 0.3 * S, roof_y, 0.3 * S, 0)
             continue
 
-        style = "Brick" if seed % 100 < 22 else f"Facade{seed % len(FACADE_COLORS)}"
+        wall_rgb = parse_color(tags.get("building:colour"))
+        if wall_rgb:
+            style = color_style(wall_rgb, "wall")
+        else:
+            style = "Brick" if seed % 100 < 22 else f"Facade{seed % len(FACADE_COLORS)}"
         rect = min_area_rect(ring)
         if rect and area / rect[0] >= 0.9:
             _, cx, cz, lu, lv, c, s = rect
@@ -497,6 +574,19 @@ def main(osm_path, out_path):
             # (window bands are added in-game from each building box)
             out.box(style, cx, height / 2, cz, lu, height, lv, yaw)
             rect_count += 1
+
+            # Roof: the mapped roof shape if there is one; otherwise about
+            # half the small houses get a pitched red-tile roof, as in Babrru.
+            shape = tags.get("roof:shape")
+            if shape:
+                pitched = shape not in ("flat", "skillion")
+            else:
+                small_house = kind in ("yes", "house", "residential", "detached", "semidetached_house") and levels <= 3 and area <= 250 * S * S
+                pitched = small_house and seed % 100 >= 50
+            if pitched:
+                roof_rgb = parse_color(tags.get("roof:colour")) or ROOF_TILE_COLORS[seed % len(ROOF_TILE_COLORS)]
+                gabled_roof(out, color_style(roof_rgb, "roof"), cx, cz, lu, lv, c, s, height)
+                pitched_count += 1
         else:
             for tri in triangulate(ring):
                 add_prism(out, style, tri, 0.0, height)
@@ -777,7 +867,7 @@ def main(osm_path, out_path):
     credit = (spawn[0] + rx * (sw / 2 + 1.5 * S), spawn[1] + rz * (sw / 2 + 1.5 * S))
     out.signs.append(("credit", credit[0], credit[1], spawn_yaw, "Map data (c) OpenStreetMap contributors"))
 
-    summary = (f"{len(roads)} roads, {rect_count + poly_count} buildings, {crossings} crossings, {stops} stop signs, "
+    summary = (f"{len(roads)} roads, {rect_count + poly_count} buildings ({pitched_count} with pitched roofs), {crossings} crossings, {stops} stop signs, "
                f"{signals} traffic lights, {bus_stops} bus stops, {tree_count} trees, {len(out.lamps) // 4} street lamps, "
                f"{len(placed_names)} street signs, {len(out.labels)} place names")
 
@@ -839,6 +929,9 @@ local MAP = {{
 	boxes = [[
 {numstr(out.boxes, 8)}
 ]],
+	roofs = [[
+{numstr(out.roofs, 8)}
+]],
 	wedges = [[
 {numstr(out.wedges, 13, precise=(4, 5, 6, 7, 8, 9))}
 ]],
@@ -868,7 +961,7 @@ local MAP = {{
         '</roblox>\n'
     )
     Path(out_path).with_suffix("").with_suffix(".rbxmx").write_text(rbxmx, encoding="utf-8")
-    parts = len(out.boxes) // 8 + len(out.wedges) // 13 + 2 * len(out.balls) // 5 + 3 * len(out.lamps) // 4 + 2 * len(out.signs) + len(out.labels) + 2 * rect_count
+    parts = len(out.roofs) // 8 + len(out.boxes) // 8 + len(out.wedges) // 13 + 2 * len(out.balls) // 5 + 3 * len(out.lamps) // 4 + 2 * len(out.signs) + len(out.labels) + 2 * rect_count
     print(summary)
     print(f"markings: {marking_count}; parts ~{parts}; wedges {len(out.wedges) // 13}; file {Path(out_path).stat().st_size / 1024:.0f} KB")
     return out

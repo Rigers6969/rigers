@@ -25,6 +25,13 @@ it - no copy/paste. Delete the old `TiranaRoads` script (the two maps
 would overlap) and the default `Baseplate`. Press Play; it builds in a
 few seconds and you spawn on a real Babrru street.
 
+Buildings use their real floors, wall colour and roof shape wherever
+OpenStreetMap has them (`building:levels`, `building:colour`,
+`roof:shape`, `roof:colour`); elsewhere about half the small houses get
+a pitched red-tile roof, as is common in Babrru. Specific buildings can
+be corrected in `data/babrru_overrides.json` (keyed by OSM way id), e.g.
+from satellite or Street View screenshots.
+
 To rebuild it from a newer or bigger OpenStreetMap export:
 
     python tools/osm_to_babrru.py data/babrru.osm BabrruMap.server.lua

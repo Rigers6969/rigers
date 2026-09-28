@@ -145,6 +145,15 @@ for i = 1, #b, 8 do
 	end
 end
 
+-- Pitched roofs: two WedgeParts leaning against each other at the ridge.
+local roofs = numbers(MAP.roofs)
+for i = 1, #roofs, 8 do
+	local p = Instance.new("WedgePart")
+	p.Size = Vector3.new(roofs[i + 4], roofs[i + 5], roofs[i + 6])
+	p.CFrame = CFrame.new(roofs[i + 1], roofs[i + 2], roofs[i + 3]) * CFrame.Angles(0, math.rad(roofs[i + 7]), 0)
+	finish(p, STYLES[roofs[i]])
+end
+
 -- Wedges: pairs of them make the exact outline of non-rectangular
 -- buildings and of lakes/river areas (each pair = one triangle).
 local w = numbers(MAP.wedges)

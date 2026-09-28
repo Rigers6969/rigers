@@ -1,0 +1,4 @@
+{
+  "_how": "Corrections for specific buildings, keyed by OpenStreetMap way id. Any of: building:levels, building:colour (name or #rrggbb), roof:shape (flat/gabled/hipped), roof:colour.",
+  "buildings": {}
+}
