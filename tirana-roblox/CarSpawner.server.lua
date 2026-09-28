@@ -268,6 +268,16 @@ local function buildCar(car, rootCFrame)
 	root.Parent = model
 	model.PrimaryPart = root
 
+	-- Headlights: the root's Front face is the car's front.
+	local headlight = Instance.new("SpotLight")
+	headlight.Face = Enum.NormalId.Front
+	headlight.Range = 60
+	headlight.Angle = 70
+	headlight.Brightness = 4
+	headlight.Color = Color3.fromRGB(255, 244, 214)
+	headlight.Shadows = false
+	headlight.Parent = root
+
 	local parts = {}
 
 	local function add(className, name, size, x, heightAboveGround, z, color, material, rotation)

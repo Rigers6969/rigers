@@ -432,6 +432,9 @@ def main(osm_path, out_path):
         return node_width[ref] / 2 + 2 * S if ref in junction else 0.0
 
     road_segments = []  # for placement checks: (a, b, half_width)
+    road_lines = []  # x1 z1 x2 z2 width streetIndex - for the minimap and street names
+    street_names = []
+    street_index = {}
     marking_count = 0
     for wid, tags, refs, w, top, cls in roads:
         surface = tags.get("surface", "")
@@ -446,10 +449,19 @@ def main(osm_path, out_path):
         else:
             style = "Asphalt"
         pts = [nodes[r] for r in refs]
+        name = tags.get("name")
+        name_i = 0
+        if name and cls in CAR_ROADS:
+            if name not in street_index:
+                street_names.append(name)
+                street_index[name] = len(street_names)
+            name_i = street_index[name]
         for a, b in zip(pts, pts[1:]):
             # Extending each piece by half the width fills the gaps at bends.
             seg_box(out, style, a, b, w, top, ROAD_THICK, extend=w / 2)
             road_segments.append((a, b, w / 2))
+            if cls in CAR_ROADS:
+                road_lines.extend([a[0], a[1], b[0], b[1], w, name_i])
 
         _, _, lamps, center, edges = ROAD_CLASSES[cls]
         if style != "Asphalt" or cls not in CAR_ROADS:
@@ -932,6 +944,12 @@ local MAP = {{
 	roofs = [[
 {numstr(out.roofs, 8)}
 ]],
+	-- Car-road centerlines for the minimap / street names:
+	-- x1 z1 x2 z2 width streetIndex (0 = unnamed), and the street names.
+	roadlines = [[
+{numstr([round(v) for v in road_lines], 6)}
+]],
+	streets = {{ {", ".join(lua_str(n) for n in street_names)} }},
 	wedges = [[
 {numstr(out.wedges, 13, precise=(4, 5, 6, 7, 8, 9))}
 ]],

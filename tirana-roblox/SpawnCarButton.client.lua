@@ -372,3 +372,161 @@ task.spawn(function()
 		updateCash()
 	end
 end)
+
+---------------------------------------------------------------------
+-- Where am I: minimap of the real streets around you (north is up),
+-- the street you're on and the nearest real place. Shows up once the
+-- Babrru map is in the game (it publishes the road lines).
+-- N switches day/night (only for you).
+---------------------------------------------------------------------
+
+local Lighting = game:GetService("Lighting")
+
+local MAP_PX = 230
+local MAP_RADIUS = 450 -- studs from the minimap's center to its edge
+local PX_PER_STUD = (MAP_PX / 2) / MAP_RADIUS
+local MAJOR_ROAD = Color3.fromRGB(255, 214, 120)
+local MINOR_ROAD = Color3.fromRGB(225, 225, 225)
+
+local mapFrame = Instance.new("Frame")
+mapFrame.Name = "Minimap"
+mapFrame.Size = UDim2.new(0, MAP_PX, 0, MAP_PX)
+mapFrame.AnchorPoint = Vector2.new(0, 1)
+mapFrame.Position = UDim2.new(0, 16, 1, -16)
+mapFrame.BackgroundColor3 = Color3.fromRGB(34, 48, 36)
+mapFrame.BackgroundTransparency = 0.1
+mapFrame.ClipsDescendants = true
+mapFrame.Visible = false
+mapFrame.Parent = gui
+corner(mapFrame, 12)
+
+local arrow = Instance.new("TextLabel")
+arrow.Size = UDim2.fromOffset(24, 24)
+arrow.AnchorPoint = Vector2.new(0.5, 0.5)
+arrow.Position = UDim2.fromScale(0.5, 0.5)
+arrow.BackgroundTransparency = 1
+arrow.Text = "▲"
+arrow.TextColor3 = Color3.fromRGB(255, 60, 60)
+arrow.TextStrokeTransparency = 0
+arrow.Font = Enum.Font.GothamBold
+arrow.TextSize = 22
+arrow.ZIndex = 3
+arrow.Parent = mapFrame
+
+local north = Instance.new("TextLabel")
+north.Size = UDim2.fromOffset(20, 20)
+north.AnchorPoint = Vector2.new(0.5, 0)
+north.Position = UDim2.new(0.5, 0, 0, 4)
+north.BackgroundTransparency = 1
+north.Text = "N"
+north.TextColor3 = Color3.fromRGB(255, 255, 255)
+north.TextStrokeTransparency = 0
+north.Font = Enum.Font.GothamBold
+north.TextSize = 14
+north.ZIndex = 3
+north.Parent = mapFrame
+
+local function hudLabel(y, size, bold)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromOffset(460, size + 6)
+	label.AnchorPoint = Vector2.new(0, 1)
+	label.Position = UDim2.new(0, 18, 1, y)
+	label.BackgroundTransparency = 1
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextStrokeTransparency = 0.2
+	label.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
+	label.TextSize = size
+	label.Text = ""
+	label.Visible = false
+	label.Parent = gui
+	return label
+end
+local streetLabel = hudLabel(-16 - MAP_PX - 30, 20, true)
+local placeLabel = hudLabel(-16 - MAP_PX - 8, 15, false)
+local keysLabel = hudLabel(-16 - MAP_PX - 58, 13, false)
+keysLabel.Text = "N - day / night"
+
+local roadData = nil
+task.spawn(function()
+	local value = ReplicatedStorage:WaitForChild("BabrruRoads", 120)
+	if not value then
+		return -- no Babrru map in this game
+	end
+	local nums = {}
+	for v in string.gmatch(value.Value, "%S+") do
+		nums[#nums + 1] = tonumber(v)
+	end
+	roadData = nums
+	mapFrame.Visible = true
+	streetLabel.Visible = true
+	placeLabel.Visible = true
+	keysLabel.Visible = true
+end)
+
+local pool, used = {}, 0
+local function nextLine()
+	used = used + 1
+	local line = pool[used]
+	if not line then
+		line = Instance.new("Frame")
+		line.BorderSizePixel = 0
+		line.AnchorPoint = Vector2.new(0.5, 0.5)
+		line.ZIndex = 2
+		line.Parent = mapFrame
+		pool[used] = line
+	end
+	line.Visible = true
+	return line
+end
+
+task.spawn(function()
+	while true do
+		task.wait(0.2)
+		local character = player.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if roadData and hrp then
+			local px, pz = hrp.Position.X, hrp.Position.Z
+			local reach = MAP_RADIUS * 1.5
+			local half = MAP_PX / 2
+			used = 0
+			for i = 1, #roadData, 6 do
+				local ax, az, bx, bz = roadData[i], roadData[i + 1], roadData[i + 2], roadData[i + 3]
+				-- skip roads whose bounding box is nowhere near the minimap
+				if math.min(ax, bx) < px + reach and math.max(ax, bx) > px - reach
+					and math.min(az, bz) < pz + reach and math.max(az, bz) > pz - reach then
+					local dx, dz = bx - ax, bz - az
+					local length = math.sqrt(dx * dx + dz * dz)
+					if length > 0.5 then
+						local width = roadData[i + 4]
+						local line = nextLine()
+						-- +Z is south, so world (x, z) maps straight onto screen (x, y).
+						line.Size = UDim2.fromOffset(length * PX_PER_STUD + 1, math.max(2, width * PX_PER_STUD))
+						line.Position = UDim2.fromOffset(half + ((ax + bx) / 2 - px) * PX_PER_STUD, half + ((az + bz) / 2 - pz) * PX_PER_STUD)
+						line.Rotation = math.deg(math.atan2(dz, dx))
+						line.BackgroundColor3 = width >= 20 and MAJOR_ROAD or MINOR_ROAD
+					end
+				end
+			end
+			for k = used + 1, #pool do
+				pool[k].Visible = false
+			end
+			local look = hrp.CFrame.LookVector
+			arrow.Rotation = math.deg(math.atan2(look.X, -look.Z))
+			streetLabel.Text = player:GetAttribute("BabrruStreet") or ""
+			local place = player:GetAttribute("BabrruPlace") or ""
+			placeLabel.Text = place ~= "" and ("near " .. place) or ""
+		end
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed or input.KeyCode ~= Enum.KeyCode.N then
+		return
+	end
+	if Lighting.ClockTime >= 18 or Lighting.ClockTime < 6 then
+		Lighting.ClockTime = 13
+	else
+		Lighting.ClockTime = 21
+	end
+end)

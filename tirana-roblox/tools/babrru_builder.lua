@@ -305,6 +305,78 @@ for ix = 0, math.ceil((maxX - minX) / TILE) - 1 do
 	end
 end
 
+-- Where am I: the road lines go to every player (for the minimap), and
+-- twice a second each player's current street and nearest real place are
+-- worked out here and set as attributes the HUD shows.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local roadsValue = ReplicatedStorage:FindFirstChild("BabrruRoads") or Instance.new("StringValue")
+roadsValue.Name = "BabrruRoads"
+roadsValue.Value = MAP.roadlines
+roadsValue.Parent = ReplicatedStorage
+
+local lines = numbers(MAP.roadlines)
+local places = {}
+for _, l in ipairs(MAP.labels) do
+	if l[5] == 0 then
+		table.insert(places, l)
+	end
+end
+
+local function distanceToSegment(px, pz, ax, az, bx, bz)
+	local dx, dz = bx - ax, bz - az
+	local lengthSq = dx * dx + dz * dz
+	local t = 0
+	if lengthSq > 0 then
+		t = math.clamp(((px - ax) * dx + (pz - az) * dz) / lengthSq, 0, 1)
+	end
+	local cx, cz = ax + dx * t, az + dz * t
+	return math.sqrt((px - cx) ^ 2 + (pz - cz) ^ 2)
+end
+
+task.spawn(function()
+	while true do
+		for _, player in ipairs(Players:GetPlayers()) do
+			local character = player.Character
+			local hrp = character and character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local px, pz = hrp.Position.X, hrp.Position.Z
+				local nearest, nearestD = 0, math.huge
+				local named, namedD = 0, math.huge
+				for i = 1, #lines, 6 do
+					local d = distanceToSegment(px, pz, lines[i], lines[i + 1], lines[i + 2], lines[i + 3]) - lines[i + 4] / 2
+					if d < nearestD then
+						nearestD, nearest = d, lines[i + 5]
+					end
+					if lines[i + 5] > 0 and d < namedD then
+						namedD, named = d, lines[i + 5]
+					end
+				end
+				local street
+				if nearestD > 30 * MAP.scale then
+					street = named > 0 and ("near " .. MAP.streets[named]) or ""
+				elseif nearest > 0 then
+					street = MAP.streets[nearest]
+				elseif named > 0 and namedD < 150 * MAP.scale then
+					street = "Unnamed street, near " .. MAP.streets[named]
+				else
+					street = "Unnamed street"
+				end
+				local place, placeD = "", 70 * MAP.scale
+				for _, l in ipairs(places) do
+					local d = math.sqrt((l[1] - px) ^ 2 + (l[3] - pz) ^ 2)
+					if d < placeD then
+						placeD, place = d, l[4]
+					end
+				end
+				player:SetAttribute("BabrruStreet", street)
+				player:SetAttribute("BabrruPlace", place)
+			end
+		end
+		task.wait(0.5)
+	end
+end)
+
 if NIGHT_MODE then
 	Lighting.ClockTime = 21
 	Lighting.Brightness = 1
