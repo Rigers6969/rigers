@@ -1,5 +1,7 @@
 input/
 output/
 cache/
-.installed
+.installed*
 __pycache__/
+streamers.json
+trends_last.json

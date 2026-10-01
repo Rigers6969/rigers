@@ -22,9 +22,11 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
+import downloader
 import moments
 import renderer
 import transcriber
+import trends
 
 APP_DIR = Path(__file__).resolve().parent
 INPUT_DIR = APP_DIR / "input"
@@ -241,7 +243,7 @@ def status():
     except renderer.RenderError as exc:
         ffmpeg_error = str(exc)
     return jsonify({"ffmpeg_error": ffmpeg_error, "active": active_run["id"], "default_host": DEFAULT_HOST,
-                    "input_folder": str(INPUT_DIR)})
+                    "input_folder": str(INPUT_DIR), "js_runtime": bool(downloader.js_runtimes())})
 
 
 @app.route("/api/inputs")
@@ -293,30 +295,21 @@ def _int(data, key, default, lo, hi):
         return default
 
 
-@app.route("/api/start", methods=["POST"])
-def start():
-    data = request.get_json(silent=True) or {}
-    path_text = str(data.get("path") or "").strip().strip('"').strip("'").strip()
-    if path_text:
-        source = Path(os.path.expandvars(os.path.expanduser(path_text)))
-        if not source.is_file():
-            return jsonify({"error": f"Can't find that file: {path_text}"}), 400
-    else:
-        name = str(data.get("input") or "")
-        source = INPUT_DIR / name
-        if not name or "/" in name or "\\" in name or not source.is_file():
-            return jsonify({"error": "Pick a video first."}), 400
-    if source.suffix.lower() not in VIDEO_EXTS:
-        return jsonify({"error": f"That doesn't look like a video file ({source.suffix or 'no extension'})."}), 400
+class StartError(Exception):
+    def __init__(self, message: str, code: int = 400):
+        super().__init__(message)
+        self.code = code
 
+
+def parse_settings(data: dict) -> dict:
     min_len = _int(data, "min_len", 20, 5, 170)
     max_len = _int(data, "max_len", 60, 10, 180)
     if max_len < min_len + 5:
-        return jsonify({"error": "The longest clip length must be at least 5 seconds more than the shortest."}), 400
+        raise StartError("The longest clip length must be at least 5 seconds more than the shortest.")
     host = str(data.get("host") or DEFAULT_HOST).strip()
     if not host.startswith("http"):
         host = "http://" + host
-    settings = {
+    return {
         "count": _int(data, "count", 10, 1, MAX_CLIPS),
         "min_len": min_len, "max_len": max_len,
         "layout": data.get("layout") if data.get("layout") in renderer.LAYOUTS else "crop",
@@ -327,9 +320,13 @@ def start():
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
 
+
+def start_run(source: Path, settings: dict) -> str:
+    if source.suffix.lower() not in VIDEO_EXTS:
+        raise StartError(f"That doesn't look like a video file ({source.suffix or 'no extension'}).")
     with state_lock:
         if active_run["id"]:
-            return jsonify({"error": "Another video is still being cut - wait for it to finish or press Stop."}), 409
+            raise StartError("Another video is still being cut - wait for it to finish or press Stop.", 409)
         run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(source.stem)}"
         while (OUTPUT_DIR / run_id).exists():
             time.sleep(1)
@@ -347,7 +344,190 @@ def start():
     runs[run_id] = run
     save_run(run)
     threading.Thread(target=run_pipeline, args=(run,), daemon=True).start()
+    return run_id
+
+
+@app.route("/api/start", methods=["POST"])
+def start():
+    data = request.get_json(silent=True) or {}
+    path_text = str(data.get("path") or "").strip().strip('"').strip("'").strip()
+    if path_text:
+        source = Path(os.path.expandvars(os.path.expanduser(path_text)))
+        if not source.is_file():
+            return jsonify({"error": f"Can't find that file: {path_text}"}), 400
+    else:
+        name = str(data.get("input") or "")
+        source = INPUT_DIR / name
+        if not name or "/" in name or "\\" in name or not source.is_file():
+            return jsonify({"error": "Pick a video first."}), 400
+    try:
+        run_id = start_run(source, parse_settings(data))
+    except StartError as exc:
+        return jsonify({"error": str(exc)}), exc.code
     return jsonify({"id": run_id}), 202
+
+
+# ---------- Find viral videos ----------
+
+TRENDS_FILE = APP_DIR / "trends_last.json"
+trend_state: dict = {"status": "idle", "message": "", "error": None, "result": None, "label": None,
+                     "updated": None, "summary": None, "summary_status": "idle"}
+trend_lock = threading.Lock()
+
+
+def _load_last_trends() -> None:
+    try:
+        saved = json.loads(TRENDS_FILE.read_text(encoding="utf-8"))
+        trend_state.update(result=saved.get("result"), label=saved.get("label"), updated=saved.get("updated"),
+                           summary=saved.get("summary"), status="done")
+    except (OSError, json.JSONDecodeError):
+        pass
+
+
+def _save_trends() -> None:
+    data = {k: trend_state[k] for k in ("result", "label", "updated", "summary")}
+    TRENDS_FILE.write_text(json.dumps(data), encoding="utf-8")
+
+
+def _trend_job(label: str, fn) -> tuple[dict, int]:
+    with trend_lock:
+        if trend_state["status"] == "running" or trend_state["summary_status"] == "running":
+            return {"error": "Already looking - give it a moment."}, 409
+        trend_state.update(status="running", message="Starting...", error=None)
+
+    def work():
+        try:
+            result = fn(lambda m: trend_state.update(message=m))
+            trend_state.update(status="done", result=result, label=label, summary=None,
+                               updated=time.strftime("%Y-%m-%d %H:%M"), message="")
+            _save_trends()
+        except trends.TrendError as exc:
+            trend_state.update(status="error", error=str(exc))
+        except Exception as exc:
+            trend_state.update(status="error", error=f"Unexpected problem: {trends.clean_error(exc)}")
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"ok": True}, 202
+
+
+@app.route("/api/streamers", methods=["GET", "POST"])
+def streamers():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        names = data.get("names") if isinstance(data.get("names"), list) else str(data.get("names") or "").splitlines()
+        return jsonify({"names": trends.save_streamers([str(n) for n in names])})
+    return jsonify({"names": trends.load_streamers()})
+
+
+@app.route("/api/trends")
+def trends_state():
+    return jsonify(trend_state)
+
+
+@app.route("/api/trends/scan", methods=["POST"])
+def trends_scan():
+    data = request.get_json(silent=True) or {}
+    days = _int(data, "days", 7, 1, 60)
+    include_streams = bool(data.get("include_streams", True))
+    names = trends.load_streamers()
+    if not names:
+        return jsonify({"error": "Add at least one streamer first."}), 400
+    body, code = _trend_job(
+        f"{len(names)} streamers, last {days} day{'s' if days != 1 else ''}",
+        lambda progress: trends.scan_streamers(names, days, include_streams, progress),
+    )
+    return jsonify(body), code
+
+
+@app.route("/api/trends/search", methods=["POST"])
+def trends_search():
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("query") or "").strip()[:100]
+    period = data.get("period") if data.get("period") in trends.SEARCH_PERIODS else "week"
+    if not query:
+        return jsonify({"error": "Type what to search for first."}), 400
+    label = {"hour": "the last hour", "today": "today", "week": "this week", "month": "this month"}[period]
+    body, code = _trend_job(f'"{query}", most viewed {label}', lambda progress: trends.search(query, period))
+    return jsonify(body), code
+
+
+@app.route("/api/trends/summary", methods=["POST"])
+def trends_summary():
+    data = request.get_json(silent=True) or {}
+    result = trend_state.get("result") or {}
+    if not result.get("videos"):
+        return jsonify({"error": "Scan or search first."}), 400
+    with trend_lock:
+        if trend_state["summary_status"] == "running" or trend_state["status"] == "running":
+            return jsonify({"error": "Already working on it."}), 409
+        trend_state["summary_status"] = "running"
+    host = str(data.get("host") or DEFAULT_HOST).strip()
+    host = host if host.startswith("http") else "http://" + host
+    model = str(data.get("model") or "llama3")
+
+    def work():
+        try:
+            trend_state["summary"] = trends.summarize(result["videos"], host, model)
+            _save_trends()
+        finally:
+            trend_state["summary_status"] = "idle"
+
+    threading.Thread(target=work, daemon=True).start()
+    return jsonify({"ok": True}), 202
+
+
+# ---------- Downloads ----------
+
+def _public_download(d: dict) -> dict:
+    return {k: v for k, v in d.items() if k not in ("then_clip", "cancel")} | {"auto_clip": bool(d.get("then_clip"))}
+
+
+@app.route("/api/downloads", methods=["GET", "POST"])
+def downloads_route():
+    if request.method == "GET":
+        items = sorted(downloader.downloads.values(), key=lambda d: d["created"], reverse=True)[:30]
+        return jsonify({"downloads": [_public_download(d) for d in items]})
+    data = request.get_json(silent=True) or {}
+    url = str(data.get("url") or "").strip()
+    if not downloader.is_url(url):
+        return jsonify({"error": "Paste a full link (starting with https://)."}), 400
+    then_clip = None
+    if data.get("then_clip"):
+        try:
+            then_clip = parse_settings(data.get("settings") or {})
+        except StartError as exc:
+            return jsonify({"error": str(exc)}), 400
+    d = downloader.add(url, str(data.get("quality") or "1080"), str(data.get("title") or ""), then_clip)
+    return jsonify(_public_download(d)), 202
+
+
+@app.route("/api/downloads/<did>/cancel", methods=["POST"])
+def cancel_download(did):
+    return jsonify({"ok": downloader.cancel(did)})
+
+
+def _auto_clip(d: dict) -> None:
+    """After a "Download + make clips": start cutting as soon as no other video is being cut."""
+    if d["status"] != "done" or not d.get("then_clip") or not d.get("file"):
+        return
+
+    def wait_and_start():
+        d["message"] = "Downloaded - waiting for the current clips to finish, then this one starts."
+        while True:
+            try:
+                d["clip_run"] = start_run(INPUT_DIR / d["file"], d["then_clip"])
+                d["message"] = "Downloaded - clips are being made now."
+                return
+            except StartError as exc:
+                if exc.code != 409:
+                    d.update(message=f"Downloaded, but the clips couldn't start: {exc}")
+                    return
+            time.sleep(5)
+
+    threading.Thread(target=wait_and_start, daemon=True).start()
+
+
+downloader.on_finished.append(_auto_clip)
 
 
 @app.route("/api/runs")
@@ -479,14 +659,102 @@ PAGE = r"""<!DOCTYPE html>
   details summary { cursor: pointer; color: var(--dim); font-size: 13px; margin-top: 14px; }
   code { background:#0d0f13; padding: 1px 5px; border-radius: 4px; }
   .hide { display: none !important; }
+  .tabs { display: flex; gap: 8px; margin: 0 0 18px; }
+  .tabs button { background: var(--panel); color: var(--dim); border: 1px solid var(--line); font-size: 15px; padding: 11px 20px; }
+  .tabs button.on { background: var(--accent); color: #111; border-color: var(--accent); }
+  textarea { width: 100%; min-height: 120px; resize: vertical; background:#0d0f13; color: var(--text); border:1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.5; }
+  .vids { display: flex; flex-direction: column; gap: 10px; }
+  .vid { display: flex; gap: 12px; background: #14161c; border: 1px solid var(--line); border-radius: 10px; padding: 10px; align-items: flex-start; }
+  .vid img { width: 176px; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; background: #000; flex: none; }
+  .vid .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .vid .t { font-weight: 700; font-size: 15px; line-height: 1.3; }
+  .vid .meta { color: var(--dim); font-size: 13px; }
+  .vid .stats { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 12px; border-radius: 6px; padding: 3px 8px; background: #23262f; }
+  .tag.hot { background: #3a2a00; color: var(--accent); font-weight: 700; }
+  .tag.big { background: #12301f; color: var(--ok); font-weight: 700; }
+  .vid .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .vid .actions .btn, .vid .actions button { padding: 7px 12px; font-size: 13px; }
+  .rank { font-size: 20px; font-weight: 800; color: var(--accent); width: 34px; text-align: center; flex: none; padding-top: 4px; }
+  .dl { border-top: 1px solid var(--line); padding: 10px 0; }
+  .dl:first-child { border-top: 0; }
+  .dl .bar { margin: 6px 0; height: 7px; }
+  .summary { background: #14161c; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .summary ul { margin: 6px 0 0; padding-left: 20px; }
+  .summary li { margin: 3px 0; }
+  @media (max-width: 640px) { .vid { flex-wrap: wrap; } .vid img { width: 100%; } .rank { display: none; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Clip <span>Factory</span></h1>
-  <p class="sub">Long video in &rarr; vertical Shorts out, with captions. Ollama picks the most viral moments; clip 1 is ready to download while the rest are still being made.</p>
+  <p class="sub">Find what's going viral &rarr; download it &rarr; get vertical Shorts with captions. Ollama picks the best moments; clip 1 is ready to download while the rest are still being made.</p>
   <div id="sysError" class="panel error hide"></div>
+  <div class="tabs">
+    <button id="tabBtnFind" data-tab="find">Find viral videos</button>
+    <button id="tabBtnClips" data-tab="clips">Make clips</button>
+  </div>
 
+  <div id="tabFind">
+    <div class="panel">
+      <h2>Download a video from a link</h2>
+      <div class="row">
+        <input type="text" id="linkInput" style="flex:1 1 320px" placeholder="Paste a YouTube, Twitch or Kick link...">
+        <select id="quality" style="width:auto"><option value="1080">1080p</option><option value="720">720p (smaller, faster)</option></select>
+        <button id="linkDl" class="ghost">Download</button>
+        <button id="linkDlClip">Download + make clips</button>
+      </div>
+      <div class="msg" id="linkMsg"></div>
+      <div id="downloads" style="margin-top:8px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>What's viral right now</h2>
+      <div class="grid">
+        <div>
+          <label>Your streamers - one per line (their YouTube @name or channel link)</label>
+          <textarea id="streamers" spellcheck="false"></textarea>
+          <div class="row" style="margin-top:10px">
+            <select id="days" style="width:auto">
+              <option value="1">Last 24 hours</option><option value="3">Last 3 days</option>
+              <option value="7" selected>Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option>
+            </select>
+            <label class="check" style="margin:0"><input type="checkbox" id="incStreams" checked> Include past live streams</label>
+          </div>
+          <div class="row" style="margin-top:10px"><button id="scanBtn">Scan my streamers</button></div>
+        </div>
+        <div>
+          <label>Or search all of YouTube</label>
+          <input type="text" id="searchInput" placeholder="e.g. kai cenat stream, minecraft, podcast...">
+          <div class="row" style="margin-top:10px">
+            <select id="period" style="width:auto">
+              <option value="today">Most viewed today</option><option value="week" selected>Most viewed this week</option><option value="month">Most viewed this month</option>
+            </select>
+            <button id="searchBtn">Search</button>
+          </div>
+        </div>
+      </div>
+      <div class="msg" id="trendMsg" style="margin-top:12px"></div>
+    </div>
+
+    <div class="panel hide" id="resultsPanel">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <h2 style="margin:0" id="resultsTitle"></h2>
+        <div class="row">
+          <select id="sortBy" style="width:auto">
+            <option value="heat">Hottest right now</option><option value="vs_normal">Biggest jump vs. their normal</option>
+            <option value="views">Most views</option><option value="newest">Newest</option>
+          </select>
+          <button class="ghost" id="askAi">Ask Ollama what's hot</button>
+        </div>
+      </div>
+      <div id="summary"></div>
+      <div class="warn hide" id="failedMsg"></div>
+      <div class="vids" id="vids"></div>
+    </div>
+  </div>
+
+  <div id="tabClips">
   <div class="panel">
     <h2>1. Your video</h2>
     <label>Videos in the <code>input</code> folder</label>
@@ -561,6 +829,7 @@ PAGE = r"""<!DOCTYPE html>
   <div class="panel">
     <h2>Past runs</h2>
     <ul class="runs" id="runs"></ul>
+  </div>
   </div>
 </div>
 <script>
@@ -648,12 +917,7 @@ $("uploadFile").onchange = () => {
 $("startBtn").onclick = async () => {
   saveSettings();
   $("startMsg").innerText = "";
-  const body = {
-    input: $("inputSel").value, path: $("pathInput").value,
-    count: +$("count").value, min_len: +$("minLen").value, max_len: +$("maxLen").value,
-    layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
-    whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
-  };
+  const body = { input: $("inputSel").value, path: $("pathInput").value, ...clipSettings() };
   $("startBtn").disabled = true;
   try {
     const data = await api("/api/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -665,7 +929,16 @@ $("startBtn").onclick = async () => {
   }
 };
 
+function clipSettings() {
+  return {
+    count: +$("count").value, min_len: +$("minLen").value, max_len: +$("maxLen").value,
+    layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
+    whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
+  };
+}
+
 function openRun(id) {
+  showTab("clips");
   currentRun = id;
   shown = new Set();
   $("clips").innerHTML = "";
@@ -764,10 +1037,174 @@ async function loadRuns() {
   $("runs").querySelectorAll("li[data-id]").forEach((li) => (li.onclick = () => openRun(li.dataset.id)));
 }
 
+// ---------- Find viral videos ----------
+function showTab(name) {
+  $("tabFind").classList.toggle("hide", name !== "find");
+  $("tabClips").classList.toggle("hide", name !== "clips");
+  $("tabBtnFind").classList.toggle("on", name === "find");
+  $("tabBtnClips").classList.toggle("on", name === "clips");
+  store.set("cf_tab", name);
+}
+document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+
+function fmtCount(n) {
+  if (n == null) return "?";
+  for (const [size, suf] of [[1e9, "B"], [1e6, "M"], [1e3, "K"]]) if (n >= size) return (n / size).toFixed(1).replace(/\.0$/, "") + suf;
+  return String(Math.round(n));
+}
+function fmtAge(h) {
+  if (h == null) return "";
+  if (h < 1) return "just now";
+  if (h < 24) return `${Math.round(h)} hour${Math.round(h) === 1 ? "" : "s"} ago`;
+  const d = Math.round(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
+function fmtDur(s) {
+  if (!s) return "";
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+let trendData = null, trendTimer = null, dlTimer = null, knownDone = new Set();
+
+async function loadStreamers() {
+  const data = await api("/api/streamers");
+  $("streamers").value = data.names.join("\n");
+}
+
+function renderTrends() {
+  const st = trendData;
+  if (!st) return;
+  const busy = st.status === "running";
+  $("scanBtn").disabled = busy; $("searchBtn").disabled = busy;
+  $("trendMsg").innerHTML = busy ? esc(st.message || "Looking...") : st.status === "error" ? `<span class="error">${esc(st.error)}</span>` : "";
+  const result = st.result;
+  if (!result) { $("resultsPanel").classList.add("hide"); return; }
+  $("resultsPanel").classList.remove("hide");
+  $("resultsTitle").innerText = `${result.videos.length} videos - ${st.label || ""}${st.updated ? " (" + st.updated + ")" : ""}`;
+  const failed = result.failed || [];
+  $("failedMsg").innerText = failed.length ? "Couldn't load: " + failed.map((f) => `${f.name} (${f.error})`).join("; ") + " - check those names." : "";
+  $("failedMsg").classList.toggle("hide", !failed.length);
+
+  const sum = st.summary;
+  $("askAi").disabled = st.summary_status === "running" || busy || !result.videos.length;
+  $("askAi").innerText = st.summary_status === "running" ? "Ollama is thinking..." : "Ask Ollama what's hot";
+  if (sum && (sum.trends.length || sum.picks.length)) {
+    $("summary").innerHTML = `<div class="summary">
+      ${sum.trends.length ? `<b>What's blowing up right now</b><ul>${sum.trends.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+      <b style="display:block;margin-top:8px">Best to clip</b><ul>${sum.picks.map((p) => `<li><b>#${p.n} ${esc(p.title)}</b> - ${esc(p.why)}</li>`).join("")}</ul>
+      ${sum.source !== "ollama" && sum.error ? `<div class="warn">Ollama couldn't answer (${esc(sum.error)}) - these picks are by the numbers.</div>` : ""}
+    </div>`;
+  } else { $("summary").innerHTML = ""; }
+
+  const key = $("sortBy").value;
+  const vids = result.videos.map((v, i) => ({ ...v, n: i + 1 }));
+  if (key === "vs_normal") vids.sort((a, b) => (b.vs_normal || 0) - (a.vs_normal || 0));
+  else if (key === "views") vids.sort((a, b) => (b.views || 0) - (a.views || 0));
+  else if (key === "newest") vids.sort((a, b) => (a.age_hours ?? 1e9) - (b.age_hours ?? 1e9));
+  $("vids").innerHTML = vids.length ? vids.map((v) => `
+    <div class="vid">
+      <div class="rank">#${v.n}</div>
+      <a href="${esc(v.url)}" target="_blank" rel="noopener"><img src="${esc(v.thumb)}" alt="" loading="lazy"></a>
+      <div class="info">
+        <div class="t">${esc(v.title)}</div>
+        <div class="meta">${esc(v.channel)}${v.was_live ? " &middot; past live stream" : ""}${v.duration ? " &middot; " + fmtDur(v.duration) : ""}${v.age_hours != null ? " &middot; " + fmtAge(v.age_hours) : ""}</div>
+        <div class="stats">
+          ${v.views_per_hour != null ? `<span class="tag hot">${fmtCount(v.views_per_hour)} views/hour</span>` : ""}
+          ${v.vs_normal ? `<span class="tag ${v.vs_normal >= 2 ? "big" : ""}">${v.vs_normal}x their normal</span>` : ""}
+          <span class="tag">${fmtCount(v.views)} views</span>
+        </div>
+        <div class="actions">
+          <a class="btn ghost" href="${esc(v.url)}" target="_blank" rel="noopener">Watch</a>
+          <button class="ghost" data-dl="${esc(v.id)}">Download</button>
+          <button data-dlclip="${esc(v.id)}">Download + make clips</button>
+        </div>
+      </div>
+    </div>`).join("") : '<div class="msg">Nothing found in that time - try more days or other streamers.</div>';
+  const byId = Object.fromEntries(result.videos.map((v) => [v.id, v]));
+  $("vids").querySelectorAll("[data-dl]").forEach((b) => (b.onclick = () => startDownload(byId[b.dataset.dl].url, byId[b.dataset.dl].title, false, b)));
+  $("vids").querySelectorAll("[data-dlclip]").forEach((b) => (b.onclick = () => startDownload(byId[b.dataset.dlclip].url, byId[b.dataset.dlclip].title, true, b)));
+}
+
+async function pollTrends() {
+  try { trendData = await api("/api/trends"); } catch (e) { return; }
+  renderTrends();
+  const busy = trendData.status === "running" || trendData.summary_status === "running";
+  clearTimeout(trendTimer);
+  if (busy) trendTimer = setTimeout(pollTrends, 1200);
+}
+
+async function trendAction(url, body) {
+  try {
+    await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { $("trendMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; return; }
+  pollTrends();
+}
+
+$("scanBtn").onclick = async () => {
+  try {
+    await api("/api/streamers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: $("streamers").value }) });
+  } catch (e) {}
+  trendAction("/api/trends/scan", { days: +$("days").value, include_streams: $("incStreams").checked });
+};
+$("searchBtn").onclick = () => trendAction("/api/trends/search", { query: $("searchInput").value, period: $("period").value });
+$("searchInput").onkeydown = (e) => { if (e.key === "Enter") $("searchBtn").click(); };
+$("sortBy").onchange = renderTrends;
+$("askAi").onclick = () => trendAction("/api/trends/summary", { host: $("host").value, model: $("model").value });
+
+async function startDownload(url, title, thenClip, button) {
+  saveSettings();
+  try {
+    await api("/api/downloads", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, title, quality: $("quality").value, then_clip: thenClip, settings: clipSettings() }) });
+    if (button) { button.innerText = thenClip ? "Added - see downloads above" : "Added to downloads"; button.disabled = true; }
+    $("linkMsg").innerText = "";
+  } catch (e) {
+    if (button) alert(e.message); else $("linkMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`;
+  }
+  pollDownloads();
+  if (button) $("downloads").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+$("linkDl").onclick = () => startDownload($("linkInput").value, "", false);
+$("linkDlClip").onclick = () => startDownload($("linkInput").value, "", true);
+
+async function pollDownloads() {
+  let data;
+  try { data = await api("/api/downloads"); } catch (e) { return; }
+  $("downloads").innerHTML = data.downloads.map((d) => {
+    const active = d.status === "queued" || d.status === "downloading";
+    return `<div class="dl">
+      <div class="row" style="justify-content:space-between">
+        <b style="word-break:break-all">${esc(d.title)}</b>
+        <span class="row">
+          ${active ? `<button class="ghost" data-cancel="${d.id}" style="padding:5px 10px">Cancel</button>` : ""}
+          ${d.status === "done" && d.clip_run ? `<button data-openrun="${esc(d.clip_run)}" style="padding:5px 10px">See the clips</button>` : ""}
+          ${d.status === "done" && !d.auto_clip ? `<button data-useit="${esc(d.file)}" style="padding:5px 10px">Make clips from it</button>` : ""}
+        </span>
+      </div>
+      ${active ? `<div class="bar"><div style="width:${d.percent}%"></div></div>` : ""}
+      <div class="msg">${d.status === "error" ? `<span class="error">${esc(d.error)}</span>` : esc(d.message)}</div>
+    </div>`;
+  }).join("");
+  $("downloads").querySelectorAll("[data-cancel]").forEach((b) => (b.onclick = () => api(`/api/downloads/${b.dataset.cancel}/cancel`, { method: "POST" }).then(pollDownloads)));
+  $("downloads").querySelectorAll("[data-openrun]").forEach((b) => (b.onclick = () => openRun(b.dataset.openrun)));
+  $("downloads").querySelectorAll("[data-useit]").forEach((b) => (b.onclick = async () => {
+    await loadInputs(b.dataset.useit); $("pathInput").value = ""; showTab("clips"); window.scrollTo({ top: 0, behavior: "smooth" });
+  }));
+  let newFile = false;
+  for (const d of data.downloads) if (d.status === "done" && !knownDone.has(d.id)) { knownDone.add(d.id); newFile = true; }
+  if (newFile) { loadInputs(); loadRuns(); }
+  clearTimeout(dlTimer);
+  const waiting = data.downloads.some((d) => d.status === "queued" || d.status === "downloading" || (d.auto_clip && d.status === "done" && !d.clip_run && !/couldn't start/.test(d.message)));
+  if (waiting) dlTimer = setTimeout(pollDownloads, 1500);
+}
+
 (async () => {
   loadSettings();
+  showTab(store.get("cf_tab") || "find");
   await loadStatus();
-  await Promise.all([loadInputs(), loadModels(), loadRuns()]);
+  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads()]);
 })();
 </script>
 </body>
@@ -776,6 +1213,7 @@ async function loadRuns() {
 
 
 if __name__ == "__main__":
+    _load_last_trends()
     INPUT_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
     print(f"Clip Factory running - open http://localhost:{PORT}")
