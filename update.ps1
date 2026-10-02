@@ -45,13 +45,17 @@ function Data-Time($dir) {
 
 function Link-Tree($from, $to) {
     # puts every file of $from into $to (hard link = no extra space; copy if that fails), skips existing ones
-    Get-ChildItem -LiteralPath $from -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
-        $rel = $_.FullName.Substring($from.Length).TrimStart('\', '/')
+    foreach ($f in @(Get-ChildItem -LiteralPath $from -Recurse -File -ErrorAction SilentlyContinue)) {
+        $src = $f.FullName
+        $rel = $src.Substring($from.Length).TrimStart('\', '/')
         $dst = Join-Path $to $rel
-        if (-not (Test-Path -LiteralPath $dst)) {
-            New-Item -ItemType Directory -Path (Split-Path $dst -Parent) -Force | Out-Null
-            try { New-Item -ItemType HardLink -Path $dst -Target $_.FullName -ErrorAction Stop | Out-Null }
-            catch { Copy-Item -LiteralPath $_.FullName -Destination $dst -Force }
+        if (Test-Path -LiteralPath $dst) { continue }
+        New-Item -ItemType Directory -Path (Split-Path $dst -Parent) -Force | Out-Null
+        $linked = $false
+        try { New-Item -ItemType HardLink -Path $dst -Target $src -ErrorAction Stop | Out-Null; $linked = $true } catch { }
+        if (-not $linked) {
+            try { Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction Stop }
+            catch { Say "  (skipped $rel - couldn't copy it)" DarkGray }
         }
     }
 }
@@ -123,7 +127,10 @@ try {
     if (-not (Test-Path -LiteralPath $marker)) {
         $old = @($copies | Where-Object { $_ -ne $clip } | Sort-Object { Data-Time $_ })
         if ($old.Count) { Say "Bringing your keys, settings and clips from $($old.Count) old copies..." Cyan }
-        foreach ($o in $old) { Bring-Data $o $clip }
+        foreach ($o in $old) {
+            try { Bring-Data $o $clip }
+            catch { Say "  (some files from $o couldn't be brought over: $($_.Exception.Message))" DarkGray }
+        }
         Set-Content -LiteralPath $marker -Value (Get-Date -Format "yyyy-MM-dd HH:mm")
     }
 
@@ -134,7 +141,7 @@ try {
     Say "Done - Clip Factory is up to date." Green
     Say "Folder: $clip"
     if ($ok1 -and $ok2) { Say "On your Desktop: 'Clip Factory' starts it, 'Update Clip Factory' updates it." Green }
-    if ($copies.Count -gt 1 -and -not $full) {
+    if ($copies.Count -gt 1) {
         Say "Your old copies in Downloads aren't needed any more - you can delete them (your things are in $clip now)." Yellow
     }
     Say ""
