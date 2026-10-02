@@ -55,6 +55,90 @@ def produce():
     return jsonify({"job_id": job_id}), 202
 
 
+READY_DIR = Path(__file__).resolve().parent / "ready_videos"
+READY_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}$")
+
+
+def _load_ready(name: str) -> Optional[dict]:
+    if not READY_NAME_RE.match(name or ""):
+        return None
+    try:
+        data = json.loads((READY_DIR / f"{name}.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not (isinstance(data, dict) and data.get("topic") and data.get("script")):
+        return None
+    return data
+
+
+def _ready_made_slugs() -> dict:
+    """{ready name: slug} for ready-made videos already produced."""
+    made = {}
+    if CONTENT_ROOT.exists():
+        for d in CONTENT_ROOT.iterdir():
+            marker = d / "ready_source.txt"
+            if marker.exists():
+                made[marker.read_text(encoding="utf-8").strip()] = d.name
+    return made
+
+
+@bp.route("/api/auto/ready")
+def list_ready():
+    """Ready-made video packages (script + shots + metadata, written in
+    advance) - producing one needs no AI to write anything."""
+    made = _ready_made_slugs()
+    items = []
+    for path in sorted(READY_DIR.glob("*.json")) if READY_DIR.exists() else []:
+        data = _load_ready(path.stem)
+        if data:
+            yt = (data.get("metadata") or {}).get("youtube") or {}
+            words = len(data["script"].split())
+            items.append({"name": path.stem, "title": yt.get("title") or data["topic"], "topic": data["topic"],
+                          "words": words, "minutes": round(words / 150, 1), "made": made.get(path.stem)})
+    return jsonify({"videos": items})
+
+
+@bp.route("/api/auto/ready/produce", methods=["POST"])
+def produce_ready():
+    data = request.get_json(silent=True) or {}
+    names = [str(n) for n in data.get("names") or []]
+    packages = [(n, _load_ready(n)) for n in names]
+    if not packages or any(p is None for _, p in packages):
+        return jsonify({"error": "Pick at least one ready-made video."}), 400
+    channel = str(data.get("channel", "")).strip() or "Science"
+    voice = str(data.get("voice", "en-GB-RyanNeural"))
+    style_slug = (str(data.get("style_slug", "")).strip() or None)
+    try:
+        # only used for the extras (picking the best Shorts, the review) - the video itself needs no AI
+        writer = make_writer(data.get("engine", "ollama"), data)
+    except ValueError:
+        writer = None
+
+    def task(job_id):
+        from jobs import set_progress
+
+        results = []
+        for i, (name, package) in enumerate(packages, start=1):
+            def report(msg: str, i=i, name=name) -> None:
+                set_progress(job_id, f"Video {i}/{len(packages)} ({name[:40]}): {msg}")
+
+            report("Starting...")
+            try:
+                result = produce_video(
+                    package["topic"], channel, writer, voice=voice, style_slug=style_slug, length="long",
+                    progress=report, prepared=package,
+                )
+                (CONTENT_ROOT / result["slug"] / "ready_source.txt").write_text(name, encoding="utf-8")
+                result["error"] = None
+            except Exception as exc:
+                result = {"topic": package["topic"], "slug": None, "error": str(exc)}
+            results.append(result)
+        return {"videos": results}
+
+    job_id = start_job(task)
+    return jsonify({"job_id": job_id, "count": len(packages)}), 202
+
+
 MAX_BATCH_TOPICS = 15
 
 
