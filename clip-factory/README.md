@@ -140,6 +140,43 @@ saved in `output/<date>-<video name>/`. **Open folder** shows it in File
 Explorer, and **Download all (zip)** gets every finished clip plus a
 `titles.txt`. Click any run under **Past runs** to open it again.
 
+## My channels (fourth tab): all your channels in one place
+
+Shows every channel's views together, measured against your goal, e.g.
+**10M views across 4 channels by December 1**.
+
+**Setup (once):** click **Channels & goal**, type each channel's
+@handle, set the goal and the dates, and click **Save and check now**.
+
+**What it shows:**
+- **Views this week**, with the change from last week, and your
+  progress toward the goal.
+- **Needed per day:** how many views a day you need from now on to hit
+  the goal, next to your actual pace and where that pace ends up by the
+  deadline.
+- **Views per day:** a 14-day chart, stacked by channel. Hover a bar for
+  the numbers, or click **Show as table**.
+- **This week, channel by channel:**
+  - subscribers, and how far each channel is toward 1,000
+  - views this week and last week
+  - views split between Shorts and long videos
+  - each channel's best video
+- **Top videos this week** across all channels.
+- **What to do next week:** 3 concrete actions from the built-in coach.
+  Click **Ask the AI coach** for a deeper read from the AI engines.
+
+**How it works:**
+- The app checks your channels when it starts and then every 3 hours
+  while it's open, or when you click **Refresh now**.
+- "Views this week" is the difference between those checks, so the
+  numbers fill in over the first days after setup.
+- **The numbers come from the YouTube Data API** (exact numbers) when an
+  API key is available. It finds Wayne Factory's key in `config.json`
+  automatically, or you can paste one.
+- **With no key,** it reads the public channel pages. YouTube rounds
+  those numbers (e.g. 1.2K), so small changes can look bumpy.
+- Watch hours aren't public. YouTube Studio's **Earn** tab has those.
+
 ## YouTube rules (third tab)
 
 A guard that knows what gets a channel monetized and what gets it

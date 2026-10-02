@@ -23,6 +23,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
 import ai
+import channel_stats
 import downloader
 import moments
 import permissions
@@ -671,6 +672,34 @@ def trends_summary():
     return jsonify({"ok": True}), 202
 
 
+# ---------- My channels (analyzer) ----------
+
+@app.route("/api/stats")
+def stats_report():
+    return jsonify(channel_stats.analyze() | {"refreshing": channel_stats.refresh_running(),
+                                              "last_error": channel_stats._refresh_state["last_error"]})
+
+
+@app.route("/api/stats/config", methods=["POST"])
+def stats_config():
+    channel_stats.save_config(request.get_json(silent=True) or {})
+    return stats_report()
+
+
+@app.route("/api/stats/refresh", methods=["POST"])
+def stats_refresh():
+    if not any(c["ref"] for c in channel_stats.load_config()["channels"]):
+        return jsonify({"error": "Add at least one channel's @handle first."}), 400
+    channel_stats.refresh_async()
+    return jsonify({"ok": True}), 202
+
+
+@app.route("/api/stats/coach", methods=["POST"])
+def stats_coach():
+    data = request.get_json(silent=True) or {}
+    return jsonify(channel_stats.coach(channel_stats.analyze(), _brain_from(data) if data.get("use_ai", True) else None))
+
+
 # ---------- Clipping permission ----------
 
 perm_state: dict = {"status": "idle", "message": "", "error": None}
@@ -903,7 +932,26 @@ PAGE = r"""<!DOCTYPE html>
   details summary { cursor: pointer; color: var(--dim); font-size: 13px; margin-top: 14px; }
   code { background:#0d0f13; padding: 1px 5px; border-radius: 4px; }
   .hide { display: none !important; }
-  .tabs { display: flex; gap: 8px; margin: 0 0 18px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+  .kpi { background: #14161c; border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 4px; align-content: start; }
+  .kpi .lbl { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .kpi .big { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 13px; color: var(--dim); }
+  .up { color: var(--ok); } .down { color: var(--err); }
+  .goalbar { height: 10px; background: #0d0f13; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .goalbar div { height: 100%; background: var(--accent); border-radius: 4px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .chartwrap { position: relative; }
+  .chartwrap svg { width: 100%; height: auto; display: block; }
+  .tip { position: absolute; pointer-events: none; background: #0d0f13; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; min-width: 150px; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .tbl th, .tbl td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .tbl th { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .tbl td.r, .tbl th.r { text-align: right; }
+  .tblwrap { overflow-x: auto; }
+  .chrow { display: grid; grid-template-columns: 1.2fr 2fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .tabs { display: flex; gap: 8px; margin: 0 0 18px; flex-wrap: wrap; }
   .tabs button { background: var(--panel); color: var(--dim); border: 1px solid var(--line); font-size: 15px; padding: 11px 20px; }
   .tabs button.on { background: var(--accent); color: #111; border-color: var(--accent); }
   textarea { width: 100%; min-height: 120px; resize: vertical; background:#0d0f13; color: var(--text); border:1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.5; }
@@ -943,6 +991,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="tabBtnFind" data-tab="find">Find viral videos</button>
     <button id="tabBtnClips" data-tab="clips">Make clips</button>
     <button id="tabBtnRules" data-tab="rules">YouTube rules</button>
+    <button id="tabBtnStats" data-tab="stats">My channels</button>
     <button id="aiToggle" class="ghost" style="margin-left:auto">AI engines: ...</button>
   </div>
 
@@ -1036,6 +1085,61 @@ PAGE = r"""<!DOCTYPE html>
       <div id="summary"></div>
       <div class="warn hide" id="failedMsg"></div>
       <div class="vids" id="vids"></div>
+    </div>
+  </div>
+
+  <div id="tabStats" class="hide">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">All my channels</h2>
+        <div class="row">
+          <span class="msg" id="statsMsg"></span>
+          <button class="ghost" id="statsSetupBtn">Channels &amp; goal</button>
+          <button id="statsRefresh">Refresh now</button>
+        </div>
+      </div>
+      <div class="msg" id="statsSource" style="margin-top:6px"></div>
+    </div>
+
+    <div class="panel hide" id="statsSetup">
+      <h2>Channels &amp; goal</h2>
+      <div class="msg" style="margin-bottom:10px">Type each channel's YouTube @handle (or paste its link). Numbers are checked every 3 hours while Clip Factory is open.</div>
+      <div id="chanRows"></div>
+      <div class="grid" style="margin-top:12px">
+        <div><label for="goalViews">Goal: total views across all channels</label><input type="number" id="goalViews" min="1000" step="1000"></div>
+        <div><label for="goalStart">Counting from</label><input type="text" id="goalStart" placeholder="2026-10-03"></div>
+        <div><label for="goalEnd">Deadline</label><input type="text" id="goalEnd" placeholder="2026-12-01"></div>
+        <div><label for="ytKey">YouTube API key (optional - exact numbers)</label><input type="text" id="ytKey" autocomplete="off" spellcheck="false" placeholder="AIza..."><div class="msg" id="ytKeyState"></div></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button id="statsSave">Save and check now</button><span class="msg" id="statsSaveMsg"></span></div>
+    </div>
+
+    <div class="kpis" id="kpis" style="margin-bottom:18px"></div>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <h2 style="margin:0">Views per day</h2>
+        <button class="ghost" id="chartAsTable">Show as table</button>
+      </div>
+      <div class="legend" id="chartLegend"></div>
+      <div class="chartwrap" id="chartWrap"><svg id="chart" viewBox="0 0 720 250" role="img" aria-label="Views per day, last 14 days"></svg><div class="tip hide" id="chartTip"></div></div>
+      <div class="tblwrap hide" id="chartTable"></div>
+    </div>
+
+    <div class="panel">
+      <h2>This week, channel by channel</h2>
+      <div class="tblwrap"><table class="tbl" id="chanTable"></table></div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start">
+      <div class="panel">
+        <h2>Top videos this week</h2>
+        <div id="topVids"></div>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">What to do next week</h2><button class="ghost" id="coachBtn">Ask the AI coach</button></div>
+        <div id="coach"></div>
+      </div>
     </div>
   </div>
 
@@ -1420,7 +1524,7 @@ async function loadRuns() {
 
 // ---------- Find viral videos ----------
 function showTab(name) {
-  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"]]) {
+  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"]]) {
     $(tab).classList.toggle("hide", name !== id);
     $(btn).classList.toggle("on", name === id);
   }
@@ -1745,6 +1849,127 @@ $("updBtn").onclick = async () => {
   } catch (e) { $("updResult").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
 };
 
+// ---------- My channels ----------
+const CH_COLORS = ["#3987e5", "#d95926", "#199e70", "#9085e9", "#c98500", "#d55181", "#008300", "#e66767"];
+let statsData = null, statsTimer = null, chartTable = false;
+const fmtN = (n) => (n == null ? "-" : Number(n).toLocaleString("en-US"));
+function pct(a, b) { if (a == null || b == null || b === 0) return ""; const p = Math.round(((a - b) / b) * 100); return `<span class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "+" : ""}${p}%</span>`; }
+async function loadStats() {
+  try { statsData = await api("/api/stats"); } catch (e) { return; }
+  renderStats();
+  clearTimeout(statsTimer);
+  if (statsData.refreshing) statsTimer = setTimeout(loadStats, 2500);
+}
+function renderStats() {
+  const d = statsData, g = d.goal, t = d.totals;
+  const configured = d.channels.filter((c) => c.ref);
+  if (!configured.length) $("statsSetup").classList.remove("hide");
+  $("statsMsg").innerHTML = d.refreshing ? "Checking your channels..." : d.latest_at ? `Last checked ${esc(d.latest_at.replace("T", " "))}` : "";
+  $("statsSource").innerText = !configured.length ? "Add your channels to start tracking." :
+    (d.source === "api" ? `Exact numbers from the YouTube API (key ${d.key_where}).` : "Numbers read from your channel pages (rounded by YouTube, e.g. 1.2K). Add an API key in Channels & goal for exact numbers.") +
+    (d.first_at && new Date(d.first_at) > new Date(Date.now() - 7 * 864e5) ? ` Tracking started ${d.first_at.slice(0, 10)}, so "this week" covers the days since then.` : "");
+  // setup form
+  $("chanRows").innerHTML = d.config.channels.map((c, i) => `<div class="chrow">
+      <input type="text" id="chName${i}" value="${esc(c.name)}" aria-label="Channel ${i + 1} name">
+      <input type="text" id="chRef${i}" value="${esc(c.ref)}" placeholder="@handle or channel link" aria-label="Channel ${i + 1} handle">
+    </div>`).join("");
+  $("goalViews").value = d.config.goal_views; $("goalStart").value = d.config.start; $("goalEnd").value = d.config.deadline;
+  $("ytKeyState").innerText = d.config.api_key_set ? "Saved." : d.key_where ? `Using the key ${d.key_where}.` : "None - the public channel pages are used.";
+  // KPIs
+  const done = Math.min(100, (g.done / g.views) * 100);
+  $("kpis").innerHTML = `
+    <div class="kpi"><span class="lbl">Views this week</span><span class="big">${fmtN(d.have_week ? t.week : null)}</span><span class="sub">${d.have_prev ? `${pct(t.week, t.prev_week)} vs last week (${fmtN(t.prev_week)})` : "Last week: not tracked yet"}</span></div>
+    <div class="kpi"><span class="lbl">Goal: ${fmtN(g.views)} views by ${esc(g.deadline)}</span><span class="big">${fmtN(g.done)}</span>
+      <div class="goalbar"><div style="width:${done}%"></div></div><span class="sub">${done.toFixed(done < 1 ? 2 : 1)}% done · ${g.days_left} days left</span></div>
+    <div class="kpi"><span class="lbl">Needed per day</span><span class="big">${fmtN(g.needed_per_day)}</span><span class="sub">Your pace this week: ${g.pace_per_day == null ? "-" : fmtN(g.pace_per_day) + " a day"}</span></div>
+    <div class="kpi"><span class="lbl">At this pace, by ${esc(g.deadline)}</span><span class="big">${fmtN(g.projection)}</span><span class="sub">${g.projection == null ? "Needs a day of data" : g.projection >= g.views ? '<span class="up">On track for the goal</span>' : `<span class="down">${fmtN(g.views - g.projection)} short of the goal</span>`}</span></div>`;
+  renderChart();
+  // channel table
+  $("chanTable").innerHTML = `<thead><tr><th>Channel</th><th class="r">Subscribers</th><th class="r">This week</th><th class="r">Last week</th><th class="r">Shorts / long</th><th>Best video this week</th></tr></thead><tbody>` +
+    d.channels.map((c, i) => c.ref ? `<tr>
+      <td><span class="tag" style="background:${CH_COLORS[i]};color:#fff;padding:1px 6px">&nbsp;</span> <b>${esc(c.name)}</b>${c.error ? `<div class="error" style="font-size:12px">${esc(c.error)}</div>` : ""}</td>
+      <td class="r">${fmtN(c.subs)}<div class="msg" style="font-size:12px">${c.subs != null ? Math.min(100, Math.round((c.subs / 1000) * 100)) + "% of 1,000" : ""}</div></td>
+      <td class="r">${fmtN(c.week)} ${pct(c.week, c.prev_week)}</td><td class="r">${fmtN(c.prev_week)}</td>
+      <td class="r">${fmtN(c.week_shorts)} / ${fmtN(c.week_long)}</td>
+      <td>${c.best ? `<a href="https://www.youtube.com/watch?v=${esc(c.best.id)}" target="_blank" rel="noopener" style="color:var(--text)">${esc(c.best.title)}</a> <span class="msg">+${fmtN(c.best.gain)}</span>` : '<span class="msg">-</span>'}</td>
+    </tr>` : `<tr><td><b>${esc(c.name)}</b></td><td colspan="5" class="msg">No @handle yet - add it in Channels &amp; goal</td></tr>`).join("") + "</tbody>";
+  $("topVids").innerHTML = d.top.length ? d.top.map((v, i) => `<div style="display:flex;gap:10px;padding:7px 0;border-top:${i ? "1px solid var(--line)" : "0"}">
+      <b style="color:var(--accent);width:22px">${i + 1}</b>
+      <div style="min-width:0"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener" style="color:var(--text)">${esc(v.title)}</a>
+      <div class="msg">${esc(v.channel)} · ${v.short ? "Short" : "Video"} · +${fmtN(v.gain)} views this week</div></div></div>`).join("") :
+    '<div class="msg">Shows up after the first day of tracking.</div>';
+  if (!$("coach").innerHTML) loadCoach(false);
+}
+function renderChart() {
+  const d = statsData, chans = d.channels.map((c, i) => ({ ...c, color: CH_COLORS[i] })).filter((c) => c.ref);
+  $("chartLegend").innerHTML = chans.map((c) => `<span><i style="background:${c.color}"></i>${esc(c.name)}</span>`).join("");
+  const rows = d.days.map((r) => ({ date: r.date, parts: chans.map((c) => ({ c, v: r[c.id] || 0 })), any: chans.some((c) => r[c.id] != null) }));
+  const max = Math.max(1, ...rows.map((r) => r.parts.reduce((a, p) => a + p.v, 0)));
+  const nice = (m) => { const e = Math.pow(10, Math.floor(Math.log10(m))); return [1, 2, 2.5, 5, 10].map((f) => f * e).find((x) => x >= m); };
+  const top = nice(max), W = 720, H = 250, L = 56, R = 8, T = 10, B = 28, bw = (W - L - R) / rows.length;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  let svg = "";
+  for (let k = 0; k <= 4; k++) {
+    const v = (top / 4) * k, yy = y(v);
+    svg += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#2c303b" stroke-width="1"/>`;
+    svg += `<text x="${L - 8}" y="${yy + 4}" fill="#9a9fad" font-size="11" text-anchor="end">${v >= 1e6 ? v / 1e6 + "M" : v >= 1e3 ? v / 1e3 + "K" : v}</text>`;
+  }
+  rows.forEach((r, i) => {
+    const x = L + i * bw + bw * 0.18, w = bw * 0.64;
+    let acc = 0;
+    const visible = r.parts.filter((p) => p.v > 0);
+    visible.forEach((p, k) => {
+      const y1 = y(acc + p.v), y0 = y(acc);
+      const h = Math.max(0, y0 - y1 - (k ? 2 : 0));  // 2px gap between stacked segments
+      const last = k === visible.length - 1, rad = last ? Math.min(4, h / 2, w / 2) : 0;
+      svg += rad ? `<path d="M${x},${y1 + h} V${y1 + rad} Q${x},${y1} ${x + rad},${y1} H${x + w - rad} Q${x + w},${y1} ${x + w},${y1 + rad} V${y1 + h} Z" fill="${p.c.color}"/>`
+                 : `<rect x="${x}" y="${y1}" width="${w}" height="${h}" fill="${p.c.color}"/>`;
+      acc += p.v;
+    });
+    if (i % 2 === rows.length % 2 || rows.length < 8) svg += `<text x="${x + w / 2}" y="${H - 8}" fill="#9a9fad" font-size="11" text-anchor="middle">${r.date.slice(5).replace("-", "/")}</text>`;
+    svg += `<rect class="hit" data-i="${i}" x="${L + i * bw}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent"/>`;
+  });
+  $("chart").innerHTML = svg;
+  const tip = $("chartTip");
+  $("chart").querySelectorAll(".hit").forEach((h) => {
+    h.onmousemove = (e) => {
+      const r = rows[+h.dataset.i], box = $("chartWrap").getBoundingClientRect();
+      tip.innerHTML = `<b>${r.date}</b><br>` + (r.any ? r.parts.map((p) => `<span style="color:${p.c.color}">&#9632;</span> ${esc(p.c.name)}: ${fmtN(p.v)}`).join("<br>") + `<br><b>Total: ${fmtN(r.parts.reduce((a, p) => a + p.v, 0))}</b>` : "Not tracked");
+      tip.classList.remove("hide");
+      const left = Math.min(e.clientX - box.left + 12, box.width - tip.offsetWidth - 4);
+      tip.style.left = left + "px"; tip.style.top = Math.max(0, e.clientY - box.top - tip.offsetHeight - 8) + "px";
+    };
+    h.onmouseleave = () => tip.classList.add("hide");
+  });
+  $("chartTable").innerHTML = `<table class="tbl"><thead><tr><th>Day</th>${chans.map((c) => `<th class="r">${esc(c.name)}</th>`).join("")}<th class="r">Total</th></tr></thead><tbody>` +
+    rows.map((r) => `<tr><td>${r.date}</td>${r.parts.map((p) => `<td class="r">${r.any ? fmtN(p.v) : "-"}</td>`).join("")}<td class="r">${r.any ? fmtN(r.parts.reduce((a, p) => a + p.v, 0)) : "-"}</td></tr>`).join("") + "</tbody></table>";
+}
+async function loadCoach(useAi) {
+  $("coach").innerHTML = '<div class="msg">' + (useAi ? "The AI coach is reading your numbers..." : "") + "</div>";
+  try {
+    const c = await api("/api/stats/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use_ai: useAi, host: $("host").value, model: $("model").value }) });
+    $("coach").innerHTML = `<div style="font-weight:700;margin-bottom:6px">${esc(c.headline)}</div><ul style="margin:0;padding-left:18px">${c.actions.map((a) => `<li style="margin:4px 0">${esc(a)}</li>`).join("")}</ul><div class="msg" style="margin-top:6px">By ${esc(c.by)}</div>`;
+  } catch (e) { $("coach").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+}
+$("coachBtn").onclick = () => loadCoach(true);
+$("statsSetupBtn").onclick = () => $("statsSetup").classList.toggle("hide");
+$("chartAsTable").onclick = () => { chartTable = !chartTable; $("chartTable").classList.toggle("hide", !chartTable); $("chartWrap").classList.toggle("hide", chartTable); $("chartAsTable").innerText = chartTable ? "Show as chart" : "Show as table"; };
+$("statsRefresh").onclick = async () => {
+  try { await api("/api/stats/refresh", { method: "POST" }); } catch (e) { $("statsMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; return; }
+  loadStats();
+};
+$("statsSave").onclick = async () => {
+  const channels = statsData.config.channels.map((c, i) => ({ id: c.id, name: $("chName" + i).value, ref: $("chRef" + i).value }));
+  try {
+    statsData = await api("/api/stats/config", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channels, goal_views: +$("goalViews").value, start: $("goalStart").value, deadline: $("goalEnd").value, api_key: $("ytKey").value || null }) });
+    $("ytKey").value = "";
+    $("statsSaveMsg").innerText = "Saved.";
+    if (channels.some((c) => c.ref.trim())) { await api("/api/stats/refresh", { method: "POST" }); }
+    loadStats();
+  } catch (e) { $("statsSaveMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+};
+
 // ---------- AI engines ----------
 const AI_LINKS = {
   gemini: ["https://aistudio.google.com/apikey", "AIza..."], groq: ["https://console.groq.com/keys", "gsk_..."],
@@ -1807,7 +2032,7 @@ $("aiTest").onclick = async () => {
   loadRules();
   showTab(store.get("cf_tab") || "find");
   await loadStatus();
-  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms()]);
+  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms(), loadStats()]);
 })();
 </script>
 </body>
@@ -1817,6 +2042,7 @@ $("aiTest").onclick = async () => {
 
 if __name__ == "__main__":
     _load_last_trends()
+    channel_stats.start_background()
     INPUT_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
     print(f"Clip Factory running - open http://localhost:{PORT}")
