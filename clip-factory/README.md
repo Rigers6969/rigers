@@ -70,6 +70,33 @@ Nothing to set up and no API key: it reads YouTube's pages with
 - On the first run, start.bat also installs **Deno**, a small free
   program yt-dlp needs to download from YouTube.
 
+## Podcasts
+
+Podcast clips are one of the biggest Shorts formats, and Clip Factory
+has a podcast mode for them.
+
+1. On **Find viral videos**, pick **Podcasts** instead of **Streamers**.
+   - A starting list of big shows is filled in. Edit it like the
+     streamers list.
+   - **Scan my podcasts** shows only full episodes (20+ minutes), hottest
+     first.
+   - The YouTube search box has **Full episodes only (20+ min)** ticked.
+2. Picking Podcasts switches the **Make clips** settings to podcast mode:
+   - **Split screen layout.** The left person goes on top and the right
+     person below, with the captions on the line between them. This
+     suits the usual two-people-at-a-desk podcast camera shot.
+   - **Clip length.** Clips are 30-90 seconds.
+   - **What the AI picks.** It looks for hot takes, surprising stories,
+     funny exchanges and debates, and skips ad reads, sponsor segments
+     and intros.
+3. Click **Download + make clips** on an episode, or use any podcast
+   video with **Make clips**.
+
+**Permission matters even more for podcasts.** Many big shows claim
+copyright on clips, but many also run clipping programs that welcome
+clippers. Check each show's rules first, and add your own titles and
+context (see **YouTube rules** below).
+
 ## Make clips (second tab)
 
 1. **Pick the video.** Choose it from the list (anything you put in the
@@ -79,8 +106,9 @@ Nothing to set up and no API key: it reads YouTube's pages with
    Shorts, Reels and TikTok.
 3. **Layout:**
    - **Fill screen** for one person talking to the camera.
-   - **Whole picture + blurred background** for gameplay, screen
-     recordings, or two people side by side.
+   - **Whole picture + blurred background** for gameplay or screen
+     recordings.
+   - **Podcast - split screen** for two people side by side.
 4. Click **Make clips**.
 
 Clips are numbered 1, 2, 3... from most to least viral. Every run is

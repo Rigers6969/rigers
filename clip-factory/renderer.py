@@ -3,7 +3,9 @@ word-by-word captions (and an optional hook title) burned in.
 
 Layouts:
   crop - fills the whole screen, cut from the centre (best for one person talking)
-  fit  - the whole picture, over a blurred copy of itself (best for gameplay, screens, two people)
+  fit  - the whole picture, over a blurred copy of itself (best for gameplay, screens)
+  podcast - split screen: the left half of the picture on top, the right half below
+            (two people sitting side by side, each gets half the vertical screen)
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ from typing import Callable
 import policy
 
 OUT_W, OUT_H = 1080, 1920
-LAYOUTS = ("crop", "fit")
+LAYOUTS = ("crop", "fit", "podcast")
 CAPTION_STYLES = ("highlight", "simple", "none")
 
 YELLOW = "&H0000E5FF&"  # ASS colours are BGR
@@ -90,7 +92,11 @@ def group_words(words: list[dict], max_words: int = 3, max_chars: int = 18) -> l
 
 def build_ass(words: list[dict], title: str, duration: float, layout: str, caption_style: str, out_path: Path) -> None:
     """words are already shifted so 0 = the start of the clip."""
-    if layout == "fit":
+    cap_align = 2  # bottom centre
+    if layout == "podcast":
+        cap_align, cap_margin = 5, 0  # right on the seam between the two speakers
+        title_margin = round(OUT_H * 0.05)
+    elif layout == "fit":
         cap_margin = round(OUT_H * 0.19)  # lower blurred band, under the picture
         title_margin = round(OUT_H * 0.15)  # upper blurred band, above the picture
     else:
@@ -107,7 +113,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Arial,{cap_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,7,3,2,60,60,{cap_margin},1
+Style: Caption,Arial,{cap_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,7,3,{cap_align},60,60,{cap_margin},1
 Style: Title,Arial,{title_size},&H00000000,&H000000FF,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,16,0,8,90,90,{title_margin},1
 
 [Events]
@@ -142,6 +148,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 def _video_filter(layout: str, ass_name: str | None) -> str:
     subs = f",subtitles={ass_name}" if ass_name else ""
+    if layout == "podcast":
+        half = OUT_H // 2
+        return (
+            f"[0:v]split=2[l][r];"
+            f"[l]crop=iw/2:ih:0:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase,crop={OUT_W}:{half},setsar=1[top];"
+            f"[r]crop=iw/2:ih:iw/2:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase,crop={OUT_W}:{half},setsar=1[bottom];"
+            f"[top][bottom]vstack=inputs=2,format=yuv420p{subs}[v]"
+        )
     if layout == "fit":
         return (
             # the blur is done on a small copy - much faster on a CPU, looks the same

@@ -27,15 +27,21 @@ import moments
 
 APP_DIR = Path(__file__).resolve().parent
 STREAMERS_FILE = APP_DIR / "streamers.json"
+PODCASTS_FILE = APP_DIR / "podcasts.json"
 
 # a starting list - edit it on the page; a name that doesn't load is flagged there
 DEFAULT_STREAMERS = ["@IShowSpeed", "@KaiCenat", "@xQc", "@Jynxzi", "@AdinRoss"]
+DEFAULT_PODCASTS = ["@PowerfulJRE", "@lexfridman", "@hubermanlab", "@TheDiaryOfACEO", "@flagrant", "@TheoVon", "@ShawnRyanShow", "@impaulsive"]
+LISTS = {"streamers": (STREAMERS_FILE, DEFAULT_STREAMERS), "podcasts": (PODCASTS_FILE, DEFAULT_PODCASTS)}
+MIN_PODCAST_S = 20 * 60  # a podcast "episode" - anything shorter is usually already a clip
 
 MIN_LONG_VIDEO_S = 240  # anything shorter isn't worth cutting into several Shorts
 PER_TAB = 15
 
 # YouTube's own search filters ("sp" parameter): sorted by view count, videos only, uploaded within...
 SEARCH_PERIODS = {"hour": "CAMSBAgBEAE=", "today": "CAMSBAgCEAE=", "week": "CAMSBAgDEAE=", "month": "CAMSBAgEEAE="}
+# the same, but only long videos (over 20 minutes) - full podcast episodes
+EPISODE_PERIODS = {"hour": "CAMSBggBEAEYAg==", "today": "CAMSBggCEAEYAg==", "week": "CAMSBggDEAEYAg==", "month": "CAMSBggEEAEYAg=="}
 PERIOD_DAYS = {"hour": 1, "today": 1, "week": 7, "month": 31}
 
 
@@ -71,24 +77,25 @@ def clean_error(exc: Exception) -> str:
     return msg.strip()[:300]
 
 
-def load_streamers() -> list[str]:
+def load_streamers(kind: str = "streamers") -> list[str]:
+    path, default = LISTS.get(kind, LISTS["streamers"])
     try:
-        data = json.loads(STREAMERS_FILE.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, list):
             return [str(x) for x in data if str(x).strip()]
     except (OSError, json.JSONDecodeError):
         pass
-    return list(DEFAULT_STREAMERS)
+    return list(default)
 
 
-def save_streamers(names: list[str]) -> list[str]:
+def save_streamers(names: list[str], kind: str = "streamers") -> list[str]:
     seen, clean = set(), []
     for n in names:
         n = n.strip()
         if n and n.lower() not in seen:
             seen.add(n.lower())
             clean.append(n)
-    STREAMERS_FILE.write_text(json.dumps(clean[:60], indent=2), encoding="utf-8")
+    LISTS.get(kind, LISTS["streamers"])[0].write_text(json.dumps(clean[:60], indent=2), encoding="utf-8")
     return clean[:60]
 
 
@@ -104,13 +111,13 @@ def channel_url(text: str) -> str:
     return f"https://www.youtube.com/{handle}"
 
 
-def _video(entry: dict, origin: str, now: float) -> Optional[dict]:
+def _video(entry: dict, origin: str, now: float, min_s: int = MIN_LONG_VIDEO_S) -> Optional[dict]:
     vid = entry.get("id")
     if not vid or entry.get("live_status") in ("is_live", "is_upcoming"):
         return None
     url = entry.get("url") or f"https://www.youtube.com/watch?v={vid}"
     duration = entry.get("duration")
-    if "/shorts/" in url or (duration is not None and duration < MIN_LONG_VIDEO_S):
+    if "/shorts/" in url or (duration is not None and duration < min_s):
         return None
     views = entry.get("view_count")
     ts = entry.get("timestamp")
@@ -140,7 +147,7 @@ def _fetch_tab(url: str) -> list[dict]:
     return entries
 
 
-def scan_channel(name: str, days: int, include_streams: bool = True) -> dict:
+def scan_channel(name: str, days: int, include_streams: bool = True, min_s: int = MIN_LONG_VIDEO_S) -> dict:
     """{name, ok, error, videos} - one streamer's recent long videos/streams."""
     base = channel_url(name)
     now = time.time()
@@ -155,7 +162,7 @@ def scan_channel(name: str, days: int, include_streams: bool = True) -> dict:
             if required:
                 error = clean_error(exc)
             continue
-        tab_videos = [v for v in (_video(e, name, now) for e in entries) if v]
+        tab_videos = [v for v in (_video(e, name, now, min_s) for e in entries) if v]
         # "vs. normal": compared with this channel's own usual numbers on this tab
         counts = [v["views"] for v in tab_videos if v["views"]]
         median = statistics.median(counts) if len(counts) >= 3 else None
@@ -169,22 +176,25 @@ def scan_channel(name: str, days: int, include_streams: bool = True) -> dict:
 
 
 def scan_streamers(names: list[str], days: int, include_streams: bool = True,
-                   progress: Optional[Callable[[str], None]] = None) -> dict:
+                   progress: Optional[Callable[[str], None]] = None, kind: str = "streamers") -> dict:
+    min_s = MIN_PODCAST_S if kind == "podcasts" else MIN_LONG_VIDEO_S
     results, done = [], 0
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(scan_channel, n, days, include_streams): n for n in names}
+        futures = {pool.submit(scan_channel, n, days, include_streams, min_s): n for n in names}
         for fut in futures:
             results.append(fut.result())
             done += 1
             if progress:
-                progress(f"Checked {done} of {len(names)} streamers...")
+                progress(f"Checked {done} of {len(names)} {kind}...")
     videos = [v for r in results for v in r["videos"]]
     failed = [{"name": r["name"], "error": r["error"]} for r in results if not r["ok"]]
     return {"videos": rank(videos), "failed": failed, "checked": len(names)}
 
 
-def search(query: str, period: str = "week") -> dict:
-    sp = SEARCH_PERIODS.get(period, SEARCH_PERIODS["week"])
+def search(query: str, period: str = "week", episodes_only: bool = False) -> dict:
+    """episodes_only: only videos over 20 minutes (full podcast episodes)."""
+    periods = EPISODE_PERIODS if episodes_only else SEARCH_PERIODS
+    sp = periods.get(period, periods["week"])
     url = "https://www.youtube.com/results?" + urllib.parse.urlencode({"search_query": query, "sp": sp})
     try:
         entries = _fetch_tab(url)
@@ -193,7 +203,8 @@ def search(query: str, period: str = "week") -> dict:
     except Exception as exc:  # network, YouTube changed something...
         raise TrendError(f"YouTube search failed: {clean_error(exc)}") from exc
     now = time.time()
-    videos = [v for v in (_video(e, f"search: {query}", now) for e in entries) if v]
+    min_s = MIN_PODCAST_S if episodes_only else MIN_LONG_VIDEO_S
+    videos = [v for v in (_video(e, f"search: {query}", now, min_s) for e in entries) if v]
     days = PERIOD_DAYS.get(period, 7)
     videos = [v for v in videos if v["age_hours"] is None or v["age_hours"] <= days * 24 + 24]
     for v in videos:

@@ -4,6 +4,7 @@ cache/
 .installed*
 __pycache__/
 streamers.json
+podcasts.json
 trends_last.json
 ai_keys.json
 rules_watch.json

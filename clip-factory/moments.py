@@ -23,7 +23,7 @@ BATCH_SIZE = 8  # candidates per Ollama call - small enough for a small model to
 MAX_ATTEMPTS = 3
 
 PROMPT = """You are a viral short-form video editor (TikTok, YouTube Shorts, Reels).
-Below are {n} candidate clips cut from a longer video. Rate each one's potential to go viral as a standalone short, from 1 (boring) to 10 (extremely engaging).
+Below are {n} candidate clips cut from a longer video.{hint} Rate each one's potential to go viral as a standalone short, from 1 (boring) to 10 (extremely engaging).
 
 A great clip: opens with a hook (a surprising claim, a question, emotion, conflict, a funny moment), makes sense without the rest of the video, and delivers a payoff.
 A bad clip: starts mid-thought, is filler, small talk, an intro/outro, or needs earlier context.
@@ -220,9 +220,15 @@ def parse_scores(raw: str, wanted_ids: set[int]) -> dict[int, dict]:
     return out
 
 
+KIND_HINTS = {
+    "podcast": "\nThis video is a podcast conversation. The best podcast clips are: a strong or controversial opinion, a surprising personal story, a funny exchange or punchline, a heated debate, a shocking fact, or advice people will want to share. Small talk, ad reads, sponsor segments and \"welcome to the show\" intros are bad clips.",
+}
+
+
 def score_candidates(
     candidates: list[dict], brain=None,
     progress: Optional[ProgressCB] = None, cancelled: Callable[[], bool] = lambda: False,
+    kind: str = "",
 ) -> dict:
     """Fills in each candidate's score/title/source. Returns stats.
 
@@ -256,7 +262,7 @@ def score_candidates(
             local = {n: c for n, c in enumerate(todo, start=1)}
             listing = "\n\n".join(f"Clip {n} ({c['end'] - c['start']:.0f}s):\n{c['text']}" for n, c in local.items())
             try:
-                raw, who = brain.ask(PROMPT.format(n=len(local), clips=listing))
+                raw, who = brain.ask(PROMPT.format(n=len(local), clips=listing, hint=KIND_HINTS.get(kind, "")))
             except Exception as exc:  # every AI is down or out of free use (the brain already retried)
                 stats["ai_error"], stop = str(exc), True
                 break

@@ -193,7 +193,7 @@ def run_pipeline(run: dict) -> None:
                 done_batches["n"] = int(m.group(1)) - 1
             update(message=msg, percent=35 + 15 * done_batches["n"] / batches)
 
-        stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled)
+        stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled, kind=s["kind"])
         if cancelled():
             raise transcriber.Cancelled()
         if brain and stats["fallback"]:
@@ -374,6 +374,7 @@ def parse_settings(data: dict) -> dict:
         "whisper": data.get("whisper") if data.get("whisper") in ("base", "small", "medium") else "base",
         "use_ai": bool(data.get("use_ai", True)),
         "safe_mode": bool(data.get("safe_mode", True)),
+        "kind": "podcast" if data.get("kind") == "podcast" else "",
         "bleep": bool(data.get("bleep", True)),
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
@@ -566,13 +567,17 @@ def _trend_job(label: str, fn) -> tuple[dict, int]:
     return {"ok": True}, 202
 
 
+def _kind(value) -> str:
+    return value if value in trends.LISTS else "streamers"
+
+
 @app.route("/api/streamers", methods=["GET", "POST"])
 def streamers():
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         names = data.get("names") if isinstance(data.get("names"), list) else str(data.get("names") or "").splitlines()
-        return jsonify({"names": trends.save_streamers([str(n) for n in names])})
-    return jsonify({"names": trends.load_streamers()})
+        return jsonify({"names": trends.save_streamers([str(n) for n in names], _kind(data.get("kind")))})
+    return jsonify({"names": trends.load_streamers(_kind(request.args.get("kind")))})
 
 
 @app.route("/api/trends")
@@ -585,12 +590,13 @@ def trends_scan():
     data = request.get_json(silent=True) or {}
     days = _int(data, "days", 7, 1, 60)
     include_streams = bool(data.get("include_streams", True))
-    names = trends.load_streamers()
+    kind = _kind(data.get("kind"))
+    names = trends.load_streamers(kind)
     if not names:
         return jsonify({"error": "Add at least one streamer first."}), 400
     body, code = _trend_job(
-        f"{len(names)} streamers, last {days} day{'s' if days != 1 else ''}",
-        lambda progress: trends.scan_streamers(names, days, include_streams, progress),
+        f"{len(names)} {kind}, last {days} day{'s' if days != 1 else ''}",
+        lambda progress: trends.scan_streamers(names, days, include_streams, progress, kind),
     )
     return jsonify(body), code
 
@@ -603,7 +609,9 @@ def trends_search():
     if not query:
         return jsonify({"error": "Type what to search for first."}), 400
     label = {"hour": "the last hour", "today": "today", "week": "this week", "month": "this month"}[period]
-    body, code = _trend_job(f'"{query}", most viewed {label}', lambda progress: trends.search(query, period))
+    episodes = bool(data.get("episodes_only"))
+    body, code = _trend_job(f'"{query}", most viewed {label}' + (" (full episodes)" if episodes else ""),
+                            lambda progress: trends.search(query, period, episodes))
     return jsonify(body), code
 
 
@@ -901,8 +909,13 @@ PAGE = r"""<!DOCTYPE html>
       <h2>What's viral right now</h2>
       <div class="grid">
         <div>
-          <label>Your streamers - one per line (their YouTube @name or channel link)</label>
+          <div class="row" style="margin-bottom:8px">
+            <label class="check" style="margin:0"><input type="radio" name="listKind" value="streamers" checked> Streamers</label>
+            <label class="check" style="margin:0"><input type="radio" name="listKind" value="podcasts"> Podcasts</label>
+          </div>
+          <label id="listLabel">Your streamers - one per line (their YouTube @name or channel link)</label>
           <textarea id="streamers" spellcheck="false"></textarea>
+          <div class="note hide" id="podcastNote">Only full episodes (20+ minutes) are shown. Big podcasts often claim copyright on clips - check each show's clipping rules first (many welcome clippers).</div>
           <div class="row" style="margin-top:10px">
             <select id="days" style="width:auto">
               <option value="1">Last 24 hours</option><option value="3">Last 3 days</option>
@@ -921,6 +934,7 @@ PAGE = r"""<!DOCTYPE html>
             </select>
             <button id="searchBtn">Search</button>
           </div>
+          <label class="check"><input type="checkbox" id="episodesOnly"> Full episodes only (20+ min) - best for podcasts</label>
         </div>
       </div>
       <div class="msg" id="trendMsg" style="margin-top:12px"></div>
@@ -1009,6 +1023,14 @@ PAGE = r"""<!DOCTYPE html>
 
   <div class="panel">
     <h2>2. Settings</h2>
+    <div class="row" style="margin-bottom:12px">
+      <label style="margin:0">Type of video:</label>
+      <select id="kind" style="width:auto">
+        <option value="">Stream, gaming, vlog...</option>
+        <option value="podcast">Podcast / interview</option>
+      </select>
+      <span class="msg" id="kindNote"></span>
+    </div>
     <div class="grid">
       <div><label>How many clips (1-100)</label><input type="number" id="count" min="1" max="100" value="10"></div>
       <div><label>Shortest clip (seconds)</label><input type="number" id="minLen" min="5" max="170" value="20"></div>
@@ -1017,6 +1039,7 @@ PAGE = r"""<!DOCTYPE html>
         <select id="layout">
           <option value="crop">Fill screen (one person talking)</option>
           <option value="fit">Whole picture + blurred background</option>
+          <option value="podcast">Podcast - two people, split screen</option>
         </select></div>
       <div><label>Captions</label>
         <select id="captions">
@@ -1077,7 +1100,7 @@ const $ = (id) => document.getElementById(id);
 function esc(s) { const d = document.createElement("div"); d.innerText = s == null ? "" : String(s); return d.innerHTML; }
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
-const SETTINGS = ["count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep"];
+const SETTINGS = ["kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -1174,7 +1197,7 @@ function clipSettings() {
     count: +$("count").value, min_len: +$("minLen").value, max_len: +$("maxLen").value,
     layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
-    safe_mode: $("safeMode").checked, bleep: $("bleep").checked,
+    safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value,
   };
 }
 
@@ -1319,10 +1342,34 @@ function fmtDur(s) {
 
 let trendData = null, trendTimer = null, dlTimer = null, knownDone = new Set();
 
+function listKind() { return document.querySelector("input[name=listKind]:checked").value; }
 async function loadStreamers() {
-  const data = await api("/api/streamers");
+  const kind = listKind();
+  const data = await api("/api/streamers?kind=" + kind);
   $("streamers").value = data.names.join("\n");
+  const pod = kind === "podcasts";
+  $("listLabel").innerText = pod ? "Your podcasts - one per line (their YouTube @name or channel link)" : "Your streamers - one per line (their YouTube @name or channel link)";
+  $("scanBtn").innerText = pod ? "Scan my podcasts" : "Scan my streamers";
+  $("podcastNote").classList.toggle("hide", !pod);
+  $("incStreams").parentElement.classList.toggle("hide", pod);
+  $("episodesOnly").checked = pod;
+  // clips made from here use podcast settings when podcasts are picked
+  if (pod && $("kind").value !== "podcast") { $("kind").value = "podcast"; applyKind(); }
+  if (!pod && $("kind").value === "podcast") { $("kind").value = ""; applyKind(); }
 }
+document.querySelectorAll("input[name=listKind]").forEach((r) => (r.onchange = () => { store.set("cf_listKind", listKind()); loadStreamers(); }));
+function applyKind() {
+  if ($("kind").value === "podcast") {
+    $("layout").value = "podcast"; $("minLen").value = 30; $("maxLen").value = 90;
+    $("kindNote").innerText = "Podcast settings: split screen, 30-90 s clips, AI looks for hot takes, stories and debates.";
+  } else {
+    if ($("layout").value === "podcast") $("layout").value = "crop";
+    $("minLen").value = 20; $("maxLen").value = 60;
+    $("kindNote").innerText = "";
+  }
+  saveSettings();
+}
+$("kind").onchange = applyKind;
 
 function renderTrends() {
   const st = trendData;
@@ -1395,11 +1442,11 @@ async function trendAction(url, body) {
 
 $("scanBtn").onclick = async () => {
   try {
-    await api("/api/streamers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: $("streamers").value }) });
+    await api("/api/streamers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: $("streamers").value, kind: listKind() }) });
   } catch (e) {}
-  trendAction("/api/trends/scan", { days: +$("days").value, include_streams: $("incStreams").checked });
+  trendAction("/api/trends/scan", { days: +$("days").value, include_streams: $("incStreams").checked, kind: listKind() });
 };
-$("searchBtn").onclick = () => trendAction("/api/trends/search", { query: $("searchInput").value, period: $("period").value });
+$("searchBtn").onclick = () => trendAction("/api/trends/search", { query: $("searchInput").value, period: $("period").value, episodes_only: $("episodesOnly").checked });
 $("searchInput").onkeydown = (e) => { if (e.key === "Enter") $("searchBtn").click(); };
 $("sortBy").onchange = renderTrends;
 $("askAi").onclick = () => trendAction("/api/trends/summary", { host: $("host").value, model: $("model").value });
@@ -1593,6 +1640,8 @@ $("aiTest").onclick = async () => {
 
 (async () => {
   loadSettings();
+  const savedKind = store.get("cf_listKind");
+  if (savedKind) { const r = document.querySelector(`input[name=listKind][value=${savedKind}]`); if (r) r.checked = true; }
   loadAi();
   loadRules();
   showTab(store.get("cf_tab") || "find");
