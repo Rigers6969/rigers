@@ -16,3 +16,4 @@ publish_queue.json
 publish_queue.tmp
 tokens/
 client_secret*.json
+to-upload/

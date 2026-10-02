@@ -203,6 +203,16 @@ them to YouTube at the right times.
 2. Click **Fill the schedule**. Each video gets the next free time of its
    channel. Change any time or channel in the list.
 
+**Posting with YouTube Studio (free, no Google setup needed):** click
+**Get this week ready for YouTube Studio**. Each channel's next 7 days of
+videos go into `to-upload\<channel>`, named by their titles, with a file
+`00 - titles, descriptions, tags.txt`. Then, for each channel:
+1. Click **Open folder**, and open YouTube Studio for that channel.
+2. **Create** -> **Upload videos** -> select all the videos (up to 15 at a time).
+3. Paste each video's description and tags from the text file, and set
+   **Visibility** -> **Schedule** to its time.
+4. Click **Done - I scheduled them**.
+
 **Until Google approves:** YouTube locks everything an unapproved app
 uploads as private. So the schedule is a checklist. For each item:
 1. **Show file**, then **Open YouTube Studio** and upload it there.

@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -40,6 +42,7 @@ TOKENS_DIR = APP_DIR / "tokens"
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
 UPLOAD_UNITS, THUMB_UNITS, DAILY_UNITS = 1600, 50, 10_000
 UPLOAD_AHEAD_DAYS = 3        # upload this far ahead of the publish time (spreads the daily quota)
+WEEK_DIR = APP_DIR / "to-upload"   # "this week" folders for bulk uploads in YouTube Studio
 CONTENT_DIRS = [ROOT / "content", ROOT / "wayne-factory-lite" / "content"]
 WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -346,6 +349,79 @@ def fill_schedule(now: Optional[dt.datetime] = None) -> int:
                 break
     save_queue(q)
     return filled
+
+
+# ---------- the week, ready for YouTube Studio ----------
+
+def _file_name(title: str) -> str:
+    """A Windows-safe file name. YouTube Studio uses the file name as the first title."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", title).strip().rstrip(".")
+    return name[:90] or "video"
+
+
+def _place(src: Path, dst: Path) -> None:
+    try:
+        os.link(src, dst)  # same drive: instant, uses no extra space
+    except OSError:
+        shutil.copy2(src, dst)
+
+
+def prepare_week(days: int = 7, now: Optional[dt.datetime] = None) -> list[dict]:
+    """Puts each channel's next `days` of to-do videos in to-upload/<channel>/, named by their title,
+    plus a list with each video's time, title, description and tags."""
+    now = now or dt.datetime.now()
+    end = now + dt.timedelta(days=days)
+    names = {c["id"]: c["name"] for c in channels()}
+    by_ch: dict[str, list[dict]] = {}
+    for it in sorted(load_queue(), key=lambda i: i["when"] or ""):
+        if it["status"] == "waiting" and it["when"] and it["cid"] in names and Path(it["file"]).exists() \
+                and dt.datetime.fromisoformat(it["when"]) <= end:
+            by_ch.setdefault(it["cid"], []).append(it)
+    shutil.rmtree(WEEK_DIR, ignore_errors=True)  # last week's files go, so nothing gets posted twice
+    out = []
+    for cid, items in by_ch.items():
+        folder = WEEK_DIR / _file_name(names[cid])
+        folder.mkdir(parents=True, exist_ok=True)
+        used, lines = set(), []
+        for n, it in enumerate(items, start=1):
+            base = _file_name(it["title"])
+            name, k = base, 2
+            while name.lower() in used:
+                name, k = f"{base} ({k})", k + 1
+            used.add(name.lower())
+            src = Path(it["file"])
+            _place(src, folder / (name + src.suffix.lower()))
+            if it["kind"] == "long" and it.get("thumb") and Path(it["thumb"]).exists():
+                _place(Path(it["thumb"]), folder / (name + " - thumbnail.jpg"))
+            when = dt.datetime.fromisoformat(it["when"])
+            lines.append(f"{'=' * 60}\n{n}. {when:%A %d %B, %H:%M}  ({'Short' if it['kind'] == 'short' else 'full video'})\n"
+                         f"File: {name}{src.suffix.lower()}\n\nTITLE:\n{it['title']}\n\nDESCRIPTION:\n{it['description']}\n\n"
+                         f"TAGS:\n{', '.join(it['tags'])}\n")
+        head = (f"{names[cid]} - {len(items)} videos for {now:%d %B} to {end:%d %B}\n\n"
+                "In YouTube Studio: Create -> Upload videos -> select all the video files in this folder (up to 15 at a time).\n"
+                "For each one: paste the title, description and tags below, then Visibility -> Schedule -> the time below.\n\n")
+        (folder / "00 - titles, descriptions, tags.txt").write_text(head + "\n".join(lines), encoding="utf-8")
+        out.append({"cid": cid, "name": names[cid], "count": len(items), "folder": str(folder), "ids": [i["id"] for i in items],
+                    "first": items[0]["when"], "last": items[-1]["when"]})
+    return out
+
+
+def open_folder(path: Path) -> None:
+    if os.name == "nt":
+        subprocess.Popen(["explorer", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(path)])
+
+
+def mark(ids: list[str], status: str) -> int:
+    q = load_queue()
+    n = 0
+    for it in q:
+        if it["id"] in ids and it["status"] == "waiting":
+            it["status"] = status
+            n += 1
+    save_queue(q)
+    return n
 
 
 # ---------- quota ----------

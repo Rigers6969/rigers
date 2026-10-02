@@ -820,6 +820,30 @@ def publish_reveal():
     return jsonify({"ok": True, "path": item["file"]})
 
 
+@app.route("/api/publish/week", methods=["POST"])
+def publish_week():
+    return jsonify({"channels": publisher.prepare_week()})
+
+
+@app.route("/api/publish/open-folder", methods=["POST"])
+def publish_open_folder():
+    folder = (publisher.WEEK_DIR / publisher._file_name(str(_publish_body().get("name") or ""))).resolve()
+    if publisher.WEEK_DIR.resolve() not in folder.parents or not folder.is_dir():
+        return jsonify({"error": "That folder isn't there - click the button again."}), 404
+    try:
+        publisher.open_folder(folder)
+    except Exception as exc:
+        return jsonify({"error": str(exc), "path": str(folder)}), 500
+    return jsonify({"ok": True, "path": str(folder)})
+
+
+@app.route("/api/publish/mark", methods=["POST"])
+def publish_mark():
+    ids = [str(i) for i in _publish_body().get("ids") or []]
+    publisher.mark(ids, "scheduled")
+    return publish_state()
+
+
 @app.route("/api/publish/audit")
 def publish_audit():
     return jsonify({"text": publisher.audit_text()})
@@ -1309,9 +1333,10 @@ PAGE = r"""<!DOCTYPE html>
     <div class="panel">
       <div class="row" style="justify-content:space-between">
         <h2 style="margin:0">Schedule</h2>
-        <div class="row"><span class="msg" id="quotaMsg"></span><button id="fillBtn">Fill the schedule</button></div>
+        <div class="row"><span class="msg" id="quotaMsg"></span><button id="fillBtn">Fill the schedule</button><button class="ghost" id="weekBtn">Get this week ready for YouTube Studio</button></div>
       </div>
       <div class="msg" style="margin:6px 0 10px" id="slotsMsg"></div>
+      <div id="weekBox" class="hide" style="margin-bottom:12px"></div>
       <div id="modeBanner"></div>
       <div id="queueList"></div>
     </div>
@@ -2209,6 +2234,28 @@ function renderPub() {
   });
 }
 $("fillBtn").onclick = async () => { const r = await api("/api/publish/fill", { method: "POST" }); await loadPub(); $("fillBtn").innerText = `Filled ${r.filled}`; setTimeout(() => ($("fillBtn").innerText = "Fill the schedule"), 1800); };
+$("weekBtn").onclick = async () => {
+  $("weekBtn").disabled = true;
+  try {
+    const r = await postJson("/api/publish/week");
+    const box = $("weekBox"); box.classList.remove("hide");
+    if (!r.channels.length) { box.innerHTML = '<div class="msg">Nothing to post in the next 7 days - add videos and click Fill the schedule first.</div>'; return; }
+    box.innerHTML = `<div class="banner auto" style="color:var(--text)"><b>This week is ready.</b> For each channel: click <b>Open folder</b>, open YouTube Studio for that channel &rarr; <b>Create</b> &rarr; <b>Upload videos</b> &rarr; select all the videos in the folder (up to 15 at a time). The file <b>00 - titles, descriptions, tags.txt</b> has what to paste and the time to set under <b>Visibility &rarr; Schedule</b>. Then click <b>Done</b>.</div>` +
+      r.channels.map((c, i) => `<div class="conn"><span class="tag" style="background:${chColor(c.cid)};color:#fff">${esc(c.name)}</span><span>${c.count} video${c.count > 1 ? "s" : ""}</span>
+        <button class="ghost" data-wopen="${i}" style="padding:5px 12px">Open folder</button>
+        <a class="btn ghost" href="https://studio.youtube.com/" target="_blank" rel="noopener" style="padding:5px 12px;font-size:13px">YouTube Studio</a>
+        <button data-wdone="${i}" style="padding:5px 12px">Done - I scheduled them</button></div>`).join("");
+    box.querySelectorAll("[data-wopen]").forEach((b) => (b.onclick = async () => {
+      try { const x = await postJson("/api/publish/open-folder", { name: r.channels[+b.dataset.wopen].name }); b.innerText = "Opened"; b.title = x.path; }
+      catch (e) { b.innerText = e.message.slice(0, 60); }
+    }));
+    box.querySelectorAll("[data-wdone]").forEach((b) => (b.onclick = async () => {
+      pubData = await postJson("/api/publish/mark", { ids: r.channels[+b.dataset.wdone].ids }); renderPub();
+      b.innerText = "Marked as scheduled"; b.disabled = true;
+    }));
+  } catch (e) { $("weekBox").classList.remove("hide"); $("weekBox").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  finally { $("weekBtn").disabled = false; }
+};
 $("approvedChk").onchange = async () => { pubData = await postJson("/api/publish/approved", { approved: $("approvedChk").checked }); renderPub(); };
 $("auditBtn").onclick = async () => { const r = await api("/api/publish/audit"); $("auditText").value = r.text; $("auditBox").classList.toggle("hide"); };
 $("auditCopy").onclick = async () => { try { await navigator.clipboard.writeText($("auditText").value); $("auditCopy").innerText = "Copied"; } catch (e) { $("auditText").select(); } };
