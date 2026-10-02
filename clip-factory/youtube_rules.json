@@ -1,0 +1,181 @@
+{
+  "as_of": "2026-10",
+  "note": "Plain-English summary of YouTube's rules for monetized channels, checked against news and guide coverage in October 2026. YouTube's official pages are the final word - the 'Check for rule updates' button compares them for you.",
+  "ypp": {
+    "general": [
+      "Follow YouTube's channel monetization policies",
+      "Live in a country or region where the YouTube Partner Program is available",
+      "No active Community Guidelines strikes on the channel",
+      "2-Step Verification turned on for the Google account",
+      "Advanced features turned on in YouTube",
+      "An active AdSense for YouTube account linked to the channel"
+    ],
+    "tiers": [
+      {
+        "name": "Fan funding (lower tier)",
+        "unlocks": "Channel memberships, Super Chat, Super Stickers, Super Thanks, YouTube Shopping",
+        "subscribers": 500,
+        "uploads_90d": 3,
+        "watch_hours_12m": 3000,
+        "shorts_views_90d": 3000000
+      },
+      {
+        "name": "Ad revenue (full tier)",
+        "unlocks": "Watch-page ads and YouTube Premium revenue, Shorts ad revenue, plus everything in the lower tier",
+        "subscribers": 1000,
+        "uploads_90d": 0,
+        "watch_hours_12m": 4000,
+        "shorts_views_90d": 10000000,
+        "from_2027_02_01": {"watch_hours_12m": 8000, "shorts_views_90d": 20000000}
+      }
+    ],
+    "change_2027": "From February 1, 2027, new channels applying for ad revenue need 8,000 watch hours in 12 months or 20 million Shorts views in 90 days (double today), with 1,000 subscribers as before. Channels already in the program keep it, but reports say Shorts revenue will then need 10 million qualified Shorts views in the last 90 days."
+  },
+  "rules": [
+    {
+      "id": "inauthentic",
+      "area": "Monetization - whole channel",
+      "title": "Inauthentic (mass-produced / repetitive) content",
+      "summary": "Since July 15, 2025, 'repetitious content' is called 'inauthentic content'. Videos that are mass-produced from a template with little variation - e.g. many near-identical videos a day, the same script structure with words swapped, text-to-speech over stock footage with no real substance - are not eligible for money. Using AI as a tool is fine; AI 'slop' is not.",
+      "consequence": "The whole channel can be refused or removed from the Partner Program (after a human review; borderline channels usually get a warning first).",
+      "safe": [
+        "Every video needs its own real idea, research and structure - not a template with words swapped",
+        "Check and edit AI-written scripts; add your own opinion, jokes, analysis",
+        "Vary the visuals, pacing and format between videos",
+        "Prefer a real or clearly consistent narrator; avoid cloning someone else's voice",
+        "Fewer, better uploads beat dozens of near-identical ones a day"
+      ],
+      "sources": ["https://support.google.com/youtube/answer/1311392", "https://ppc.land/youtube-clarifies-inauthentic-content-policy-changes/", "https://alternativeto.net/news/2025/7/youtube-updates-its-policy-to-demonetize-inauthentic-mass-produced-ai-generated-content"]
+    },
+    {
+      "id": "reused",
+      "area": "Monetization - whole channel",
+      "title": "Reused content (clips, compilations, reactions)",
+      "summary": "Using other people's videos is only monetizable if viewers can clearly see a meaningful difference: significant original commentary, editing that tells a story, analysis, or educational framing. Plain re-uploads, lightly edited clips, and compilations with little or no narration are not eligible. This is the biggest risk for clip channels.",
+      "consequence": "The channel is refused or removed from the Partner Program.",
+      "safe": [
+        "Only clip creators who allow it (many streamers run clipping programs) - get permission in writing",
+        "Add your own value: a hook/title card, commentary, context, a storyline across clips",
+        "Don't upload whole segments unchanged; cut tight and edit",
+        "Credit the original creator in the description"
+      ],
+      "sources": ["https://support.google.com/youtube/answer/1311392", "https://vidiq.com/blog/post/youtube-reused-content-policy-guide/", "https://ppc.land/understanding-youtubes-reused-content-policy"]
+    },
+    {
+      "id": "ai_disclosure",
+      "area": "Every upload",
+      "title": "Disclose realistic AI / altered content",
+      "summary": "When you upload, you must tick 'altered or synthetic content' if the video realistically shows something that didn't happen - e.g. a real person saying or doing something they didn't, a realistic fake event or place. Not needed for clearly unrealistic or animated content, special effects, or AI used only to help production (scripts, captions, ideas).",
+      "consequence": "YouTube can add the label itself; repeatedly hiding it can mean video removal or suspension from the Partner Program.",
+      "safe": ["Tick the altered/synthetic box whenever a realistic AI person, voice clone or fake event appears", "Never make a real person appear to say something they didn't"],
+      "sources": ["https://support.google.com/youtube/answer/14328491", "https://9to5google.com/2024/03/18/youtube-altered-content-disclosure/"]
+    },
+    {
+      "id": "profanity",
+      "area": "Advertiser-friendly - per video",
+      "title": "Swearing",
+      "summary": "Since July 29, 2025, strong swearing in the first 7 seconds no longer limits ads. Still limited: swear words in the title or thumbnail, and frequent swearing throughout the video. Hateful or extremely offensive language gets no ads at all.",
+      "consequence": "Limited or no ads on that video (yellow $ icon).",
+      "safe": ["Keep titles and thumbnails clean", "Bleep frequent swearing", "Never use slurs"],
+      "sources": ["https://ppc.land/youtube-removes-strong-profanity-restrictions-from-first-7-seconds/", "https://support.google.com/youtube/answer/6162278"]
+    },
+    {
+      "id": "violence",
+      "area": "Advertiser-friendly - per video",
+      "title": "Violence and shocking content",
+      "summary": "Graphic violence, injuries, dead bodies, gore, or someone (human or animal) in real distress for shock value get limited or no ads. News, documentary or educational context without graphic footage usually keeps ads.",
+      "consequence": "Limited or no ads; graphic violence for shock can also be removed.",
+      "safe": ["Talk about it, don't show it", "Add context (news, history, education)", "No gore in thumbnails"],
+      "sources": ["https://support.google.com/youtube/answer/6162278"]
+    },
+    {
+      "id": "adult",
+      "area": "Advertiser-friendly - per video",
+      "title": "Sexual and adult content",
+      "summary": "Sexual acts, nudity, fetish content, or sexually suggestive titles/thumbnails get no ads; explicit content is removed.",
+      "consequence": "No ads; explicit content is removed with a strike.",
+      "safe": ["No sexual titles or thumbnails", "Keep jokes PG-13"],
+      "sources": ["https://support.google.com/youtube/answer/6162278"]
+    },
+    {
+      "id": "harmful_acts",
+      "area": "Advertiser-friendly + Community Guidelines",
+      "title": "Harmful or dangerous acts",
+      "summary": "Dangerous challenges, stunts that can seriously hurt people, pranks that make people believe they're in danger, or instructions for harmful things get limited/no ads and can be removed.",
+      "consequence": "Limited/no ads; removal and a strike for dangerous challenges.",
+      "safe": ["Don't encourage copying dangerous stunts", "No fake-danger pranks"],
+      "sources": ["https://support.google.com/youtube/answer/6162278"]
+    },
+    {
+      "id": "drugs",
+      "area": "Advertiser-friendly - per video",
+      "title": "Drugs",
+      "summary": "Showing or promoting recreational drug use, buying or making drugs gets limited or no ads. Educational, news or recovery discussion without promotion usually keeps ads.",
+      "consequence": "Limited or no ads.",
+      "safe": ["Discuss, don't promote or show use"],
+      "sources": ["https://support.google.com/youtube/answer/6162278"]
+    },
+    {
+      "id": "hate",
+      "area": "Advertiser-friendly + Community Guidelines",
+      "title": "Hate and harassment",
+      "summary": "Slurs, attacking people for who they are (race, religion, gender, sexuality, disability...), or targeting and insulting a real person get no ads and can be removed.",
+      "consequence": "No ads; removal and strikes.",
+      "safe": ["Criticise ideas and actions, not who people are", "Don't target private individuals"],
+      "sources": ["https://support.google.com/youtube/answer/6162278"]
+    },
+    {
+      "id": "firearms",
+      "area": "Advertiser-friendly - per video",
+      "title": "Firearms",
+      "summary": "Selling guns, making or modifying them, or guns used by minors or in unsafe settings get limited or no ads. Ordinary hunting, sport or history content is usually fine.",
+      "consequence": "Limited or no ads.",
+      "safe": ["No sales, building or modification instructions"],
+      "sources": ["https://support.google.com/youtube/answer/6162278"]
+    },
+    {
+      "id": "sensitive",
+      "area": "Advertiser-friendly - per video",
+      "title": "Sensitive events and controversial issues",
+      "summary": "Wars, terror attacks, tragedies, suicide, self-harm, abuse, abortion and similar topics. Recent updates allow full ads more often when it's discussed or dramatised without graphic detail; graphic or exploitative treatment is limited.",
+      "consequence": "Limited ads if graphic or exploitative.",
+      "safe": ["Be respectful and non-graphic", "Add helpline/context for suicide or self-harm"],
+      "sources": ["https://support.google.com/youtube/answer/6162278", "https://www.storyboard18.com/amp/digital/youtube-eases-ad-rules-for-videos-on-sensitive-topics-87782.htm"]
+    },
+    {
+      "id": "misleading",
+      "area": "Community Guidelines",
+      "title": "Misleading titles, thumbnails and spam",
+      "summary": "Titles or thumbnails that promise something the video doesn't deliver, fake news framing, scams, fake giveaways, or keyword-stuffed descriptions break the spam & deceptive practices rules.",
+      "consequence": "Removal and a strike; repeated spam can end the channel.",
+      "safe": ["The title must match what actually happens in the video", "No fake giveaways or 'link in bio' scams", "Don't stuff tags/descriptions with unrelated keywords"],
+      "sources": ["https://support.google.com/youtube/answer/2802032"]
+    },
+    {
+      "id": "copyright",
+      "area": "Copyright",
+      "title": "Copyright",
+      "summary": "Using someone else's video, music or stream without permission can get a Content ID claim (their ads, not yours) or a copyright strike. 3 copyright strikes end the channel. 'Fair use' is decided case by case and is never guaranteed.",
+      "consequence": "Claims take the money; 3 strikes = channel terminated.",
+      "safe": ["Get permission to clip", "Use royalty-free music", "Transform the content heavily"],
+      "sources": ["https://support.google.com/youtube/answer/2802032"]
+    },
+    {
+      "id": "strikes",
+      "area": "Community Guidelines",
+      "title": "How strikes work",
+      "summary": "The first problem usually gets a one-time warning. After that: 1st strike = 1 week without uploading, 2nd strike within 90 days = 2 weeks, 3rd strike within 90 days = the channel is terminated. Strikes expire after 90 days. A channel with an active strike can't join the Partner Program.",
+      "consequence": "Upload freezes; termination at 3 strikes.",
+      "safe": ["Fix and appeal mistakes quickly", "Take the policy training YouTube offers to remove a warning"],
+      "sources": ["https://support.google.com/youtube/answer/2802032"]
+    }
+  ],
+  "official_pages": [
+    {"name": "YouTube Partner Program overview & eligibility", "url": "https://support.google.com/youtube/answer/72851?hl=en"},
+    {"name": "YouTube channel monetization policies", "url": "https://support.google.com/youtube/answer/1311392?hl=en"},
+    {"name": "Advertiser-friendly content guidelines", "url": "https://support.google.com/youtube/answer/6162278?hl=en"},
+    {"name": "Community Guidelines strike basics", "url": "https://support.google.com/youtube/answer/2802032?hl=en"},
+    {"name": "Changes to the YouTube Partner Program", "url": "https://support.google.com/youtube/answer/12843009?hl=en"},
+    {"name": "Disclosing altered or synthetic content", "url": "https://support.google.com/youtube/answer/14328491?hl=en"}
+  ]
+}

@@ -88,6 +88,53 @@ saved in `output/<date>-<video name>/`. **Open folder** shows it in File
 Explorer, and **Download all (zip)** gets every finished clip plus a
 `titles.txt`. Click any run under **Past runs** to open it again.
 
+## YouTube rules (third tab)
+
+A guard that knows what gets a channel monetized and what gets it
+demonetized, so the clips (and any video you make) stay within
+YouTube's rules. The rule book is `youtube_rules.json`: a plain-English
+summary from October 2026, with sources.
+
+**Every clip is checked automatically:**
+- **Skipped moments.** Moments with slurs, harassment or sexual content
+  are never picked (setting: *Skip moments that break YouTube's rules*).
+- **Bleeping.** Swear words are bleeped (muted) and shown as `F***` in
+  the captions (setting: *Bleep swear words*). Frequent swearing limits
+  ads; occasional swearing is fine.
+- **Clean titles.** Clip titles never contain swear words, because
+  swearing in a title limits ads even when the video is clean.
+- **A badge on every clip:**
+  - green = looks ad-friendly
+  - yellow = risk of limited ads
+  - red = risk of no ads, removal or a strike
+
+**On the YouTube rules tab:**
+- **Check a video before you upload.** Paste the title, description and
+  script.
+  - **Instant check** runs on this PC.
+  - **AI review** reads it against all the rules and quotes exactly
+    what's wrong and how to fix it.
+  - **Fix it for me** rewrites it safely, keeping the meaning, then
+    re-checks it.
+  - **Full rules check** on any clip opens it here, already filled in.
+- **Can my channel get monetized?** Enter your numbers to see which tier
+  you qualify for and exactly what's missing. The calculator includes
+  the February 1, 2027 change: new channels will need 8,000 watch hours
+  or 20 million Shorts views, double today.
+- **Is my channel at risk?** These are the channel-level rules that
+  remove whole channels from monetization:
+  - reused content (clip channels)
+  - inauthentic or mass-produced content (AI or template channels)
+  - AI disclosure
+  - copyright
+- **Check for rule updates.** Reads YouTube's official policy pages,
+  shows exactly what changed since your last check, and has an AI
+  explain it in plain English.
+
+This is a careful first pass, not a guarantee. YouTube's reviewers make
+the final call, and context matters: news, education and calm
+discussion get more leeway than content made to shock.
+
 ## AI engines: every AI in one (much faster)
 
 Click **AI engines** at the top right, tick **Use cloud AI**, paste the

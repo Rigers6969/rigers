@@ -27,6 +27,9 @@ Below are {n} candidate clips cut from a longer video. Rate each one's potential
 
 A great clip: opens with a hook (a surprising claim, a question, emotion, conflict, a funny moment), makes sense without the rest of the video, and delivers a payoff.
 A bad clip: starts mid-thought, is filler, small talk, an intro/outro, or needs earlier context.
+Give a LOW score (1-2) to anything that breaks YouTube's rules or kills ad revenue: slurs or hate, sexual content, graphic violence, dangerous acts or challenges, drug use, or harassing a real person.
+
+Titles must be honest about what happens in the clip (no clickbait lies) and must not contain swear words.
 
 For EVERY clip, also write a punchy title of at most 7 words that would make someone stop scrolling.
 

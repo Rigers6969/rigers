@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+import policy
+
 OUT_W, OUT_H = 1080, 1920
 LAYOUTS = ("crop", "fit")
 CAPTION_STYLES = ("highlight", "simple", "none")
@@ -154,6 +156,14 @@ def _video_filter(layout: str, ass_name: str | None) -> str:
     )
 
 
+def _audio_filter(mute: list[tuple[float, float]]) -> str:
+    """Silences the given (start, end) stretches - the "bleep"."""
+    if not mute:
+        return ""
+    when = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in mute)
+    return f";[0:a:0]volume=enable='{when}':volume=0[a]"
+
+
 def _run(cmd: list[str], cwd: Path, cancelled: Callable[[], bool], timeout: float) -> None:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     proc = subprocess.Popen(cmd, cwd=str(cwd), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -184,15 +194,23 @@ def _run(cmd: list[str], cwd: Path, cancelled: Callable[[], bool], timeout: floa
 def render_clip(
     source: Path, start: float, end: float, words: list[dict], title: str,
     layout: str, caption_style: str, out_path: Path, poster_path: Path,
-    has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False,
-) -> None:
-    """words: the whole video's words - the ones inside start..end are used."""
+    has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
+) -> int:
+    """words: the whole video's words - the ones inside start..end are used.
+    bleep: mute swear words and show them as F*** in the captions.
+    Returns how many words were bleeped."""
     duration = end - start
     out_dir = out_path.parent
     clip_words = [
         {"start": max(0.0, w["start"] - start), "end": min(duration, w["end"] - start), "text": w["text"]}
         for w in words if w["start"] >= start - 0.05 and w["start"] < end
     ]
+    mute = []
+    if bleep:
+        for w in clip_words:
+            if policy.swear_strength(w["text"]):
+                mute.append((max(0.0, w["start"] - 0.05), min(duration, w["end"] + 0.05)))
+                w["text"] = policy.censor(w["text"])
     ass_name = None
     if title or caption_style != "none":
         # ffmpeg runs inside the output folder and gets just the file name:
@@ -203,10 +221,10 @@ def render_clip(
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(source.resolve()),
-        "-filter_complex", _video_filter(layout, ass_name), "-map", "[v]",
+        "-filter_complex", _video_filter(layout, ass_name) + _audio_filter(mute if has_audio else []), "-map", "[v]",
     ]
     if has_audio:
-        cmd += ["-map", "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "44100"]
+        cmd += ["-map", "[a]" if mute else "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "44100"]
     cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", "30",
             "-movflags", "+faststart", "-f", "mp4", tmp_name]
     try:
@@ -224,3 +242,4 @@ def render_clip(
              out_dir, lambda: False, timeout=60)
     except RenderError:
         pass
+    return len(mute)

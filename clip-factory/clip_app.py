@@ -25,6 +25,7 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 import ai
 import downloader
 import moments
+import policy
 import renderer
 import transcriber
 import trends
@@ -100,6 +101,22 @@ def public(run: dict) -> dict:
 
 
 # ---------- the pipeline ----------
+
+def _clip_policy(result: dict, bleeped: int) -> dict:
+    """What the page shows on each clip: verdict + short notes."""
+    verdict = result["verdict"]
+    notes = []
+    for f in result["findings"]:
+        if f["rule"] == "profanity" and f["where"] != "title" and bleeped:
+            continue  # handled by the bleep
+        if f["severity"] in ("yellow", "red"):
+            notes.append(f"{f['why']} ({f['where']})")
+    if bleeped:
+        notes.append(f"{bleeped} swear word{'s' if bleeped != 1 else ''} bleeped")
+        if verdict == "yellow" and not any(f["severity"] == "yellow" and not (f["rule"] == "profanity" and f["where"] != "title")
+                                           for f in result["findings"]):
+            verdict = "green"  # the only problem was swearing, and it's bleeped now
+    return {"verdict": verdict, "notes": notes[:4]}
 
 def run_pipeline(run: dict) -> None:
     s = run["settings"]
@@ -187,7 +204,20 @@ def run_pipeline(run: dict) -> None:
             run["warning"] = " ".join(filter(None, [run["warning"], "; ".join(brain.problems)]))
         run["engines"]["moments"] = ", ".join(f"{name} ({n})" for name, n in stats["by"].items()) or "built-in scorer"
         run["stats"] = dict(stats, candidates=len(candidates))
-        picks = moments.pick_best(candidates, s["count"])
+        # YouTube rules: check every moment; clips that would break the rules are never picked
+        blocked = 0
+        for c in candidates:
+            clip_words = [w for w in words if c["start"] - 0.05 <= w["start"] < c["end"] + 0.4]
+            c["title"] = policy.clean_title(c["title"])
+            c["policy"] = policy.scan(c["title"], words=clip_words, duration=c["end"] - c["start"])
+            if s["safe_mode"] and c["policy"]["verdict"] == "red":
+                c["score"] = -1
+                blocked += 1
+        allowed = [c for c in candidates if c["score"] >= 0]
+        if blocked:
+            run["policy_note"] = (f"{blocked} moment{'s' if blocked != 1 else ''} broke YouTube's rules "
+                                  f"(slurs, harassment or sexual content) and {'were' if blocked != 1 else 'was'} skipped.")
+        picks = moments.pick_best(allowed, s["count"])
         run["planned"] = len(picks)
         if len(picks) < s["count"]:
             run["note"] = (f"This video only has room for {len(picks)} separate clips of {s['min_len']}-{s['max_len']}s "
@@ -206,10 +236,10 @@ def run_pipeline(run: dict) -> None:
             name = f"clip_{n:03d}"
             began = time.time()
             try:
-                renderer.render_clip(
+                bleeped = renderer.render_clip(
                     source, start, end, words, c["title"] if s["show_title"] else "",
                     s["layout"], s["captions"], run_dir / f"{name}.mp4", run_dir / f"{name}.jpg",
-                    has_audio=info["has_audio"], cancelled=cancelled,
+                    has_audio=info["has_audio"], cancelled=cancelled, bleep=s["bleep"],
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -228,6 +258,7 @@ def run_pipeline(run: dict) -> None:
                 "at": f"{fmt_time(start)} - {fmt_time(end)}", "text": c["text"],
                 "download_name": f"{n:03d} - {safe_filename(c['title'])}.mp4",
                 "render_seconds": round(time.time() - began, 1),
+                "policy": _clip_policy(c["policy"], bleeped),
             })
             save_run(run)
 
@@ -342,6 +373,8 @@ def parse_settings(data: dict) -> dict:
         "show_title": bool(data.get("show_title", True)),
         "whisper": data.get("whisper") if data.get("whisper") in ("base", "small", "medium") else "base",
         "use_ai": bool(data.get("use_ai", True)),
+        "safe_mode": bool(data.get("safe_mode", True)),
+        "bleep": bool(data.get("bleep", True)),
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
 
@@ -364,7 +397,7 @@ def start_run(source: Path, settings: dict) -> str:
         "clips": [], "planned": None, "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         # every key exists from the start: the page reads this dict while the job thread fills it in
         "cancel": False, "warning": None, "note": None, "error": None, "failed": [], "stats": None,
-        "video_duration": None, "finished_at": None, "engines": {},
+        "video_duration": None, "finished_at": None, "engines": {}, "policy_note": None,
     }
     runs[run_id] = run
     save_run(run)
@@ -422,6 +455,72 @@ def ai_settings():
 @app.route("/api/ai/test", methods=["POST"])
 def ai_test():
     return jsonify(ai.test_keys(ai.load_keys()))
+
+
+# ---------- YouTube rules ----------
+
+def _policy_input() -> tuple[dict, str, str, str]:
+    data = request.get_json(silent=True) or {}
+    return data, str(data.get("title") or "")[:300], str(data.get("description") or "")[:5000], str(data.get("text") or "")[:60000]
+
+
+def _brain_from(data: dict):
+    host = str(data.get("host") or DEFAULT_HOST).strip()
+    host = host if host.startswith("http") else "http://" + host
+    return ai.build_brain({"use_ai": True, "host": host, "model": str(data.get("model") or "llama3")}, ai.load_keys())
+
+
+@app.route("/api/rules")
+def rules_book():
+    return jsonify(policy.load_rules() | {"questions": policy.QUESTIONS})
+
+
+@app.route("/api/policy/scan", methods=["POST"])
+def policy_scan():
+    _data, title, description, text = _policy_input()
+    return jsonify(policy.scan(title, description, text))
+
+
+@app.route("/api/policy/review", methods=["POST"])
+def policy_review():
+    data, title, description, text = _policy_input()
+    if not (title or description or text):
+        return jsonify({"error": "Paste a title, description or script first."}), 400
+    quick = policy.scan(title, description, text)
+    review = policy.ai_review(_brain_from(data), title, description, text, str(data.get("kind") or "video"))
+    verdict = quick["verdict"]
+    if review.get("ok") and policy.LEVELS[review["verdict"]] > policy.LEVELS[verdict]:
+        verdict = review["verdict"]
+    return jsonify({"verdict": verdict, "scan": quick, "ai": review})
+
+
+@app.route("/api/policy/fix", methods=["POST"])
+def policy_fix():
+    data, title, description, text = _policy_input()
+    if not (title or description or text):
+        return jsonify({"error": "Paste a title, description or script first."}), 400
+    issues = data.get("issues") if isinstance(data.get("issues"), list) else []
+    issues = issues or policy.scan(title, description, text)["findings"]
+    return jsonify(policy.ai_fix(_brain_from(data), title, description, text, issues, str(data.get("kind") or "video")))
+
+
+@app.route("/api/policy/ypp", methods=["POST"])
+def policy_ypp():
+    data = request.get_json(silent=True) or {}
+    return jsonify(policy.ypp_status(_int(data, "subs", 0, 0, 10**9), _int(data, "hours", 0, 0, 10**9),
+                                     _int(data, "shorts", 0, 0, 10**12), _int(data, "uploads", 0, 0, 10**6)))
+
+
+@app.route("/api/policy/channel", methods=["POST"])
+def policy_channel():
+    data = request.get_json(silent=True) or {}
+    return jsonify({"risks": policy.channel_risks(data.get("answers") or {})})
+
+
+@app.route("/api/policy/updates", methods=["POST"])
+def policy_updates():
+    data = request.get_json(silent=True) or {}
+    return jsonify(policy.check_updates(_brain_from(data)))
 
 
 # ---------- Find viral videos ----------
@@ -705,6 +804,18 @@ PAGE = r"""<!DOCTYPE html>
   .card .meta { color: var(--dim); font-size: 12px; }
   .card .actions { display: flex; gap: 6px; margin-top: auto; }
   .card .actions .btn, .card .actions button { flex: 1; text-align: center; padding: 8px; font-size: 13px; }
+  .verdict { border-radius: 8px; padding: 6px 9px; font-size: 12px; line-height: 1.4; }
+  .verdict.green { background: #12301f; color: var(--ok); }
+  .verdict.yellow { background: #3a2f0a; color: #ffcf4d; }
+  .verdict.red { background: #3a1512; color: var(--err); }
+  .verdict b { display: block; font-size: 13px; }
+  .issue { border-left: 3px solid var(--line); padding: 6px 10px; margin: 8px 0; background: #14161c; border-radius: 0 8px 8px 0; }
+  .issue.yellow { border-color: #ffcf4d; } .issue.red { border-color: var(--err); } .issue.info { border-color: var(--line); }
+  .rule { border-top: 1px solid var(--line); padding: 12px 0; }
+  .rule:first-child { border-top: 0; }
+  .rule h3 { margin: 0 0 4px; font-size: 15px; }
+  .rule .area { color: var(--dim); font-size: 12px; }
+  .rule ul { margin: 6px 0; padding-left: 20px; }
   .pending { border-style: dashed; align-items: center; justify-content: center; color: var(--dim); aspect-ratio: 9/16; font-size: 14px; text-align: center; padding: 10px; }
   .runs { list-style: none; padding: 0; margin: 0; }
   .runs li { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); flex-wrap: wrap; cursor: pointer; }
@@ -751,6 +862,7 @@ PAGE = r"""<!DOCTYPE html>
   <div class="tabs">
     <button id="tabBtnFind" data-tab="find">Find viral videos</button>
     <button id="tabBtnClips" data-tab="clips">Make clips</button>
+    <button id="tabBtnRules" data-tab="rules">YouTube rules</button>
     <button id="aiToggle" class="ghost" style="margin-left:auto">AI engines: ...</button>
   </div>
 
@@ -831,6 +943,53 @@ PAGE = r"""<!DOCTYPE html>
     </div>
   </div>
 
+  <div id="tabRules" class="hide">
+    <div class="panel">
+      <h2>Check a video before you upload</h2>
+      <div class="msg" style="margin-bottom:10px">Paste the title, description and script (or spoken words). The instant check runs on this PC; <b>AI review</b> reads it against all of YouTube's rules.</div>
+      <label>Title</label><input type="text" id="pTitle" placeholder="Your video title">
+      <label style="margin-top:10px">Description</label><textarea id="pDesc" style="min-height:70px" placeholder="Optional"></textarea>
+      <label style="margin-top:10px">Script / what's said in the video</label><textarea id="pText" style="min-height:160px" placeholder="Paste the script or transcript"></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="ghost" id="pScan">Instant check</button>
+        <button id="pReview">AI review</button>
+        <button class="ghost" id="pFix">Fix it for me</button>
+        <span class="msg" id="pMsg"></span>
+      </div>
+      <div id="pResult" style="margin-top:12px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Can my channel get monetized?</h2>
+      <div class="grid">
+        <div><label>Subscribers</label><input type="number" id="ySubs" min="0" value="0"></div>
+        <div><label>Watch hours (last 12 months)</label><input type="number" id="yHours" min="0" value="0"></div>
+        <div><label>Shorts views (last 90 days)</label><input type="number" id="yShorts" min="0" value="0"></div>
+        <div><label>Public uploads (last 90 days)</label><input type="number" id="yUploads" min="0" value="0"></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button id="yCheck">Check</button></div>
+      <div id="yResult" style="margin-top:12px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Is my channel at risk?</h2>
+      <div class="msg" style="margin-bottom:8px">These are the rules that remove whole channels from monetization - tick what's true for you.</div>
+      <div id="qList"></div>
+      <div class="row" style="margin-top:12px"><button id="qCheck">Check my channel</button></div>
+      <div id="qResult" style="margin-top:12px"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">YouTube's rules, in plain English</h2>
+        <button class="ghost" id="updBtn">Check for rule updates</button>
+      </div>
+      <div class="msg" id="rulesAsOf" style="margin:6px 0 10px"></div>
+      <div id="updResult"></div>
+      <div id="rulesList"></div>
+    </div>
+  </div>
+
   <div id="tabClips">
   <div class="panel">
     <h2>1. Your video</h2>
@@ -869,6 +1028,8 @@ PAGE = r"""<!DOCTYPE html>
     </div>
     <label class="check"><input type="checkbox" id="useAi" checked> Let AI pick the viral moments (otherwise a built-in scorer does)</label>
     <label class="check"><input type="checkbox" id="showTitle" checked> Put a hook title at the top of each clip</label>
+    <label class="check"><input type="checkbox" id="safeMode" checked> Skip moments that break YouTube's rules (slurs, harassment, sexual content)</label>
+    <label class="check"><input type="checkbox" id="bleep" checked> Bleep swear words (and show them as F*** in the captions)</label>
     <details>
       <summary>Advanced</summary>
       <div class="grid" style="margin-top:12px">
@@ -900,6 +1061,7 @@ PAGE = r"""<!DOCTYPE html>
     <div class="note hide" id="runEngines"></div>
     <div class="warn hide" id="runWarn"></div>
     <div class="note hide" id="runNote"></div>
+    <div class="note hide" id="runPolicy"></div>
     <div class="error hide" id="runError"></div>
     <div class="clips" id="clips" style="margin-top:16px"></div>
   </div>
@@ -915,7 +1077,7 @@ const $ = (id) => document.getElementById(id);
 function esc(s) { const d = document.createElement("div"); d.innerText = s == null ? "" : String(s); return d.innerHTML; }
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
-const SETTINGS = ["count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle"];
+const SETTINGS = ["count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -1012,6 +1174,7 @@ function clipSettings() {
     count: +$("count").value, min_len: +$("minLen").value, max_len: +$("maxLen").value,
     layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
+    safe_mode: $("safeMode").checked, bleep: $("bleep").checked,
   };
 }
 
@@ -1036,15 +1199,21 @@ function clipCard(c) {
     <div class="body">
       <div class="t">${esc(c.title)}</div>
       <div class="meta">${c.length}s &middot; from ${esc(c.at)} &middot; score ${c.score}${c.rated_by === "heuristic" ? " (built-in)" : " &middot; " + esc(c.rated_by)}</div>
+      ${policyBadge(c.policy)}
       <div class="actions">
         <a class="btn" href="${c.download}" download>Download</a>
         <button class="ghost copy">Copy title</button>
       </div>
+      <button class="ghost rulescheck" style="padding:6px;font-size:12px">Full rules check</button>
     </div>`;
   el.querySelector(".media").onclick = () => {
     const media = el.querySelector(".media");
     if (media.querySelector("video")) return;
     media.innerHTML = `<video src="${c.url}" controls autoplay playsinline></video><span class="num">#${c.n}</span>`;
+  };
+  el.querySelector(".rulescheck").onclick = () => {
+    $("pTitle").value = c.title; $("pDesc").value = ""; $("pText").value = c.text || "";
+    showTab("rules"); $("pTitle").scrollIntoView({ behavior: "smooth", block: "center" }); runPolicyCheck(true);
   };
   el.querySelector(".copy").onclick = async (e) => {
     try { await navigator.clipboard.writeText(c.title); e.target.innerText = "Copied"; } catch (err) { e.target.innerText = "Can't copy"; }
@@ -1072,6 +1241,7 @@ async function poll() {
   $("runMsg").innerText = run.message || "";
   $("runWarn").innerText = run.warning || ""; $("runWarn").classList.toggle("hide", !run.warning);
   $("runNote").innerText = run.note || ""; $("runNote").classList.toggle("hide", !run.note);
+  $("runPolicy").innerText = run.policy_note ? "YouTube rules: " + run.policy_note : ""; $("runPolicy").classList.toggle("hide", !run.policy_note);
   const eng = run.engines || {};
   const engText = [eng.transcribe && "Speech: " + eng.transcribe, eng.moments && "Moments picked by: " + eng.moments].filter(Boolean).join("  \u00b7  ");
   $("runEngines").innerText = engText; $("runEngines").classList.toggle("hide", !engText);
@@ -1120,10 +1290,10 @@ async function loadRuns() {
 
 // ---------- Find viral videos ----------
 function showTab(name) {
-  $("tabFind").classList.toggle("hide", name !== "find");
-  $("tabClips").classList.toggle("hide", name !== "clips");
-  $("tabBtnFind").classList.toggle("on", name === "find");
-  $("tabBtnClips").classList.toggle("on", name === "clips");
+  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"]]) {
+    $(tab).classList.toggle("hide", name !== id);
+    $(btn).classList.toggle("on", name === id);
+  }
   store.set("cf_tab", name);
 }
 document.querySelectorAll(".tabs button[data-tab]").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
@@ -1281,6 +1451,92 @@ async function pollDownloads() {
   if (waiting) dlTimer = setTimeout(pollDownloads, 1500);
 }
 
+// ---------- YouTube rules ----------
+const VERDICT_TEXT = { green: "Looks ad-friendly", yellow: "Risk of limited ads", red: "Risk of no ads, removal or a strike" };
+function policyBadge(p) {
+  if (!p) return "";
+  return `<div class="verdict ${p.verdict}"><b>${VERDICT_TEXT[p.verdict]}</b>${(p.notes || []).map((n) => esc(n)).join("<br>")}</div>`;
+}
+function issueHtml(i) {
+  return `<div class="issue ${esc(i.severity)}"><b>${esc(i.rule)}</b>${i.where ? " &middot; " + esc(i.where) : ""}${i.quote ? ` &middot; "<i>${esc(i.quote)}</i>"` : ""}
+    <div>${esc(i.why)}</div>${i.fix ? `<div class="msg">Fix: ${esc(i.fix)}</div>` : ""}</div>`;
+}
+function policyBody() { return { title: $("pTitle").value, description: $("pDesc").value, text: $("pText").value, host: $("host").value, model: $("model").value }; }
+let lastIssues = [];
+async function runPolicyCheck(quickOnly) {
+  $("pMsg").innerText = quickOnly ? "" : "The AI is reading it...";
+  try {
+    if (quickOnly) {
+      const r = await api("/api/policy/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(policyBody()) });
+      lastIssues = r.findings;
+      $("pResult").innerHTML = `<div class="verdict ${r.verdict}"><b>${VERDICT_TEXT[r.verdict]} (instant check)</b></div>` +
+        (r.findings.length ? r.findings.map(issueHtml).join("") : '<div class="msg">Nothing found by the instant check. For a full check, click AI review.</div>');
+      return;
+    }
+    const r = await api("/api/policy/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(policyBody()) });
+    const aiPart = r.ai.ok
+      ? `<div class="msg" style="margin:8px 0">${esc(r.ai.summary)} <i>(checked by ${esc(r.ai.by)})</i></div>` + r.ai.issues.map(issueHtml).join("")
+      : `<div class="warn">No AI could review it (${esc(r.ai.error)}) - only the instant check below.</div>`;
+    lastIssues = [...r.scan.findings, ...(r.ai.ok ? r.ai.issues : [])];
+    $("pResult").innerHTML = `<div class="verdict ${r.verdict}"><b>${VERDICT_TEXT[r.verdict]}</b></div>` + aiPart +
+      (r.scan.findings.length ? `<div class="msg" style="margin-top:10px">Instant check:</div>` + r.scan.findings.map(issueHtml).join("") : "");
+    $("pMsg").innerText = "";
+  } catch (e) { $("pMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+}
+$("pScan").onclick = () => runPolicyCheck(true);
+$("pReview").onclick = () => runPolicyCheck(false);
+$("pFix").onclick = async () => {
+  $("pMsg").innerText = "The AI is rewriting it...";
+  try {
+    const r = await api("/api/policy/fix", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...policyBody(), issues: lastIssues }) });
+    if (!r.ok) { $("pMsg").innerHTML = `<span class="error">No AI could rewrite it (${esc(r.error)}).</span>`; return; }
+    if (r.title) $("pTitle").value = r.title;
+    if (r.description) $("pDesc").value = r.description;
+    if (r.script) $("pText").value = r.script;
+    $("pMsg").innerText = "";
+    $("pResult").innerHTML = `<div class="verdict ${r.check.verdict}"><b>Rewritten by ${esc(r.by)} - now: ${VERDICT_TEXT[r.check.verdict]}</b>${r.changes.map((c) => "&bull; " + esc(c)).join("<br>")}</div>
+      ${r.check.findings.map(issueHtml).join("")}<div class="msg">The boxes above now hold the safe version - click AI review to double-check.</div>`;
+  } catch (e) { $("pMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+};
+$("yCheck").onclick = async () => {
+  const r = await api("/api/policy/ypp", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subs: +$("ySubs").value, hours: +$("yHours").value, shorts: +$("yShorts").value, uploads: +$("yUploads").value }) });
+  $("yResult").innerHTML = r.tiers.map((t) => `<div class="verdict ${t.met ? "green" : "yellow"}" style="margin-bottom:8px">
+      <b>${t.met ? "&#10003;" : "&#10007;"} ${esc(t.name)}</b>${esc(t.unlocks)}<br><span style="opacity:.8">Needs: ${esc(t.needs)}</span>
+      ${t.missing.length ? "<br>Still missing: " + t.missing.map(esc).join("; ") : "<br>You qualify - apply in YouTube Studio &rarr; Earn."}</div>`).join("") +
+    `<div class="warn">${esc(r.note_2027)}</div><div class="msg" style="margin-top:6px">Also required: ${r.general.map(esc).join(" &middot; ")}</div>`;
+};
+let rulesBook = null;
+async function loadRules() {
+  rulesBook = await api("/api/rules");
+  $("rulesAsOf").innerText = `Summary as of ${rulesBook.as_of}. ${rulesBook.note}`;
+  $("qList").innerHTML = rulesBook.questions.map(([id, q]) => `<label class="check"><input type="checkbox" data-q="${esc(id)}"> ${esc(q)}</label>`).join("");
+  $("rulesList").innerHTML = rulesBook.rules.map((r) => `<div class="rule">
+      <h3>${esc(r.title)}</h3><div class="area">${esc(r.area)}</div>
+      <div>${esc(r.summary)}</div>
+      <div class="msg" style="margin-top:4px"><b>What happens:</b> ${esc(r.consequence)}</div>
+      <ul>${r.safe.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <div class="msg">Sources: ${r.sources.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--dim)">${esc(u.replace(/^https?:\/\/(www\.)?/, "").slice(0, 45))}</a>`).join(" &middot; ")}</div>
+    </div>`).join("");
+}
+$("qCheck").onclick = async () => {
+  const answers = {};
+  document.querySelectorAll("[data-q]").forEach((c) => (answers[c.dataset.q] = c.checked));
+  const r = await api("/api/policy/channel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) });
+  $("qResult").innerHTML = r.risks.map((x) => `<div class="verdict ${x.level}" style="margin-bottom:8px"><b>${esc(x.rule)}</b>${esc(x.text)}</div>`).join("");
+};
+$("updBtn").onclick = async () => {
+  $("updResult").innerHTML = '<div class="msg">Reading YouTube\'s official policy pages...</div>';
+  try {
+    const r = await api("/api/policy/updates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ host: $("host").value, model: $("model").value }) });
+    const icon = { same: "&#10003; no change", changed: "&#9888; CHANGED", saved: "saved", error: "&#10007; couldn't load" };
+    $("updResult").innerHTML = (r.summary ? `<div class="verdict yellow" style="margin-bottom:10px"><b>What changed (explained by ${esc(r.summary.by)})</b>${r.summary.points.map((x) => "&bull; " + esc(x)).join("<br>")}</div>` : "") +
+      r.pages.map((pg) => `<div class="issue ${pg.status === "changed" ? "yellow" : pg.status === "error" ? "red" : "info"}">
+        <b>${icon[pg.status]}</b> &middot; <a href="${esc(pg.url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(pg.name)}</a>
+        <div class="msg" style="white-space:pre-wrap">${esc(pg.detail).slice(0, 1500)}</div></div>`).join("");
+  } catch (e) { $("updResult").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+};
+
 // ---------- AI engines ----------
 const AI_LINKS = {
   gemini: ["https://aistudio.google.com/apikey", "AIza..."], groq: ["https://console.groq.com/keys", "gsk_..."],
@@ -1338,6 +1594,7 @@ $("aiTest").onclick = async () => {
 (async () => {
   loadSettings();
   loadAi();
+  loadRules();
   showTab(store.get("cf_tab") || "find");
   await loadStatus();
   await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads()]);
