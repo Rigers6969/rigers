@@ -1266,8 +1266,10 @@ PAGE = r"""<!DOCTYPE html>
           <ol class="msg" style="margin:8px 0 0;padding-left:20px;line-height:1.7">
             <li>Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" style="color:var(--accent)">console.cloud.google.com</a> and create a project (top bar &rarr; New project), or use the one your API key is in.</li>
             <li>APIs &amp; Services &rarr; Library &rarr; search <b>YouTube Data API v3</b> &rarr; Enable.</li>
-            <li>APIs &amp; Services &rarr; OAuth consent screen &rarr; External &rarr; fill in the app name and your email. Under <b>Test users</b> add your Google address. Then press <b>Publish app</b> (otherwise logins expire every 7 days; Google shows a "not verified" warning for your own app - click Advanced &rarr; continue).</li>
-            <li>APIs &amp; Services &rarr; Credentials &rarr; Create credentials &rarr; OAuth client ID &rarr; type <b>Desktop app</b> &rarr; Create &rarr; <b>Download JSON</b>.</li>
+            <li>Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener" style="color:var(--accent)">Google Auth Platform</a> (same project). If you see <b>Get started</b>: app name <b>Clip Factory</b>, your email, Audience <b>External</b>, your email again, tick I agree &rarr; <b>Create</b>.</li>
+            <li>Left menu &rarr; <b>Audience</b> &rarr; under Publishing status click <b>Publish app</b> &rarr; Confirm (otherwise logins expire every 7 days).</li>
+            <li>Left menu &rarr; <b>Clients</b> &rarr; <b>+ Create client</b> &rarr; Application type <b>Desktop app</b> &rarr; Create &rarr; click the download button.</li>
+            <li>When you connect, Google says "Google hasn't verified this app" - that's normal for your own app: click <b>Advanced</b> &rarr; <b>Go to Clip Factory</b> &rarr; Continue.</li>
             <li>Rename the file to <code>client_secret.json</code> and put it in the <code>clip-factory</code> folder. Then reload this page.</li>
           </ol></details>
       </div></div>

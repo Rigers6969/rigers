@@ -149,8 +149,8 @@ def connect_async(cid: str) -> None:
         except Exception as exc:
             msg = str(exc)
             if "access_denied" in msg or "403" in msg:
-                msg = ("Google said access_denied. In Google Cloud Console -> OAuth consent screen, add your Google "
-                       "address under Test users (or press Publish app), then try again.")
+                msg = ("Google said access_denied. In Google Cloud -> Google Auth Platform -> Audience, press Publish app "
+                       "(or add your Google address under Test users), then try again.")
             state["connect_error"] = msg[:400]
         finally:
             state["connecting"] = None
