@@ -138,8 +138,9 @@ def connect_async(cid: str) -> None:
         try:
             from google_auth_oauthlib.flow import InstalledAppFlow
             flow = InstalledAppFlow.from_client_secrets_file(str(secret), SCOPES)
+            # prompt=select_account: always ask which Google account / channel, never reuse the last login
             creds = flow.run_local_server(port=0, open_browser=True, timeout_seconds=600,
-                                          authorization_prompt_message="",
+                                          prompt="select_account consent", authorization_prompt_message="",
                                           success_message="Connected - you can close this tab and go back to Clip Factory.")
             info = _whoami(creds)
             TOKENS_DIR.mkdir(exist_ok=True)
