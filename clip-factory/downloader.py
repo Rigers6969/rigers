@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
+import upload_text
 from trends import _QuietLogger, clean_error
 
 APP_DIR = Path(__file__).resolve().parent
@@ -195,6 +196,10 @@ def _download(d: dict) -> None:
     if not path.exists():
         d.update(status="error", error="The download finished but the file can't be found in the input folder.")
         return
+    try:  # remember where it came from - clip descriptions credit the show and link the full video
+        upload_text.save_source(path, info)
+    except Exception:
+        pass
     title = d["title"] if d["title"] != d["url"] else (info.get("title") or d["title"])
     d.update(status="done", percent=100, file=path.name, title=title,
              message=f"Downloaded - saved in the input folder as {path.name}")

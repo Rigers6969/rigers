@@ -30,6 +30,7 @@ import policy
 import renderer
 import transcriber
 import trends
+import upload_text
 
 APP_DIR = Path(__file__).resolve().parent
 INPUT_DIR = APP_DIR / "input"
@@ -225,6 +226,29 @@ def run_pipeline(run: dict) -> None:
                            f"(they never overlap), so you'll get {len(picks)} instead of {s['count']}.")
         update("render", f"Found {len(picks)} moments - cutting clip 1...", 50, save=True)
 
+        # upload text (description + tags) for every clip: the built-in writer is instant; when an AI is
+        # available it writes better ones alongside the rendering, and they replace the built-in ones
+        src = upload_text.source_for(source)
+        texts: dict[int, dict] = {}
+        texts_lock = threading.Lock()
+        items = [{"n": n, "title": c["title"], "text": c["text"]} for n, c in enumerate(picks, start=1)]
+
+        def write_texts():
+            for k in range(0, len(items), 10):
+                if cancelled():
+                    return
+                got = upload_text.ai_batch(brain, items[k:k + 10], src, s["kind"], s["channel_name"])
+                with texts_lock:
+                    texts.update(got)
+                    for clip in run["clips"]:
+                        if clip["n"] in got:
+                            clip["upload"] = got[clip["n"]]
+                if got:
+                    save_run(run)
+
+        if brain:
+            threading.Thread(target=write_texts, daemon=True).start()
+
         # 3. render, best first (50-100%) - each clip is downloadable as soon as it's finished
         duration = info["duration"] or (words[-1]["end"] + 1)
         failures_in_a_row = 0
@@ -260,7 +284,11 @@ def run_pipeline(run: dict) -> None:
                 "download_name": f"{n:03d} - {safe_filename(c['title'])}.mp4",
                 "render_seconds": round(time.time() - began, 1),
                 "policy": _clip_policy(c["policy"], bleeped),
+                "upload": None,
             })
+            with texts_lock:
+                run["clips"][-1]["upload"] = texts.get(n) or upload_text.fallback(
+                    {"title": c["title"], "text": c["text"]}, src, s["kind"], s["channel_name"])
             save_run(run)
 
         made = len(run["clips"])
@@ -376,6 +404,7 @@ def parse_settings(data: dict) -> dict:
         "use_ai": bool(data.get("use_ai", True)),
         "safe_mode": bool(data.get("safe_mode", True)),
         "kind": "podcast" if data.get("kind") == "podcast" else "",
+        "channel_name": re.sub(r"[\r\n]+", " ", str(data.get("channel_name") or "")).strip()[:60],
         "bleep": bool(data.get("bleep", True)),
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
@@ -772,6 +801,9 @@ def zip_run(run_id):
             if (run_dir / c["file"]).exists():
                 zf.write(run_dir / c["file"], c.get("download_name") or c["file"])
         zf.writestr("titles.txt", "\n".join(f"{c['n']:03d}  {c['title']}" for c in run["clips"]))
+        for c in run["clips"]:  # title + description + tags for each clip, ready to paste
+            if c.get("upload"):
+                zf.writestr(f"{c['n']:03d} - upload text.txt", upload_text.as_text(c["upload"]))
     return send_file(zip_path, as_attachment=True, download_name=f"{safe_filename(Path(run['video']).stem)} - clips.zip")
 
 
@@ -1100,6 +1132,7 @@ PAGE = r"""<!DOCTYPE html>
       <div><label>Ollama model</label><select id="model"></select></div>
     </div>
     <label class="check"><input type="checkbox" id="useAi" checked> Let AI pick the viral moments (otherwise a built-in scorer does)</label>
+    <div style="max-width:420px;margin:4px 0 6px"><label for="channelName">Your channel name (used at the end of each description)</label><input type="text" id="channelName" placeholder="e.g. Hot Mic Moments"></div>
     <label class="check"><input type="checkbox" id="showTitle" checked> Put a hook title at the top of each clip</label>
     <label class="check"><input type="checkbox" id="safeMode" checked> Skip moments that break YouTube's rules (slurs, harassment, sexual content)</label>
     <label class="check"><input type="checkbox" id="bleep" checked> Bleep swear words (and show them as F*** in the captions)</label>
@@ -1150,7 +1183,7 @@ const $ = (id) => document.getElementById(id);
 function esc(s) { const d = document.createElement("div"); d.innerText = s == null ? "" : String(s); return d.innerHTML; }
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
-const SETTINGS = ["kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep"];
+const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -1247,7 +1280,7 @@ function clipSettings() {
     count: +$("count").value, min_len: +$("minLen").value, max_len: +$("maxLen").value,
     layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
-    safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value,
+    safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
   };
 }
 
@@ -1277,6 +1310,11 @@ function clipCard(c) {
         <a class="btn" href="${c.download}" download>Download</a>
         <button class="ghost copy">Copy title</button>
       </div>
+      <div class="actions">
+        <button class="ghost copydesc">Copy description</button>
+        <button class="ghost copytags">Copy tags</button>
+      </div>
+      <details class="uptext"><summary class="msg" style="cursor:pointer">Upload text</summary><div class="uptext-body"></div></details>
       <button class="ghost rulescheck" style="padding:6px;font-size:12px">Full rules check</button>
     </div>`;
   el.querySelector(".media").onclick = () => {
@@ -1288,11 +1326,25 @@ function clipCard(c) {
     $("pTitle").value = c.title; $("pDesc").value = ""; $("pText").value = c.text || "";
     showTab("rules"); $("pTitle").scrollIntoView({ behavior: "smooth", block: "center" }); runPolicyCheck(true);
   };
-  el.querySelector(".copy").onclick = async (e) => {
-    try { await navigator.clipboard.writeText(c.title); e.target.innerText = "Copied"; } catch (err) { e.target.innerText = "Can't copy"; }
-    setTimeout(() => (e.target.innerText = "Copy title"), 1500);
+  const copy = async (btn, text, label) => {
+    try { await navigator.clipboard.writeText(text); btn.innerText = "Copied"; } catch (err) { btn.innerText = "Can't copy"; }
+    setTimeout(() => (btn.innerText = label), 1500);
   };
+  el.querySelector(".copy").onclick = (e) => copy(e.target, c.title, "Copy title");
+  el.querySelector(".copydesc").onclick = (e) => copy(e.target, el._upload ? el._upload.description : c.title, "Copy description");
+  el.querySelector(".copytags").onclick = (e) => copy(e.target, el._upload ? el._upload.tags.join(", ") : "", "Copy tags");
+  setUpload(el, c.upload);
   return el;
+}
+
+function setUpload(el, up) {
+  el._upload = up || null;
+  const body = el.querySelector(".uptext-body");
+  if (!up) { body.innerHTML = '<div class="msg">Writing the description...</div>'; return; }
+  body.innerHTML = `<div class="msg" style="margin-top:6px">Description${up.by && up.by !== "built-in" ? " (written by " + esc(up.by) + ")" : ""}</div>
+    <textarea readonly style="min-height:120px;font-size:12px">${esc(up.description)}</textarea>
+    <div class="msg" style="margin-top:6px">Tags</div>
+    <textarea readonly style="min-height:60px;font-size:12px">${esc(up.tags.join(", "))}</textarea>`;
 }
 
 function pendingCard(n, active) {
@@ -1328,7 +1380,12 @@ async function poll() {
 
   // finished clips appear one by one, in place, without touching ones already shown (so playing videos keep playing)
   for (const c of run.clips) {
-    if (shown.has(c.n)) continue;
+    if (shown.has(c.n)) {
+      // the AI's description can arrive after the clip - refresh just that card's upload text
+      const card = $("clips").querySelector(`.card[data-n="${c.n}"]`);
+      if (card && c.upload && (!card._upload || card._upload.by !== c.upload.by)) setUpload(card, c.upload);
+      continue;
+    }
     shown.add(c.n);
     const card = clipCard(c);
     const placeholder = $("clips").querySelector(`[data-pending="${c.n}"]`);
