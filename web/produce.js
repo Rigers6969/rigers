@@ -377,3 +377,55 @@ async function runAssemble(slug) {
 }
 
 loadVideos();
+
+
+// ---------- Ready-made videos ----------
+async function loadReady() {
+  const listEl = document.getElementById("ready-list");
+  if (!listEl) return;
+  let data;
+  try { data = await (await fetch("/api/auto/ready")).json(); } catch (e) { return; }
+  if (!data.videos || !data.videos.length) {
+    document.getElementById("ready-panel").classList.add("hidden");
+    return;
+  }
+  listEl.innerHTML = data.videos.map((v) => `
+    <label class="radio-label" style="display:flex; gap:10px; align-items:flex-start; margin:8px 0;">
+      <input type="checkbox" data-ready="${escapeHtml(v.name)}" ${v.made ? "" : "checked"}>
+      <span><b>${escapeHtml(v.title)}</b><br>
+        <span style="color:var(--text-dim);">about ${v.minutes} min &middot; ${v.words} words${v.made ? ` &middot; already made (${escapeHtml(v.made)})` : ""}</span></span>
+    </label>`).join("");
+}
+
+document.getElementById("ready-btn").addEventListener("click", async () => {
+  const names = [...document.querySelectorAll("[data-ready]")].filter((c) => c.checked).map((c) => c.dataset.ready);
+  const progressEl = document.getElementById("ready-progress");
+  const btn = document.getElementById("ready-btn");
+  if (!names.length) { progressEl.innerText = "Tick at least one video first."; return; }
+  btn.disabled = true;
+  progressEl.innerText = "Starting...";
+  const resp = await fetch("/api/auto/ready/produce", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      names,
+      channel: document.getElementById("channel-input").value.trim() || "Paper Trail",
+      voice: document.getElementById("voice-select").value,
+    }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) { progressEl.innerText = data.error || "Failed to start."; btn.disabled = false; return; }
+  pollJob(data.job_id, {
+    onProgress: (msg) => { progressEl.innerText = msg; },
+    onDone: (result) => {
+      const vids = result.videos || [];
+      progressEl.innerText = vids.map((v) => (v.error ? `Failed: ${v.topic} - ${v.error}` : `Done: ${v.slug}${v.video_error ? " (video problem: " + v.video_error + ")" : ""}`)).join("\n");
+      btn.disabled = false;
+      loadVideos();
+      loadReady();
+    },
+    onError: (err) => { progressEl.innerText = "Error: " + err; btn.disabled = false; },
+  });
+});
+
+loadReady();

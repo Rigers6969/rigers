@@ -218,8 +218,13 @@ def produce_video(
     style_slug: Optional[str] = None,
     length: Optional[str] = None,
     progress: Optional[ProgressCB] = None,
+    prepared: Optional[dict] = None,
 ) -> dict:
     """Runs the whole chain and writes everything to content/<slug>/.
+
+    prepared, if given, is a ready-made package (see ready_videos/): its
+    script, shots and metadata are used as they are, so no AI writer is
+    needed (writer may be None) - only voiceover, media and assembly run.
     Returns a summary dict the API layer can hand back to the frontend.
 
     style_slug, if given, names a profile saved under content/_styles/ by
@@ -255,16 +260,21 @@ def produce_video(
     video_dir.mkdir(parents=True)
     media_dir = video_dir / "media"
 
-    report("Writing script...")
-    script = writer.generate_script(topic, target_words=target_words, progress=lambda m: report(f"Script: {m}"))
+    prepared = prepared or {}
+    if prepared.get("script"):
+        report("Script: using the ready-made script")
+        script = prepared["script"].strip()
+    else:
+        report("Writing script...")
+        script = writer.generate_script(topic, target_words=target_words, progress=lambda m: report(f"Script: {m}"))
     (video_dir / "script.txt").write_text(script, encoding="utf-8")
 
     report("Planning shots...")
-    shots = generate_shot_list(writer, script)
+    shots = prepared.get("shots") or generate_shot_list(writer, script)
     (video_dir / "shots.json").write_text(json.dumps(shots, indent=2), encoding="utf-8")
 
     report("Writing YouTube/Instagram/Facebook metadata...")
-    metadata = generate_metadata(writer, topic, channel, script)
+    metadata = prepared.get("metadata") or generate_metadata(writer, topic, channel, script)
     (video_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     (video_dir / "notes.txt").write_text(format_notes(topic, channel, metadata), encoding="utf-8")
 
