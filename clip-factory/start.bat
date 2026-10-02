@@ -3,10 +3,10 @@ cd /d "%~dp0"
 title Clip Factory
 where python >nul 2>&1 || (echo Python is not installed - get it from python.org and tick "Add python.exe to PATH". & pause & exit /b)
 where ffmpeg >nul 2>&1 || echo WARNING: ffmpeg was not found - clips cannot be cut until it is installed. See README.md.
-if not exist ".installed-v2" (
+if not exist ".installed-v3" (
   echo Installing what Clip Factory needs, this takes a minute...
   python -m pip install -r requirements.txt || (echo Install failed - check your internet and run start.bat again. & pause & exit /b)
-  echo ok> .installed-v2
+  echo ok> .installed-v3
 )
 rem YouTube downloads need a JavaScript runtime - install Deno once if there's none
 where deno >nul 2>&1 && goto jsok

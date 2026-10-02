@@ -28,6 +28,7 @@ import downloader
 import moments
 import permissions
 import policy
+import publisher
 import renderer
 import transcriber
 import trends
@@ -672,6 +673,158 @@ def trends_summary():
     return jsonify({"ok": True}), 202
 
 
+# ---------- Publish ----------
+
+def _queue_public() -> list[dict]:
+    names = {c["id"]: c["name"] for c in channel_stats.load_config()["channels"]}
+    out = []
+    for it in publisher.load_queue():
+        out.append(dict(it, channel=names.get(it["cid"], "(pick a channel)"), file_name=Path(it["file"]).name,
+                        missing=not Path(it["file"]).exists()))
+    return sorted(out, key=lambda i: (i["when"] or "9999", i["added"]))
+
+
+@app.route("/api/publish")
+def publish_state():
+    s = publisher.load_settings()
+    secret = publisher.client_secret_path()
+    return jsonify({
+        "approved": s["approved"], "client_secret": str(secret) if secret else None,
+        "channels": [{k: c.get(k) for k in ("id", "name", "ref", "connected", "token", "slots")} for c in publisher.channels()],
+        "connecting": publisher.state["connecting"], "connect_error": publisher.state["connect_error"],
+        "uploading": publisher.state["uploading"], "queue": _queue_public(), "quota": publisher.quota(),
+        "weekdays": publisher.WEEKDAYS,
+    })
+
+
+@app.route("/api/publish/sources")
+def publish_sources():
+    runs_out = []
+    if OUTPUT_DIR.exists():
+        for d in sorted(OUTPUT_DIR.iterdir(), reverse=True)[:30]:
+            run = load_run(d.name) if d.is_dir() else None
+            if run and run.get("clips"):
+                runs_out.append({"id": run["id"], "video": run["video"], "clips": len(run["clips"]), "created": run.get("created")})
+    return jsonify({"runs": runs_out, "wayne": publisher.wayne_videos()})
+
+
+def _publish_body() -> dict:
+    return request.get_json(silent=True) or {}
+
+
+@app.route("/api/publish/connect", methods=["POST"])
+def publish_connect():
+    try:
+        publisher.connect_async(str(_publish_body().get("cid") or ""))
+    except publisher.PublishError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"ok": True}), 202
+
+
+@app.route("/api/publish/disconnect", methods=["POST"])
+def publish_disconnect():
+    publisher.disconnect(str(_publish_body().get("cid") or ""))
+    return publish_state()
+
+
+@app.route("/api/publish/approved", methods=["POST"])
+def publish_approved():
+    s = publisher.load_settings()
+    s["approved"] = bool(_publish_body().get("approved"))
+    publisher.save_settings(s)
+    return publish_state()
+
+
+@app.route("/api/publish/add", methods=["POST"])
+def publish_add():
+    data = _publish_body()
+    items = []
+    if data.get("run_id"):
+        run = load_run(str(data["run_id"]))
+        if not run:
+            return jsonify({"error": "That clip run doesn't exist."}), 404
+        for c in run.get("clips", []):
+            up = c.get("upload") or {}
+            items.append({"file": str(OUTPUT_DIR / run["id"] / c["file"]), "kind": "short", "cid": str(data.get("cid") or ""),
+                          "title": up.get("title") or c["title"], "description": up.get("description") or c["title"],
+                          "tags": up.get("tags") or [], "source": f"Clip Factory: {run['video']} #{c['n']}"})
+    for w in data.get("wayne") or []:
+        if isinstance(w, dict):
+            items.append(w)
+    added = publisher.add_items(items)
+    return jsonify({"added": added})
+
+
+@app.route("/api/publish/fill", methods=["POST"])
+def publish_fill():
+    return jsonify({"filled": publisher.fill_schedule()})
+
+
+@app.route("/api/publish/item/<item_id>", methods=["POST"])
+def publish_item(item_id):
+    try:
+        publisher.update_item(item_id, _publish_body())
+    except publisher.PublishError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return publish_state()
+
+
+@app.route("/api/publish/item/<item_id>/remove", methods=["POST"])
+def publish_remove(item_id):
+    publisher.remove_item(item_id)
+    return publish_state()
+
+
+@app.route("/api/publish/item/<item_id>/upload", methods=["POST"])
+def publish_upload(item_id):
+    test = bool(_publish_body().get("test"))
+    item = next((i for i in publisher.load_queue() if i["id"] == item_id), None)
+    if not item:
+        return jsonify({"error": "That item isn't in the queue any more."}), 404
+    if publisher.state["uploading"]:
+        return jsonify({"error": "Another upload is running - wait for it to finish."}), 409
+    publisher.state["uploading"] = item_id
+
+    def work():
+        try:
+            publisher._set(item_id, status="uploading", error="")
+            res = publisher.upload_item(item, test=test, progress=lambda pct: publisher._set(item_id, progress=pct))
+            if test:  # a private test copy - the item stays on the to-do list
+                note = ("Test upload done (private) - open the link: if YouTube Studio shows 'Locked as private', Google "
+                        "hasn't approved the app yet. Delete the test copy in YouTube Studio afterwards. " + res["note"]).strip()
+                publisher._set(item_id, status="waiting", url=res["url"], error=note, progress=0, test=True)
+            else:
+                publisher._set(item_id, status="uploaded", video_id=res["video_id"], url=res["url"], error=res["note"],
+                               progress=100, uploaded_at=time.strftime("%Y-%m-%d %H:%M"), test=False)
+        except Exception as exc:
+            publisher._set(item_id, status="failed", error=str(exc)[:300])
+        finally:
+            publisher.state["uploading"] = None
+
+    threading.Thread(target=work, daemon=True).start()
+    return jsonify({"ok": True}), 202
+
+
+@app.route("/api/publish/reveal", methods=["POST"])
+def publish_reveal():
+    item = next((i for i in publisher.load_queue() if i["id"] == str(_publish_body().get("id"))), None)
+    if not item or not Path(item["file"]).exists():
+        return jsonify({"error": "The file isn't there any more."}), 404
+    try:
+        if os.name == "nt":
+            subprocess.Popen(["explorer", "/select,", str(Path(item["file"]))])
+        else:
+            subprocess.Popen(["xdg-open", str(Path(item["file"]).parent)])
+    except Exception as exc:
+        return jsonify({"error": str(exc), "path": item["file"]}), 500
+    return jsonify({"ok": True, "path": item["file"]})
+
+
+@app.route("/api/publish/audit")
+def publish_audit():
+    return jsonify({"text": publisher.audit_text()})
+
+
 # ---------- My channels (analyzer) ----------
 
 @app.route("/api/stats")
@@ -950,6 +1103,20 @@ PAGE = r"""<!DOCTYPE html>
   .tbl th { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
   .tbl td.r, .tbl th.r { text-align: right; }
   .tblwrap { overflow-x: auto; }
+  .step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .step:first-of-type { border-top: 0; }
+  .step .n { width: 30px; height: 30px; border-radius: 50%; background: #23262f; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+  .step .n.ok { background: var(--ok); color: #111; }
+  .conn { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+  .conn b { min-width: 140px; }
+  .qday { margin-top: 14px; font-weight: 700; color: var(--dim); text-transform: uppercase; font-size: 12px; letter-spacing: .06em; }
+  .qitem { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; background: #14161c; }
+  .qitem .time { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .qitem .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .qitem .acts button, .qitem .acts a { padding: 5px 10px; font-size: 12px; }
+  .banner { border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 10px; }
+  .banner.manual { background: #3a2f0a; color: #ffcf4d; }
+  .banner.auto { background: #12301f; color: var(--ok); }
   .chrow { display: grid; grid-template-columns: 1.2fr 2fr; gap: 10px; align-items: center; margin-bottom: 8px; }
   .tabs { display: flex; gap: 8px; margin: 0 0 18px; flex-wrap: wrap; }
   .tabs button { background: var(--panel); color: var(--dim); border: 1px solid var(--line); font-size: 15px; padding: 11px 20px; }
@@ -992,6 +1159,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="tabBtnClips" data-tab="clips">Make clips</button>
     <button id="tabBtnRules" data-tab="rules">YouTube rules</button>
     <button id="tabBtnStats" data-tab="stats">My channels</button>
+    <button id="tabBtnPub" data-tab="pub">Publish</button>
     <button id="aiToggle" class="ghost" style="margin-left:auto">AI engines: ...</button>
   </div>
 
@@ -1085,6 +1253,65 @@ PAGE = r"""<!DOCTYPE html>
       <div id="summary"></div>
       <div class="warn hide" id="failedMsg"></div>
       <div class="vids" id="vids"></div>
+    </div>
+  </div>
+
+  <div id="tabPub" class="hide">
+    <div class="panel">
+      <h2>Set up the publisher (once)</h2>
+      <div class="step"><div class="n" id="st1n">1</div><div>
+        <b>Google project file (client_secret.json)</b>
+        <div class="msg" id="st1msg"></div>
+        <details style="margin-top:6px"><summary class="msg" style="cursor:pointer">How to get it (10 minutes, free)</summary>
+          <ol class="msg" style="margin:8px 0 0;padding-left:20px;line-height:1.7">
+            <li>Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" style="color:var(--accent)">console.cloud.google.com</a> and create a project (top bar &rarr; New project), or use the one your API key is in.</li>
+            <li>APIs &amp; Services &rarr; Library &rarr; search <b>YouTube Data API v3</b> &rarr; Enable.</li>
+            <li>APIs &amp; Services &rarr; OAuth consent screen &rarr; External &rarr; fill in the app name and your email. Under <b>Test users</b> add your Google address. Then press <b>Publish app</b> (otherwise logins expire every 7 days; Google shows a "not verified" warning for your own app - click Advanced &rarr; continue).</li>
+            <li>APIs &amp; Services &rarr; Credentials &rarr; Create credentials &rarr; OAuth client ID &rarr; type <b>Desktop app</b> &rarr; Create &rarr; <b>Download JSON</b>.</li>
+            <li>Rename the file to <code>client_secret.json</code> and put it in the <code>clip-factory</code> folder. Then reload this page.</li>
+          </ol></details>
+      </div></div>
+      <div class="step"><div class="n" id="st2n">2</div><div>
+        <b>Connect each channel</b>
+        <div class="msg">Google's login opens in your browser. When it asks which account or channel to use, pick <b>that</b> channel. The channels come from the My channels tab.</div>
+        <div id="connList" style="margin-top:6px"></div>
+        <div class="error hide" id="connErr"></div>
+      </div></div>
+      <div class="step"><div class="n" id="st3n">3</div><div>
+        <b>Google's approval for automatic uploads</b>
+        <div class="msg">Until Google approves your app (free, usually 1-4 weeks), YouTube locks every video it uploads as private. Until then the schedule below is a checklist you post from yourself.</div>
+        <div class="row" style="margin-top:8px">
+          <button class="ghost" id="auditBtn">Prepare the approval request</button>
+          <label class="check" style="margin:0"><input type="checkbox" id="approvedChk"> Google approved my app - upload automatically</label>
+        </div>
+        <div class="hide" id="auditBox" style="margin-top:10px">
+          <div class="msg">Open <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" rel="noopener" style="color:var(--accent)">Google's form</a> and copy these answers into it:</div>
+          <textarea id="auditText" readonly style="min-height:260px;margin-top:6px;font-size:12px"></textarea>
+          <button class="ghost" id="auditCopy" style="margin-top:6px">Copy all</button>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Add videos to the schedule</h2>
+      <div class="grid" style="align-items:end">
+        <div><label for="addRun">Clips from Clip Factory</label><select id="addRun"></select></div>
+        <div><label for="addRunCh">Post them on</label><select id="addRunCh"></select></div>
+        <div><button id="addRunBtn">Add these clips</button></div>
+      </div>
+      <div style="margin-top:16px"><div class="row" style="justify-content:space-between"><label style="margin:0">Finished videos from Wayne Factory</label><button class="ghost" id="addAllWayne">Add all</button></div>
+        <div id="wayneList" class="msg" style="margin-top:6px">Looking for videos...</div></div>
+      <div class="msg" id="addMsg" style="margin-top:8px"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Schedule</h2>
+        <div class="row"><span class="msg" id="quotaMsg"></span><button id="fillBtn">Fill the schedule</button></div>
+      </div>
+      <div class="msg" style="margin:6px 0 10px" id="slotsMsg"></div>
+      <div id="modeBanner"></div>
+      <div id="queueList"></div>
     </div>
   </div>
 
@@ -1524,7 +1751,7 @@ async function loadRuns() {
 
 // ---------- Find viral videos ----------
 function showTab(name) {
-  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"]]) {
+  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"], ["tabPub", "tabBtnPub", "pub"]]) {
     $(tab).classList.toggle("hide", name !== id);
     $(btn).classList.toggle("on", name === id);
   }
@@ -1849,6 +2076,142 @@ $("updBtn").onclick = async () => {
   } catch (e) { $("updResult").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
 };
 
+// ---------- Publish ----------
+let pubData = null, pubTimer = null;
+const chColor = (cid) => { const list = statsData ? statsData.config.channels : (pubData ? pubData.channels : []); const i = list.findIndex((c) => c.id === cid); return i >= 0 ? CH_COLORS[i] : "#555"; };
+const postJson = (url, body) => api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+async function loadPub() {
+  try { pubData = await api("/api/publish"); } catch (e) { return; }
+  renderPub();
+  clearTimeout(pubTimer);
+  if (pubData.connecting || pubData.uploading || pubData.queue.some((q) => q.status === "uploading")) pubTimer = setTimeout(loadPub, 2000);
+}
+async function loadPubSources() {
+  if (!pubData) await loadPub();
+  let src;
+  try { src = await api("/api/publish/sources"); } catch (e) { return; }
+  $("addRun").innerHTML = src.runs.length ? src.runs.map((r) => `<option value="${esc(r.id)}">${esc(r.video)} (${r.clips} clips, ${esc(r.created || "")})</option>`).join("") : '<option value="">No clips made yet</option>';
+  const fresh = src.wayne.filter((w) => !w.queued);
+  window._wayne = fresh;
+  const opts = (sel) => pubData.channels.map((c) => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+  $("wayneList").innerHTML = fresh.length ? fresh.map((w, i) => `<div class="row" style="padding:6px 0;border-top:1px solid var(--line)">
+      <span style="flex:1 1 260px;min-width:0"><b style="color:var(--text)">${esc(w.title)}</b><br><span class="msg">${w.kind === "short" ? "Short" : "Full video"} · ${esc(w.source)}</span></span>
+      <select data-wch="${i}" style="width:auto"><option value="">Channel...</option>${opts(w.cid)}</select>
+      <button class="ghost" data-wadd="${i}" style="padding:6px 12px">Add</button></div>`).join("") : "No new finished videos found in Wayne Factory's content folders.";
+  $("wayneList").querySelectorAll("[data-wadd]").forEach((b) => (b.onclick = () => addWayne([+b.dataset.wadd])));
+  $("addAllWayne").disabled = !fresh.length;
+}
+async function addWayne(idxs) {
+  const items = idxs.map((i) => ({ ...window._wayne[i], cid: document.querySelector(`[data-wch="${i}"]`).value }));
+  if (items.some((it) => !it.cid)) { $("addMsg").innerHTML = '<span class="error">Pick a channel for each video first.</span>'; return; }
+  const r = await postJson("/api/publish/add", { wayne: items });
+  $("addMsg").innerText = `Added ${r.added}. Click "Fill the schedule" to give them times.`;
+  await loadPub(); loadPubSources();
+}
+$("addAllWayne").onclick = () => addWayne(window._wayne.map((_, i) => i));
+$("addRunBtn").onclick = async () => {
+  if (!$("addRun").value) return;
+  try {
+    const r = await postJson("/api/publish/add", { run_id: $("addRun").value, cid: $("addRunCh").value });
+    $("addMsg").innerText = r.added ? `Added ${r.added} clips. Click "Fill the schedule" to give them times.` : "Those clips are already in the schedule.";
+  } catch (e) { $("addMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  loadPub();
+};
+const STATUS_TXT = (d, it) => ({ waiting: d.approved ? "Waiting to upload" : "To do", uploading: `Uploading ${it.progress || 0}%`,
+  uploaded: "Uploaded", scheduled: "Scheduled by you", failed: "Failed" }[it.status] || it.status);
+function renderPub() {
+  const d = pubData;
+  const secretOk = !!d.client_secret;
+  $("st1n").className = "n" + (secretOk ? " ok" : ""); $("st1n").innerHTML = secretOk ? "&#10003;" : "1";
+  $("st1msg").innerHTML = secretOk ? `Found: <code style="word-break:break-all">${esc(d.client_secret)}</code>` : "Not found yet - follow the steps below.";
+  const wanted = d.channels.filter((c) => c.ref), connected = d.channels.filter((c) => c.connected && !c.connected.mismatch);
+  const allConn = wanted.length > 0 && wanted.every((c) => c.connected && !c.connected.mismatch);
+  $("st2n").className = "n" + (allConn ? " ok" : ""); $("st2n").innerHTML = allConn ? "&#10003;" : "2";
+  $("connList").innerHTML = d.channels.map((c) => {
+    const k = c.connected;
+    const st = d.connecting === c.id ? '<span class="msg">Waiting for the Google login in your browser...</span>'
+      : k ? (k.mismatch ? `<span class="error">Logged in as "${esc(k.title)}" (${esc(k.handle)}) - that's not this channel. Connect again and pick ${esc(c.name)}.</span>`
+                        : `<span style="color:var(--ok)">&#10003; Connected as ${esc(k.title)} ${esc(k.handle || "")}</span>`)
+      : '<span class="msg">Not connected</span>';
+    return `<div class="conn"><b>${esc(c.name)}</b>${st}<button class="ghost" data-conn="${esc(c.id)}" style="padding:5px 12px" ${secretOk && !d.connecting ? "" : "disabled"}>${k ? "Reconnect" : "Connect"}</button>${k ? `<button class="ghost" data-disc="${esc(c.id)}" style="padding:5px 12px">Disconnect</button>` : ""}</div>`;
+  }).join("");
+  $("connErr").innerText = d.connect_error || ""; $("connErr").classList.toggle("hide", !d.connect_error);
+  $("connList").querySelectorAll("[data-conn]").forEach((b) => (b.onclick = async () => {
+    try { await postJson("/api/publish/connect", { cid: b.dataset.conn }); } catch (e) { $("connErr").innerText = e.message; $("connErr").classList.remove("hide"); }
+    loadPub();
+  }));
+  $("connList").querySelectorAll("[data-disc]").forEach((b) => (b.onclick = async () => { pubData = await postJson("/api/publish/disconnect", { cid: b.dataset.disc }); renderPub(); }));
+  $("approvedChk").checked = d.approved;
+  $("st3n").className = "n" + (d.approved ? " ok" : ""); $("st3n").innerHTML = d.approved ? "&#10003;" : "3";
+  const keep = $("addRunCh").value;
+  $("addRunCh").innerHTML = d.channels.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  $("addRunCh").value = keep || (d.channels.find((c) => c.id === "clips") || d.channels[0] || {}).id || "";
+  $("quotaMsg").innerText = d.approved ? `YouTube quota today: ${d.quota.uploads_left} uploads left` : "";
+  $("slotsMsg").innerHTML = "Weekly plan: " + d.channels.map((c) => `<b>${esc(c.name)}</b> ` + c.slots.map((r) => `${r.kind === "long" ? "full video" : "Short"} ${r.days.length === 7 ? "daily" : r.days.map((x) => d.weekdays[x]).join("/")} ${r.time}`).join(", ")).join(" · ");
+  $("modeBanner").innerHTML = d.approved
+    ? '<div class="banner auto">Automatic: each video is uploaded up to 3 days before its time, and YouTube publishes it at that time by itself. Open Clip Factory at least every couple of days so it can upload.</div>'
+    : '<div class="banner manual">Until Google approves, post each item yourself: click <b>Show file</b>, upload it in YouTube Studio, paste the title, description and tags with the copy buttons, set <b>Schedule</b> to the time shown, then click <b>Scheduled</b>. Tip: do the whole week in one sitting on Sunday.</div>';
+  let html = "", day = null;
+  if (!d.queue.length) html = '<div class="msg">Nothing in the schedule yet - add clips or videos above.</div>';
+  for (const it of d.queue) {
+    const dlabel = it.when ? new Date(it.when).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }) : "No time yet - click Fill the schedule";
+    if (dlabel !== day) { day = dlabel; html += `<div class="qday">${esc(dlabel)}</div>`; }
+    const done = it.status === "uploaded" || it.status === "scheduled";
+    const ch = d.channels.find((c) => c.id === it.cid) || {};
+    const studio = ch.connected ? `https://studio.youtube.com/channel/${encodeURIComponent(ch.connected.id)}/videos/upload` : "https://studio.youtube.com/";
+    html += `<div class="qitem" data-q="${esc(it.id)}">
+      <div class="time">${it.when ? esc(it.when.slice(11, 16)) : "--:--"}</div>
+      <div style="min-width:0">
+        <div><span class="tag" style="background:${chColor(it.cid)};color:#fff">${esc(it.channel)}</span> <span class="tag">${it.kind === "long" ? "Full video" : "Short"}</span>
+          <span class="tag ${done ? "big" : it.status === "failed" ? "no" : "maybe"}">${esc(STATUS_TXT(d, it))}</span></div>
+        <div style="font-weight:700;margin-top:4px">${esc(it.title)}</div>
+        <div class="msg" style="font-size:12px">${esc(it.source)}${it.missing ? ' · <span class="error">file missing</span>' : ""}</div>
+        ${it.error ? `<div class="${it.status === "failed" ? "error" : "msg"}" style="font-size:12px">${esc(it.error)}</div>` : ""}
+        ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:13px">${esc(it.url)}</a>` : ""}
+        <div class="acts">
+          <button class="ghost" data-cp="title">Copy title</button><button class="ghost" data-cp="description">Copy description</button><button class="ghost" data-cp="tags">Copy tags</button>
+          <button class="ghost" data-act="reveal">Show file</button>
+          ${!d.approved && !done ? `<a class="btn ghost" href="${studio}" target="_blank" rel="noopener">Open YouTube Studio</a><button data-act="scheduled">Scheduled</button>` : ""}
+          ${d.approved && it.status !== "uploaded" && it.status !== "uploading" ? `<button data-act="upload">Upload now</button>` : ""}
+          ${!d.approved && it.status === "waiting" && ch.connected ? `<button class="ghost" data-act="test">Test upload (private)</button>` : ""}
+          ${it.status === "failed" || it.status === "scheduled" ? `<button class="ghost" data-act="retry">Back to to-do</button>` : ""}
+          <select data-act="cid" style="width:auto;padding:4px 6px;font-size:12px" aria-label="Channel">${d.channels.map((c) => `<option value="${esc(c.id)}" ${c.id === it.cid ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+          <input type="datetime-local" data-act="when" value="${esc(it.when || "")}" style="width:auto;padding:4px 6px;font-size:12px" aria-label="Publish time">
+          <button class="ghost" data-act="remove">Remove</button>
+        </div>
+      </div></div>`;
+  }
+  $("queueList").innerHTML = html;
+  const byId = Object.fromEntries(d.queue.map((i) => [i.id, i]));
+  $("queueList").querySelectorAll(".qitem").forEach((el) => {
+    const it = byId[el.dataset.q];
+    el.querySelectorAll("[data-cp]").forEach((b) => (b.onclick = async () => {
+      const text = b.dataset.cp === "tags" ? it.tags.join(", ") : it[b.dataset.cp];
+      try { await navigator.clipboard.writeText(text); b.innerText = "Copied"; } catch (e) { b.innerText = "Can't copy"; }
+      setTimeout(() => (b.innerText = { title: "Copy title", description: "Copy description", tags: "Copy tags" }[b.dataset.cp]), 1500);
+    }));
+    el.querySelectorAll("[data-act]").forEach((b) => {
+      const act = b.dataset.act;
+      if (act === "when" || act === "cid") { b.onchange = async () => { pubData = await postJson(`/api/publish/item/${it.id}`, { [act]: b.value }); renderPub(); }; return; }
+      b.onclick = async () => {
+        try {
+          if (act === "reveal") { await postJson("/api/publish/reveal", { id: it.id }); b.innerText = "Opened"; return; }
+          if (act === "scheduled") pubData = await postJson(`/api/publish/item/${it.id}`, { status: "scheduled" });
+          if (act === "retry") pubData = await postJson(`/api/publish/item/${it.id}`, { status: "waiting" });
+          if (act === "remove") pubData = await postJson(`/api/publish/item/${it.id}/remove`);
+          if (act === "upload" || act === "test") { await postJson(`/api/publish/item/${it.id}/upload`, { test: act === "test" }); return loadPub(); }
+          renderPub();
+        } catch (e) { b.innerText = e.message.slice(0, 60); }
+      };
+    });
+  });
+}
+$("fillBtn").onclick = async () => { const r = await api("/api/publish/fill", { method: "POST" }); await loadPub(); $("fillBtn").innerText = `Filled ${r.filled}`; setTimeout(() => ($("fillBtn").innerText = "Fill the schedule"), 1800); };
+$("approvedChk").onchange = async () => { pubData = await postJson("/api/publish/approved", { approved: $("approvedChk").checked }); renderPub(); };
+$("auditBtn").onclick = async () => { const r = await api("/api/publish/audit"); $("auditText").value = r.text; $("auditBox").classList.toggle("hide"); };
+$("auditCopy").onclick = async () => { try { await navigator.clipboard.writeText($("auditText").value); $("auditCopy").innerText = "Copied"; } catch (e) { $("auditText").select(); } };
+$("tabBtnPub").addEventListener("click", () => { loadPubSources(); });
+
 // ---------- My channels ----------
 const CH_COLORS = ["#3987e5", "#d95926", "#199e70", "#9085e9", "#c98500", "#d55181", "#008300", "#e66767"];
 let statsData = null, statsTimer = null, chartTable = false;
@@ -2043,7 +2406,8 @@ $("aiTest").onclick = async () => {
   loadRules();
   showTab(store.get("cf_tab") || "find");
   await loadStatus();
-  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms(), loadStats()]);
+  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms(), loadStats(), loadPub()]);
+  if (store.get("cf_tab") === "pub") loadPubSources();
 })();
 </script>
 </body>
@@ -2054,6 +2418,7 @@ $("aiTest").onclick = async () => {
 if __name__ == "__main__":
     _load_last_trends()
     channel_stats.start_background()
+    publisher.start_background()
     INPUT_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
     print(f"Clip Factory running - open http://localhost:{PORT}")

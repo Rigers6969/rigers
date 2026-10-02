@@ -177,6 +177,50 @@ Shows every channel's views together, measured against your goal, e.g.
   those numbers (e.g. 1.2K), so small changes can look bumpy.
 - Watch hours aren't public. YouTube Studio's **Earn** tab has those.
 
+## Publish (fifth tab): the auto publisher
+
+Puts every video for all 4 channels on one weekly schedule, then uploads
+them to YouTube at the right times.
+
+**The weekly plan (60-day challenge):**
+- **Paper Trail:** full video Mon and Thu 17:00, a Short every day at 12:00
+- **Science:** full video Tue and Fri 17:00, a Short every day at 12:00
+- **History:** full video Wed and Sat 17:00, a Short every day at 12:00
+- **Hot Mic Moments:** Shorts every day at 09:00, 15:00 and 21:00
+
+**Setup (once):**
+1. **client_secret.json:** a free Google Cloud file. The tab shows the
+   steps (about 10 minutes). Put the file in the `clip-factory` folder.
+2. **Connect** each channel. Google's login opens; pick that channel.
+   If you pick the wrong one, the tab tells you.
+3. **Prepare the approval request:** click it, copy the answers into
+   Google's form, and send it. Approval is free and usually takes 1-4
+   weeks.
+
+**Every week:**
+1. **Add videos:** clips from Clip Factory (with their descriptions and
+   tags) and finished Wayne Factory videos and their Shorts.
+2. Click **Fill the schedule**. Each video gets the next free time of its
+   channel. Change any time or channel in the list.
+
+**Until Google approves:** YouTube locks everything an unapproved app
+uploads as private. So the schedule is a checklist. For each item:
+1. **Show file**, then **Open YouTube Studio** and upload it there.
+2. Paste the **Copy title**, **Copy description** and **Copy tags** text.
+3. Set **Schedule** to the time shown, then click **Scheduled** in the app.
+
+**After Google approves:** tick **Google approved my app**. The app then
+uploads each video up to 3 days before its time, as private with
+YouTube's own publish time. YouTube makes it public at that time, even if
+the PC is off. Keep the app open at least every couple of days.
+
+**Limits:**
+- YouTube allows about 6 uploads a day per Google project (10,000 quota
+  units). The approval form asks for more.
+- Custom thumbnails need a phone-verified channel.
+
+The login files (`tokens/`) and `client_secret.json` stay on this PC.
+
 ## YouTube rules (third tab)
 
 A guard that knows what gets a channel monetized and what gets it

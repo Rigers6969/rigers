@@ -11,3 +11,8 @@ rules_watch.json
 permissions.json
 my_channels.json
 channel_snapshots.json
+publisher.json
+publish_queue.json
+publish_queue.tmp
+tokens/
+client_secret*.json
