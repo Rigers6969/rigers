@@ -1,6 +1,6 @@
 # Updates (or installs) the apps from GitHub - no zip downloading by hand.
 # Run in PowerShell:
-#   irm https://raw.githubusercontent.com/Rigers6969/rigers/claude/sweet-dijkstra-lyzrb5/update.ps1 | iex
+#   irm "https://raw.githubusercontent.com/Rigers6969/rigers/claude/sweet-dijkstra-lyzrb5/update.ps1?v=$(Get-Random)" | iex
 # or double-click "Update Clip Factory" on the Desktop (update.bat).
 #
 # Clip Factory lives in ONE folder: C:\Users\<you>\ClipFactory (or inside the full rigers folder if you
@@ -97,6 +97,7 @@ function Make-Shortcut($name, $target, $workdir) {
 
 try {
     Say ""
+    Say "Clip Factory updater v3" DarkGray
     Say "Looking for Clip Factory on this PC (can take a minute)..." Cyan
     $copies = @(Find-Copies)
     $full = $null
@@ -151,5 +152,6 @@ try {
     Say ""
     Say "Something went wrong:" Red
     Say $_.Exception.Message Red
+    Say ("Where: " + $_.InvocationInfo.ScriptLineNumber + " | " + $_.InvocationInfo.Line.Trim()) DarkGray
     Say "Send a screenshot of this window to Claude." Yellow
 }
