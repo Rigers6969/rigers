@@ -16,6 +16,9 @@ much faster (see **AI engines** below).
 
 Double-click **`start.bat`**. The page opens at http://localhost:5003.
 
+**Get the newest version:** double-click **`update.bat`**. It downloads the
+new files and keeps your keys, logins and videos.
+
 The very first time, it installs what it needs (about a minute). The
 first transcription also downloads the Whisper speech model, about
 150 MB.
