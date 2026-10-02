@@ -182,8 +182,10 @@ def fetch_public(ref: str) -> dict:
         subs = subs or int(info.get("channel_follower_count") or 0)
         for e in info.get("entries") or []:
             if isinstance(e, dict) and e.get("id") and e.get("view_count") is not None:
+                ts = e.get("timestamp")
                 vids[e["id"]] = {"t": (e.get("title") or "")[:120], "v": int(e["view_count"]),
-                                 "s": tab == "shorts" or (e.get("duration") or 999) <= SHORT_MAX_S, "p": ""}
+                                 "s": tab == "shorts" or (e.get("duration") or 999) <= SHORT_MAX_S,
+                                 "p": dt.date.fromtimestamp(ts).isoformat() if ts else ""}
     if not loaded:
         raise StatsError(f"couldn't read that channel ({locals().get('last', 'not found')}) - check the @handle")
     return {"title": title, "subs": subs, "views": sum(v["v"] for v in vids.values()), "videos": len(vids),
@@ -269,7 +271,10 @@ def analyze(now: Optional[dt.datetime] = None) -> dict:
     week_ago, two_weeks = now - dt.timedelta(days=7), now - dt.timedelta(days=14)
     latest = snaps[-1] if snaps else None
     channels, top = [], []
-    totals = {"week": 0, "prev_week": 0, "since_start": 0, "week_shorts": 0, "week_long": 0}
+    totals = {"week": 0, "prev_week": 0, "since_start": 0, "week_shorts": 0, "week_long": 0,
+              "all_time": 0, "subs": 0, "new_week_views": 0, "new_week_videos": 0}
+    recent_top = []
+    week_ago_date = (now - dt.timedelta(days=7)).date().isoformat()
     have_week = have_prev = False
     for c in cfg["channels"]:
         cid = c["id"]
@@ -292,6 +297,17 @@ def analyze(now: Optional[dt.datetime] = None) -> dict:
             have_prev = True
             totals["prev_week"] += prev
         totals["since_start"] += since or 0
+        # these work from a single check: lifetime numbers and videos posted in the last 7 days
+        new_vids = [v for v in (last["vids"].values() if last else []) if v.get("p") and v["p"] >= week_ago_date]
+        new_views = sum(v["v"] for v in new_vids)
+        if last:
+            totals["all_time"] += last["views"]
+            totals["subs"] += last["subs"]
+            totals["new_week_views"] += new_views
+            totals["new_week_videos"] += len(new_vids)
+            for vid, v in last["vids"].items():
+                recent_top.append({"id": vid, "channel": c["name"], "cid": cid, "title": v["t"], "views": v["v"],
+                                   "short": v["s"], "posted": v.get("p") or ""})
         totals["week_shorts"] += shorts
         totals["week_long"] += longs
         channels.append({
@@ -300,6 +316,7 @@ def analyze(now: Optional[dt.datetime] = None) -> dict:
             "videos": last["videos"] if last else None, "source": last["source"] if last else None,
             "week": week, "prev_week": prev, "since_start": since, "error": err,
             "week_shorts": shorts, "week_long": longs,
+            "new_week_views": new_views if last else None, "new_week_videos": len(new_vids) if last else None,
             "best": {"id": best[0], "title": best[1]["t"], "gain": best[1]["gain"], "short": best[1]["s"]} if best and best[1]["gain"] > 0 else None,
         })
     # daily views per channel for the last 14 days (gain between the last snapshots of consecutive days)
@@ -323,10 +340,11 @@ def analyze(now: Optional[dt.datetime] = None) -> dict:
         "projection": round(totals["since_start"] + pace * days_left) if pace is not None else None,
     }
     top.sort(key=lambda v: -v["gain"])
+    recent_top.sort(key=lambda v: -v["views"])
     key, where = api_key(cfg)
     first_snap = snaps[0]["at"] if snaps else None
     return {
-        "channels": channels, "totals": totals, "goal": goal, "days": days, "top": top[:8],
+        "channels": channels, "totals": totals, "goal": goal, "days": days, "top": top[:8], "recent_top": recent_top[:8],
         "have_week": have_week, "have_prev": have_prev, "latest_at": latest["at"] if latest else None,
         "first_at": first_snap, "snapshots": len(snaps), "source": "api" if key else "public", "key_where": where,
         "config": {k: v for k, v in cfg.items() if k != "api_key"} | {"api_key_set": bool(cfg.get("api_key"))},

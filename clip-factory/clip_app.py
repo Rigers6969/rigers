@@ -1133,7 +1133,7 @@ PAGE = r"""<!DOCTYPE html>
 
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start">
       <div class="panel">
-        <h2>Top videos this week</h2>
+        <h2 id="topTitle">Top videos this week</h2>
         <div id="topVids"></div>
       </div>
       <div class="panel">
@@ -1877,23 +1877,34 @@ function renderStats() {
   $("ytKeyState").innerText = d.config.api_key_set ? "Saved." : d.key_where ? `Using the key ${d.key_where}.` : "None - the public channel pages are used.";
   // KPIs
   const done = Math.min(100, (g.done / g.views) * 100);
+  const weekCard = d.have_week
+    ? `<div class="kpi"><span class="lbl">Views this week</span><span class="big">${fmtN(t.week)}</span><span class="sub">${d.have_prev ? `${pct(t.week, t.prev_week)} vs last week (${fmtN(t.prev_week)})` : "Last week: not tracked yet"}</span></div>`
+    : `<div class="kpi"><span class="lbl">Views on videos posted in the last 7 days</span><span class="big">${fmtN(configured.length && d.snapshots ? t.new_week_views : null)}</span><span class="sub">${fmtN(t.new_week_videos)} new videos. Views gained per week appear after the next check (every 3 hours while the app is open).</span></div>`;
   $("kpis").innerHTML = `
-    <div class="kpi"><span class="lbl">Views this week</span><span class="big">${fmtN(d.have_week ? t.week : null)}</span><span class="sub">${d.have_prev ? `${pct(t.week, t.prev_week)} vs last week (${fmtN(t.prev_week)})` : "Last week: not tracked yet"}</span></div>
+    <div class="kpi"><span class="lbl">All channels together</span><span class="big">${fmtN(d.snapshots ? t.all_time : null)}</span><span class="sub">total views · ${fmtN(d.snapshots ? t.subs : null)} subscribers</span></div>
+    ${weekCard}
     <div class="kpi"><span class="lbl">Goal: ${fmtN(g.views)} views by ${esc(g.deadline)}</span><span class="big">${fmtN(g.done)}</span>
       <div class="goalbar"><div style="width:${done}%"></div></div><span class="sub">${done.toFixed(done < 1 ? 2 : 1)}% done · ${g.days_left} days left</span></div>
     <div class="kpi"><span class="lbl">Needed per day</span><span class="big">${fmtN(g.needed_per_day)}</span><span class="sub">Your pace this week: ${g.pace_per_day == null ? "-" : fmtN(g.pace_per_day) + " a day"}</span></div>
     <div class="kpi"><span class="lbl">At this pace, by ${esc(g.deadline)}</span><span class="big">${fmtN(g.projection)}</span><span class="sub">${g.projection == null ? "Needs a day of data" : g.projection >= g.views ? '<span class="up">On track for the goal</span>' : `<span class="down">${fmtN(g.views - g.projection)} short of the goal</span>`}</span></div>`;
   renderChart();
   // channel table
-  $("chanTable").innerHTML = `<thead><tr><th>Channel</th><th class="r">Subscribers</th><th class="r">This week</th><th class="r">Last week</th><th class="r">Shorts / long</th><th>Best video this week</th></tr></thead><tbody>` +
+  $("chanTable").innerHTML = `<thead><tr><th>Channel</th><th class="r">Subscribers</th><th class="r">Total views</th><th class="r">This week</th><th class="r">Last week</th><th class="r">Shorts / long</th><th>Best video this week</th></tr></thead><tbody>` +
     d.channels.map((c, i) => c.ref ? `<tr>
       <td><span class="tag" style="background:${CH_COLORS[i]};color:#fff;padding:1px 6px">&nbsp;</span> <b>${esc(c.name)}</b>${c.error ? `<div class="error" style="font-size:12px">${esc(c.error)}</div>` : ""}</td>
       <td class="r">${fmtN(c.subs)}<div class="msg" style="font-size:12px">${c.subs != null ? Math.min(100, Math.round((c.subs / 1000) * 100)) + "% of 1,000" : ""}</div></td>
-      <td class="r">${fmtN(c.week)} ${pct(c.week, c.prev_week)}</td><td class="r">${fmtN(c.prev_week)}</td>
-      <td class="r">${fmtN(c.week_shorts)} / ${fmtN(c.week_long)}</td>
+      <td class="r">${fmtN(c.views)}<div class="msg" style="font-size:12px">${c.videos != null ? fmtN(c.videos) + " videos" : ""}</div></td>
+      <td class="r">${c.week != null ? fmtN(c.week) + " " + pct(c.week, c.prev_week) : `<span class="msg">after next check</span>`}${c.new_week_videos ? `<div class="msg" style="font-size:12px">${c.new_week_videos} new: ${fmtN(c.new_week_views)} views</div>` : ""}</td><td class="r">${fmtN(c.prev_week)}</td>
+      <td class="r">${c.week != null ? fmtN(c.week_shorts) + " / " + fmtN(c.week_long) : "-"}</td>
       <td>${c.best ? `<a href="https://www.youtube.com/watch?v=${esc(c.best.id)}" target="_blank" rel="noopener" style="color:var(--text)">${esc(c.best.title)}</a> <span class="msg">+${fmtN(c.best.gain)}</span>` : '<span class="msg">-</span>'}</td>
-    </tr>` : `<tr><td><b>${esc(c.name)}</b></td><td colspan="5" class="msg">No @handle yet - add it in Channels &amp; goal</td></tr>`).join("") + "</tbody>";
-  $("topVids").innerHTML = d.top.length ? d.top.map((v, i) => `<div style="display:flex;gap:10px;padding:7px 0;border-top:${i ? "1px solid var(--line)" : "0"}">
+    </tr>` : `<tr><td><b>${esc(c.name)}</b></td><td colspan="6" class="msg">No @handle yet - add it in Channels &amp; goal</td></tr>`).join("") + "</tbody>";
+  $("topTitle").innerText = d.top.length ? "Top videos this week" : "Most viewed recent videos";
+  const recent = d.recent_top || [];
+  $("topVids").innerHTML = !d.top.length && recent.length ? recent.map((v, i) => `<div style="display:flex;gap:10px;padding:7px 0;border-top:${i ? "1px solid var(--line)" : "0"}">
+      <b style="color:var(--accent);width:22px">${i + 1}</b>
+      <div style="min-width:0"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener" style="color:var(--text)">${esc(v.title)}</a>
+      <div class="msg">${esc(v.channel)} · ${v.short ? "Short" : "Video"} · ${fmtN(v.views)} views${v.posted ? " · posted " + esc(v.posted) : ""}</div></div></div>`).join("") :
+    d.top.length ? d.top.map((v, i) => `<div style="display:flex;gap:10px;padding:7px 0;border-top:${i ? "1px solid var(--line)" : "0"}">
       <b style="color:var(--accent);width:22px">${i + 1}</b>
       <div style="min-width:0"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener" style="color:var(--text)">${esc(v.title)}</a>
       <div class="msg">${esc(v.channel)} · ${v.short ? "Short" : "Video"} · +${fmtN(v.gain)} views this week</div></div></div>`).join("") :
