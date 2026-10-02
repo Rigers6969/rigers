@@ -129,6 +129,8 @@ def _video(entry: dict, origin: str, now: float, min_s: int = MIN_LONG_VIDEO_S) 
         "duration": duration, "views": views, "age_hours": round(age_h, 1) if age_h is not None else None,
         "views_per_hour": round(views / max(age_h, 1.0)) if (views is not None and age_h is not None) else None,
         "was_live": entry.get("live_status") == "was_live", "origin": origin,
+        # which channel this is, for the "can I clip it?" check
+        "channel_ref": entry.get("uploader_id") or entry.get("channel_id") or ("" if origin.startswith("search:") else origin),
         "thumb": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
     }
 
@@ -220,6 +222,7 @@ def rank(videos: list[dict]) -> list[dict]:
             seen.add(v["id"])
             unique.append(v)
     for v in unique:
+        v["perm_key"] = channel_url(v["channel_ref"]).lower() if v.get("channel_ref") else ""
         vph = v["views_per_hour"] or 0
         boost = min(3.0, max(1.0, v["vs_normal"] or 1.0)) ** 0.5
         v["heat"] = round(vph * boost)

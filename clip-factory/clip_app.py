@@ -25,6 +25,7 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 import ai
 import downloader
 import moments
+import permissions
 import policy
 import renderer
 import transcriber
@@ -641,6 +642,40 @@ def trends_summary():
     return jsonify({"ok": True}), 202
 
 
+# ---------- Clipping permission ----------
+
+perm_state: dict = {"status": "idle", "message": "", "error": None}
+
+
+@app.route("/api/permissions")
+def permissions_state():
+    return jsonify(dict(perm_state, results=permissions.all_cached()))
+
+
+@app.route("/api/permissions/check", methods=["POST"])
+def permissions_check():
+    data = request.get_json(silent=True) or {}
+    names = [str(n).strip() for n in (data.get("names") or []) if str(n).strip()][:40]
+    if not names:
+        return jsonify({"error": "No channels to check."}), 400
+    with trend_lock:
+        if perm_state["status"] == "running":
+            return jsonify({"error": "Already checking - give it a moment."}), 409
+        perm_state.update(status="running", message="Starting...", error=None)
+    brain = _brain_from(data)
+    force = bool(data.get("force"))
+
+    def work():
+        try:
+            permissions.check_many(names, brain, force, progress=lambda m: perm_state.update(message=m))
+            perm_state.update(status="done", message="")
+        except Exception as exc:
+            perm_state.update(status="error", error=f"Unexpected problem: {trends.clean_error(exc)}")
+
+    threading.Thread(target=work, daemon=True).start()
+    return jsonify({"ok": True}), 202
+
+
 # ---------- Downloads ----------
 
 def _public_download(d: dict) -> dict:
@@ -850,6 +885,11 @@ PAGE = r"""<!DOCTYPE html>
   .tag { font-size: 12px; border-radius: 6px; padding: 3px 8px; background: #23262f; }
   .tag.hot { background: #3a2a00; color: var(--accent); font-weight: 700; }
   .tag.big { background: #12301f; color: var(--ok); font-weight: 700; }
+  .tag.no { background: #3a1512; color: var(--err); font-weight: 700; }
+  .tag.maybe { background: #3a2f0a; color: #ffcf4d; }
+  .perm { border-top: 1px solid var(--line); padding: 10px 0; }
+  .perm:first-child { border-top: 0; }
+  .perm q { display: block; color: var(--dim); font-size: 13px; margin: 4px 0 0 10px; }
   .vid .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
   .vid .actions .btn, .vid .actions button { padding: 7px 12px; font-size: 13px; }
   .rank { font-size: 20px; font-weight: 800; color: var(--accent); width: 34px; text-align: center; flex: none; padding-top: 4px; }
@@ -915,7 +955,7 @@ PAGE = r"""<!DOCTYPE html>
           </div>
           <label id="listLabel">Your streamers - one per line (their YouTube @name or channel link)</label>
           <textarea id="streamers" spellcheck="false"></textarea>
-          <div class="note hide" id="podcastNote">Only full episodes (20+ minutes) are shown. Big podcasts often claim copyright on clips - check each show's clipping rules first (many welcome clippers).</div>
+          <div class="note hide" id="podcastNote">Only full episodes (20+ minutes) are shown. Big podcasts often claim copyright on clips, but many welcome clippers - click <b>Can I clip them?</b> and the AI reads each show's rules for you.</div>
           <div class="row" style="margin-top:10px">
             <select id="days" style="width:auto">
               <option value="1">Last 24 hours</option><option value="3">Last 3 days</option>
@@ -923,7 +963,8 @@ PAGE = r"""<!DOCTYPE html>
             </select>
             <label class="check" style="margin:0"><input type="checkbox" id="incStreams" checked> Include past live streams</label>
           </div>
-          <div class="row" style="margin-top:10px"><button id="scanBtn">Scan my streamers</button></div>
+          <div class="row" style="margin-top:10px"><button id="scanBtn">Scan my streamers</button>
+            <button class="ghost" id="permBtn">Can I clip them?</button></div>
         </div>
         <div>
           <label>Or search all of YouTube</label>
@@ -938,6 +979,15 @@ PAGE = r"""<!DOCTYPE html>
         </div>
       </div>
       <div class="msg" id="trendMsg" style="margin-top:12px"></div>
+    </div>
+
+    <div class="panel hide" id="permPanel">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Clipping permission</h2>
+        <span class="msg" id="permMsg"></span>
+      </div>
+      <div class="msg" style="margin:6px 0 8px">The AI reads each channel's description and its latest video descriptions. Quotes are copied word for word from the channel. <b>Allowed</b> = the show invites clippers. <b>Unclear</b> = it doesn't say - ask the show first. This is a helper, not legal advice.</div>
+      <div id="permList"></div>
     </div>
 
     <div class="panel hide" id="resultsPanel">
@@ -1412,6 +1462,7 @@ function renderTrends() {
           ${v.views_per_hour != null ? `<span class="tag hot">${fmtCount(v.views_per_hour)} views/hour</span>` : ""}
           ${v.vs_normal ? `<span class="tag ${v.vs_normal >= 2 ? "big" : ""}">${v.vs_normal}x their normal</span>` : ""}
           <span class="tag">${fmtCount(v.views)} views</span>
+          ${permTag(v)}
         </div>
         <div class="actions">
           <a class="btn ghost" href="${esc(v.url)}" target="_blank" rel="noopener">Watch</a>
@@ -1422,7 +1473,12 @@ function renderTrends() {
     </div>`).join("") : '<div class="msg">Nothing found in that time - try more days or other streamers.</div>';
   const byId = Object.fromEntries(result.videos.map((v) => [v.id, v]));
   $("vids").querySelectorAll("[data-dl]").forEach((b) => (b.onclick = () => startDownload(byId[b.dataset.dl].url, byId[b.dataset.dl].title, false, b)));
-  $("vids").querySelectorAll("[data-dlclip]").forEach((b) => (b.onclick = () => startDownload(byId[b.dataset.dlclip].url, byId[b.dataset.dlclip].title, true, b)));
+  $("vids").querySelectorAll("[data-dlclip]").forEach((b) => (b.onclick = () => {
+    const v = byId[b.dataset.dlclip], pr = perms[v.perm_key];
+    if (pr && pr.verdict === "not_allowed" && !confirm(`${v.channel} says not to reupload its videos:\n"${(pr.evidence || [])[0] || pr.summary}"\n\nClipping it can get your channel copyright strikes. Download and clip anyway?`)) return;
+    startDownload(v.url, v.title, true, b);
+  }));
+  $("vids").querySelectorAll("[data-perm]").forEach((b) => (b.onclick = () => { b.disabled = true; b.innerText = "Checking..."; checkPerms([b.dataset.perm]); }));
 }
 
 async function pollTrends() {
@@ -1497,6 +1553,54 @@ async function pollDownloads() {
   const waiting = data.downloads.some((d) => d.status === "queued" || d.status === "downloading" || (d.auto_clip && d.status === "done" && !d.clip_run && !/couldn't start/.test(d.message)));
   if (waiting) dlTimer = setTimeout(pollDownloads, 1500);
 }
+
+// ---------- Clipping permission ----------
+let perms = {}, permTimer = null;
+const PERM_LABEL = { allowed: ["big", "Clipping allowed"], not_allowed: ["no", "Says no reuploads"], unclear: ["maybe", "Clipping: unclear"], error: ["maybe", "Couldn't check"] };
+function permTag(v) {
+  const p = perms[v.perm_key];
+  if (p) return `<span class="tag ${PERM_LABEL[p.verdict][0]}" title="${esc(p.summary)}">${PERM_LABEL[p.verdict][1]}</span>`;
+  return v.channel_ref ? `<button class="ghost" data-perm="${esc(v.channel_ref)}" style="padding:2px 8px;font-size:12px">Can I clip this?</button>` : "";
+}
+function renderPerms(st) {
+  perms = st.results || {};
+  const busy = st.status === "running";
+  $("permBtn").disabled = busy;
+  $("permMsg").innerHTML = busy ? esc(st.message) : st.status === "error" ? `<span class="error">${esc(st.error)}</span>` : "";
+  const items = Object.values(perms).sort((a, b) => (a.channel || a.name).localeCompare(b.channel || b.name));
+  $("permPanel").classList.toggle("hide", !items.length && !busy);
+  $("permList").innerHTML = items.map((p) => `<div class="perm">
+      <span class="tag ${PERM_LABEL[p.verdict][0]}">${PERM_LABEL[p.verdict][1]}</span>
+      <b style="margin-left:6px">${esc(p.channel || p.name)}</b> <span class="msg">&middot; ${esc(p.checked_on || "")}${p.by ? " &middot; " + esc(p.by) : ""}</span>
+      <div style="margin-top:4px">${esc(p.summary)}</div>
+      ${(p.evidence || []).map((q) => `<q>${esc(q)}</q>`).join("")}
+      ${(p.conditions || []).length ? `<div class="msg">Their rules: ${p.conditions.map(esc).join("; ")}</div>` : ""}
+      ${p.join_link ? `<div><a href="${esc(p.join_link)}" target="_blank" rel="noopener" style="color:var(--accent)">Join their clipping program &rarr;</a></div>` : ""}
+    </div>`).join("");
+  if (trendData) renderTrends();
+}
+async function pollPerms() {
+  let st;
+  try { st = await api("/api/permissions"); } catch (e) { return; }
+  renderPerms(st);
+  clearTimeout(permTimer);
+  if (st.status === "running") permTimer = setTimeout(pollPerms, 1500);
+}
+async function checkPerms(names, force) {
+  try {
+    await api("/api/permissions/check", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ names, force: !!force, host: $("host").value, model: $("model").value }) });
+  } catch (e) { $("permMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  $("permPanel").classList.remove("hide");
+  pollPerms();
+}
+$("permBtn").onclick = async () => {
+  const names = $("streamers").value.split("\n").map((x) => x.trim()).filter(Boolean);
+  if (!names.length) return;
+  try { await api("/api/streamers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: $("streamers").value, kind: listKind() }) }); } catch (e) {}
+  checkPerms(names);
+  $("permPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+};
 
 // ---------- YouTube rules ----------
 const VERDICT_TEXT = { green: "Looks ad-friendly", yellow: "Risk of limited ads", red: "Risk of no ads, removal or a strike" };
@@ -1646,7 +1750,7 @@ $("aiTest").onclick = async () => {
   loadRules();
   showTab(store.get("cf_tab") || "find");
   await loadStatus();
-  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads()]);
+  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms()]);
 })();
 </script>
 </body>

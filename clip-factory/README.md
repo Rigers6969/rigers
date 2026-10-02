@@ -94,8 +94,32 @@ has a podcast mode for them.
 
 **Permission matters even more for podcasts.** Many big shows claim
 copyright on clips, but many also run clipping programs that welcome
-clippers. Check each show's rules first, and add your own titles and
-context (see **YouTube rules** below).
+clippers.
+
+### Can I clip them? (the AI checks for you)
+
+Click **Can I clip them?** next to **Scan** to check every show or
+streamer on your list. You can also click **Can I clip this?** on any
+single video. For each channel, the AI reads its channel description and
+its 3 latest video descriptions, which is where shows post their
+clipping rules, and gives a verdict:
+
+| Verdict | Meaning |
+|---|---|
+| **Clipping allowed** | The show invites clippers or links a clipping program. You get a **Join their clipping program** link, plus any rules they set (e.g. "tag us"). |
+| **Says no reuploads** | The show warns against reuploads or copyright use. Clipping it risks copyright strikes, and the app asks you to confirm before clipping one of its videos. |
+| **Clipping: unclear** | The show doesn't say either way. Ask it before clipping. |
+
+**It never invents permission.**
+- Every quote shown is copied word for word from the channel. Quotes and
+  links the AI can't back up with the real text are thrown away.
+- An "allowed" with no real quote is downgraded to "unclear".
+- With no AI available, a built-in check still finds clipping programs
+  and "no reupload" warnings.
+- Results are saved for 7 days.
+
+This is a helper, not legal advice. Only a show's written rules or its
+clipping program give you real permission.
 
 ## Make clips (second tab)
 
