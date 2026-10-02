@@ -215,7 +215,7 @@ def rank(videos: list[dict]) -> list[dict]:
     return sorted(unique, key=lambda v: (-(v["heat"] or 0), -(v["views"] or 0)))
 
 
-# ---------- Ollama: "what's hot and what should I clip?" ----------
+# ---------- AI: "what's hot and what should I clip?" ----------
 
 SUMMARY_PROMPT = """You are a YouTube/TikTok trend analyst helping someone choose which long videos to cut into viral Shorts.
 Here are the fastest-growing long videos right now (views/hour = how fast it is blowing up; "x normal" = compared with that channel's usual views):
@@ -228,9 +228,10 @@ Answer ONLY with JSON in exactly this shape:
 "picks" must contain exactly 3 different video numbers from the list above, best first."""
 
 
-def summarize(videos: list[dict], host: str, model: str) -> dict:
+def summarize(videos: list[dict], brain) -> dict:
     """{trends: [...], picks: [{n, id, title, why}], source} - always valid,
-    falls back to a plain numbers-based answer if Ollama can't help."""
+    falls back to a plain numbers-based answer if no AI can help.
+    brain: an ai.Brain (Gemini/Groq/Ollama - whichever answers)."""
     top = videos[:15]
     if not top:
         return {"trends": [], "picks": [], "source": "none"}
@@ -241,19 +242,16 @@ def summarize(videos: list[dict], host: str, model: str) -> dict:
     )
     error = None
     try:
-        model = moments.check_ollama(host, model)
         for _attempt in range(moments.MAX_ATTEMPTS):
-            raw = moments._ask_ollama(host, model, SUMMARY_PROMPT.format(listing=listing), timeout=240)
+            raw, who = brain.ask(SUMMARY_PROMPT.format(listing=listing))
             parsed = _parse_summary(raw, len(top))
             if parsed:
                 trends, picks = parsed
-                return {"trends": trends, "source": "ollama",
+                return {"trends": trends, "source": who,
                         "picks": [{"n": n, "id": top[n - 1]["id"], "title": top[n - 1]["title"], "why": why} for n, why in picks]}
-        error = "Ollama's answers didn't make sense 3 times in a row"
-    except moments.OllamaUnavailable as exc:
-        error = str(exc)
-    except Exception as exc:
-        error = f"Ollama problem: {exc}"
+        error = "the AI's answers didn't make sense 3 times in a row"
+    except Exception as exc:  # every AI down
+        error = "; ".join(getattr(brain, "problems", [])) or str(exc)
     picks = [{"n": n, "id": v["id"], "title": v["title"],
               "why": f"{_fmt_count(v['views_per_hour'])} views/hour" + (f", {v['vs_normal']}x the channel's normal" if v.get("vs_normal") else "")}
              for n, v in enumerate(top[:3], start=1)]

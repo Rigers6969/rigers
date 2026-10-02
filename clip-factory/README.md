@@ -3,14 +3,14 @@
 Finds what's going viral right now, downloads it, and turns one long
 video (stream, podcast, interview...) into up to **100 vertical Shorts**
 in one go: 1080x1920, word-by-word captions,
-an optional hook title, and Ollama choosing the most viral moments.
+an optional hook title, and AI choosing the most viral moments.
 
 Clips are made **best first** and each one shows up on the page with its
 own **Download** button the moment it's finished. You can grab clip 1
 while clips 2, 3, 4... are still being cut.
 
-Everything runs on your own PC, for free. No accounts and no uploads to
-anywhere.
+It runs on your own PC for free. Optionally, cloud AIs do the heavy AI work
+much faster (see **AI engines** below).
 
 ## Start it
 
@@ -48,7 +48,7 @@ Results are ranked **hottest first**:
 Shorts, still-live and upcoming streams, and anything under 4 minutes are
 left out, so you only see videos worth cutting.
 
-**Ask Ollama what's hot** gives you a short summary of what's trending
+**Ask AI what's hot** gives you a short summary of what's trending
 plus the 3 best videos to clip, and why.
 
 On every video:
@@ -88,17 +88,58 @@ saved in `output/<date>-<video name>/`. **Open folder** shows it in File
 Explorer, and **Download all (zip)** gets every finished clip plus a
 `titles.txt`. Click any run under **Past runs** to open it again.
 
+## AI engines: every AI in one (much faster)
+
+Click **AI engines** at the top right, tick **Use cloud AI**, paste the
+key of any AI you want, then click **Test the keys**. Only the AIs you
+add a key for are used. Each one has a **get a key** link next to it.
+
+| AI | Cost | What it does |
+|---|---|---|
+| **Groq** | free | writes down the speech (1 hour of video in about a minute) and picks moments |
+| **Gemini** | free | picks moments |
+| **OpenRouter** | free models | picks moments |
+| **Claude** | paid, per use | picks moments |
+| **ChatGPT** (OpenAI) | paid, per use | writes down the speech and picks moments |
+| **Grok** (xAI) | paid, per use | picks moments |
+
+The order they're tried in:
+
+- **Writing down the speech:** Groq &rarr; ChatGPT &rarr; Whisper on
+  this PC.
+- **Picking the viral moments:** Gemini &rarr; Groq &rarr; OpenRouter
+  &rarr; Claude &rarr; ChatGPT &rarr; Grok &rarr; Ollama on this PC
+  &rarr; built-in scorer.
+
+Free ones are always tried first, and paid ones only when the free ones
+are busy or used up.
+- When an AI is rate-limited, used up, out of credit, or its key is
+  wrong, the next one takes over by itself. The page shows which AI did
+  what, and why one was skipped.
+- When a company retires a model, the app picks that company's current
+  one automatically.
+- With cloud AI on, your PC only cuts the clips.
+
+**Good to know:**
+- A ChatGPT Plus or Claude Pro subscription is **not** an API key. The
+  paid keys are separate pay-per-use accounts, and Clip Factory only
+  uses them when the free ones can't answer.
+- Keys stay on this PC, in `ai_keys.json`. With cloud AI on, the
+  video's audio and text are sent to those companies to be processed.
+- Turn cloud AI off any time and everything runs on your PC again.
+
 ## How it avoids mistakes
 
 - **Cuts.** Clips always start and end on a full sentence, never in the
   middle of a word. Picked clips never overlap each other.
-- **Ollama's answers are checked.**
-  - Ollama is put in strict JSON mode, and every answer is checked:
+- **Every AI's answers are checked.**
+  - The AIs are put in strict JSON mode, and every answer is checked:
     every clip needs a score from 1 to 10 and a title.
   - Anything missing or invalid is asked for again, up to 3 times, and
     only for the clips that were wrong.
-  - If Ollama still fails, or isn't running, or the model isn't
-    installed, the built-in scorer rates those clips. The run finishes
+  - If one AI fails, the next takes over. If every AI fails, isn't
+    running, or has no model installed, the built-in scorer rates those
+    clips. The run finishes
     anyway and the page tells you what happened.
 - **Asking for too many.** If you ask for more clips than the video has
   room for, you get as many as fit, and the page says so.
@@ -112,11 +153,13 @@ Explorer, and **Download all (zip)** gets every finished clip plus a
 
 These are rough numbers for a 1-hour video:
 
-| Step | Time |
-|---|---|
-| Transcribing, "Normal" accuracy | about 5-10 min ("Better" is 2-3x slower) |
-| Ollama rating every moment | about 10-25 min, depending on the model |
-| Each clip | about 20-40 s; clip 1 is ready right after the rating step |
+| Step | Only this PC | With cloud AI |
+|---|---|---|
+| Writing down the speech | about 5-10 min ("Better" accuracy is 2-3x slower) | about 1 min |
+| Rating every moment | about 10-25 min with Ollama | about 1-2 min |
+| Each clip | about 20-40 s | the same: your PC cuts the clips either way |
+
+Clip 1 is ready right after the rating step.
 
 The GTX 1630 isn't used for cutting: it has no video encoder, so the CPU
 does it.

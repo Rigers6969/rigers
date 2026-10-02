@@ -5,3 +5,4 @@ cache/
 __pycache__/
 streamers.json
 trends_last.json
+ai_keys.json

@@ -22,6 +22,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
+import ai
 import downloader
 import moments
 import renderer
@@ -125,10 +126,36 @@ def run_pipeline(run: dict) -> None:
 
         # 1. transcript (0-35%)
         update("transcribe", "Getting ready to transcribe...", 0, save=True)
-        words = transcriber.transcribe(
-            source, s["whisper"], cancelled=cancelled,
-            progress=lambda m, p: update(message=m, percent=p * 0.35),
-        )
+        keys = ai.load_keys()
+        cloud = bool(ai.cloud_transcribers(keys))
+        words = transcriber.cached_words(source, "cloud") or transcriber.cached_words(source, s["whisper"])
+        if words:
+            update(message="Using the saved transcript from last time.", percent=35)
+            run["engines"]["transcribe"] = "saved transcript"
+        elif cloud and info["duration"]:
+            words, tstats = ai.cloud_transcribe(
+                source, info["duration"], keys, run_dir / "audio",
+                local_fallback=lambda piece: transcriber.local_words(piece, s["whisper"]),
+                progress=lambda m, p: update(message=m, percent=p * 0.35), cancelled=cancelled,
+            )
+            if not words:
+                raise transcriber.TranscriptionError("No speech was found in this video - clips are cut around what's said, so it needs talking.")
+            transcriber.save_cache(source, "cloud", words)
+            run["engines"]["transcribe"] = ", ".join(
+                f"{who}" if n == tstats["pieces"] else f"{who} ({n} of {tstats['pieces']} pieces)" for who, n in tstats["by"].items())
+            if tstats["local"]:
+                part = "the audio" if tstats["local"] == tstats["pieces"] else "part of the audio"
+                run["warning"] = f"The cloud couldn't do {part} ({tstats['problem']}), so this PC did it."
+        else:
+            words = transcriber.transcribe(
+                source, s["whisper"], cancelled=cancelled,
+                progress=lambda m, p: update(message=m, percent=p * 0.35),
+            )
+            run["engines"]["transcribe"] = f"Whisper {s['whisper']} (this PC)"
+        try:
+            (run_dir / "audio").rmdir()
+        except OSError:
+            pass
 
         # 2. moments (35-50%)
         update("moments", "Looking for the best moments...", 35, save=True)
@@ -138,15 +165,9 @@ def run_pipeline(run: dict) -> None:
             raise renderer.RenderError(
                 f"Couldn't find any {s['min_len']}-{s['max_len']}s stretch of speech - try a wider clip length."
             )
-        model = s["model"]
-        use_ai = s["use_ai"]
-        if use_ai:
-            try:
-                model = moments.check_ollama(s["host"], s["model"])
-            except moments.OllamaUnavailable as exc:
-                use_ai = False
-                run["warning"] = f"{exc}. The built-in scorer picked the clips instead."
-        batches = max(1, -(-len(candidates) // moments.BATCH_SIZE))
+        brain = ai.build_brain(s, keys, report=lambda m: update(message=m))
+        size = brain.batch_size if brain else moments.BATCH_SIZE
+        batches = max(1, -(-len(candidates) // size))
         done_batches = {"n": 0}
 
         def scoring_progress(msg):
@@ -155,13 +176,17 @@ def run_pipeline(run: dict) -> None:
                 done_batches["n"] = int(m.group(1)) - 1
             update(message=msg, percent=35 + 15 * done_batches["n"] / batches)
 
-        stats = moments.score_candidates(candidates, use_ai, s["host"], model, progress=scoring_progress, cancelled=cancelled)
+        stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled)
         if cancelled():
             raise transcriber.Cancelled()
-        if use_ai and stats["ai_error"] and stats["fallback"]:
-            run["warning"] = (f"Ollama had a problem ({stats['ai_error']}), so {stats['fallback']} of "
-                              f"{len(candidates)} moments were rated by the built-in scorer.")
-        run["stats"] = dict(stats, candidates=len(candidates), model=model if use_ai else None)
+        if brain and stats["fallback"]:
+            why = "; ".join(brain.problems) or stats["ai_error"] or "the AI answers didn't make sense"
+            run["warning"] = " ".join(filter(None, [run["warning"], (
+                f"{stats['fallback']} of {len(candidates)} moments were rated by the built-in scorer ({why}).")]))
+        elif brain and brain.problems:
+            run["warning"] = " ".join(filter(None, [run["warning"], "; ".join(brain.problems)]))
+        run["engines"]["moments"] = ", ".join(f"{name} ({n})" for name, n in stats["by"].items()) or "built-in scorer"
+        run["stats"] = dict(stats, candidates=len(candidates))
         picks = moments.pick_best(candidates, s["count"])
         run["planned"] = len(picks)
         if len(picks) < s["count"]:
@@ -339,7 +364,7 @@ def start_run(source: Path, settings: dict) -> str:
         "clips": [], "planned": None, "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         # every key exists from the start: the page reads this dict while the job thread fills it in
         "cancel": False, "warning": None, "note": None, "error": None, "failed": [], "stats": None,
-        "video_duration": None, "finished_at": None,
+        "video_duration": None, "finished_at": None, "engines": {},
     }
     runs[run_id] = run
     save_run(run)
@@ -365,6 +390,38 @@ def start():
     except StartError as exc:
         return jsonify({"error": str(exc)}), exc.code
     return jsonify({"id": run_id}), 202
+
+
+# ---------- AI engines (keys) ----------
+
+def _ai_public() -> dict:
+    k = ai.load_keys()
+    return {"cloud_on": k["cloud_on"], "providers": [
+        {"id": n, "label": ai.CLOUD[n][0], "free": ai.CLOUD[n][3], "set": bool(k[f"{n}_key"]), "hint": ai.key_hint(k[f"{n}_key"])}
+        for n in ai.ORDER]}
+
+
+@app.route("/api/ai", methods=["GET", "POST"])
+def ai_settings():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        update = {"cloud_on": bool(data.get("cloud_on"))}
+        for name in ai.ORDER:
+            field = f"{name}_key"
+            value = str(data.get(field) or "").strip()
+            if data.get(f"clear_{field}"):
+                update[field] = ""
+            elif value:
+                if not re.fullmatch(r"[A-Za-z0-9_\-.]{10,300}", value):
+                    return jsonify({"error": f"That {ai.CLOUD[name][0]} key doesn't look right - copy it again."}), 400
+                update[field] = value
+        ai.save_keys(update)
+    return jsonify(_ai_public())
+
+
+@app.route("/api/ai/test", methods=["POST"])
+def ai_test():
+    return jsonify(ai.test_keys(ai.load_keys()))
 
 
 # ---------- Find viral videos ----------
@@ -467,7 +524,8 @@ def trends_summary():
 
     def work():
         try:
-            trend_state["summary"] = trends.summarize(result["videos"], host, model)
+            brain = ai.build_brain({"use_ai": True, "host": host, "model": model}, ai.load_keys())
+            trend_state["summary"] = trends.summarize(result["videos"], brain)
             _save_trends()
         finally:
             trend_state["summary_status"] = "idle"
@@ -688,11 +746,30 @@ PAGE = r"""<!DOCTYPE html>
 <body>
 <div class="wrap">
   <h1>Clip <span>Factory</span></h1>
-  <p class="sub">Find what's going viral &rarr; download it &rarr; get vertical Shorts with captions. Ollama picks the best moments; clip 1 is ready to download while the rest are still being made.</p>
+  <p class="sub">Find what's going viral &rarr; download it &rarr; get vertical Shorts with captions. AI picks the best moments; clip 1 is ready to download while the rest are still being made.</p>
   <div id="sysError" class="panel error hide"></div>
   <div class="tabs">
     <button id="tabBtnFind" data-tab="find">Find viral videos</button>
     <button id="tabBtnClips" data-tab="clips">Make clips</button>
+    <button id="aiToggle" class="ghost" style="margin-left:auto">AI engines: ...</button>
+  </div>
+
+  <div class="panel hide" id="aiPanel">
+    <h2>AI engines</h2>
+    <label class="check" style="font-size:15px"><input type="checkbox" id="cloudOn"> <b>Use cloud AI - much faster.</b>&nbsp;Your PC only cuts the clips.</label>
+    <div class="msg" style="margin:8px 0 14px">
+      Add a key for any AI you want - only those get used. <b>Free</b> ones are always tried first; <b>paid</b> ones only when the free ones are busy or used up.<br>
+      Writing down the speech: Groq &rarr; ChatGPT (OpenAI) &rarr; this PC.
+      Picking the viral moments: Gemini &rarr; Groq &rarr; OpenRouter &rarr; Claude &rarr; ChatGPT &rarr; Grok &rarr; Ollama on this PC &rarr; built-in scorer.
+    </div>
+    <div class="grid" id="aiKeys"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="aiSave">Save</button>
+      <button class="ghost" id="aiTest">Test the keys</button>
+      <span class="msg" id="aiMsg"></span>
+    </div>
+    <div class="note">Keys are saved only on this PC (in <code>ai_keys.json</code>). With cloud AI on, the video's audio and text are sent to those companies to be processed.
+      A ChatGPT Plus or Claude Pro subscription is not an API key - paid keys are pay-per-use from the links above.</div>
   </div>
 
   <div id="tabFind">
@@ -745,7 +822,7 @@ PAGE = r"""<!DOCTYPE html>
             <option value="heat">Hottest right now</option><option value="vs_normal">Biggest jump vs. their normal</option>
             <option value="views">Most views</option><option value="newest">Newest</option>
           </select>
-          <button class="ghost" id="askAi">Ask Ollama what's hot</button>
+          <button class="ghost" id="askAi">Ask AI what's hot</button>
         </div>
       </div>
       <div id="summary"></div>
@@ -790,7 +867,7 @@ PAGE = r"""<!DOCTYPE html>
         </select></div>
       <div><label>Ollama model</label><select id="model"></select></div>
     </div>
-    <label class="check"><input type="checkbox" id="useAi" checked> Let Ollama pick the viral moments (otherwise a built-in scorer does)</label>
+    <label class="check"><input type="checkbox" id="useAi" checked> Let AI pick the viral moments (otherwise a built-in scorer does)</label>
     <label class="check"><input type="checkbox" id="showTitle" checked> Put a hook title at the top of each clip</label>
     <details>
       <summary>Advanced</summary>
@@ -820,6 +897,7 @@ PAGE = r"""<!DOCTYPE html>
     </div>
     <div class="bar" id="barWrap"><div id="bar"></div></div>
     <div class="msg" id="runMsg"></div>
+    <div class="note hide" id="runEngines"></div>
     <div class="warn hide" id="runWarn"></div>
     <div class="note hide" id="runNote"></div>
     <div class="error hide" id="runError"></div>
@@ -957,7 +1035,7 @@ function clipCard(c) {
     <div class="media">${c.poster ? `<img src="${c.poster}" alt="">` : ""}<span class="num">#${c.n}</span><span class="play">&#9654;</span></div>
     <div class="body">
       <div class="t">${esc(c.title)}</div>
-      <div class="meta">${c.length}s &middot; from ${esc(c.at)} &middot; score ${c.score}${c.rated_by === "ollama" ? "" : " (built-in)"}</div>
+      <div class="meta">${c.length}s &middot; from ${esc(c.at)} &middot; score ${c.score}${c.rated_by === "heuristic" ? " (built-in)" : " &middot; " + esc(c.rated_by)}</div>
       <div class="actions">
         <a class="btn" href="${c.download}" download>Download</a>
         <button class="ghost copy">Copy title</button>
@@ -994,6 +1072,9 @@ async function poll() {
   $("runMsg").innerText = run.message || "";
   $("runWarn").innerText = run.warning || ""; $("runWarn").classList.toggle("hide", !run.warning);
   $("runNote").innerText = run.note || ""; $("runNote").classList.toggle("hide", !run.note);
+  const eng = run.engines || {};
+  const engText = [eng.transcribe && "Speech: " + eng.transcribe, eng.moments && "Moments picked by: " + eng.moments].filter(Boolean).join("  \u00b7  ");
+  $("runEngines").innerText = engText; $("runEngines").classList.toggle("hide", !engText);
   let err = run.error || "";
   if (run.failed && run.failed.length) err += (err ? "\n" : "") + `Clip(s) ${run.failed.map((f) => f.n).join(", ")} couldn't be made: ${run.failed[run.failed.length - 1].error}`;
   $("runError").innerText = err; $("runError").classList.toggle("hide", !err);
@@ -1045,7 +1126,7 @@ function showTab(name) {
   $("tabBtnClips").classList.toggle("on", name === "clips");
   store.set("cf_tab", name);
 }
-document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+document.querySelectorAll(".tabs button[data-tab]").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
 function fmtCount(n) {
   if (n == null) return "?";
@@ -1089,12 +1170,12 @@ function renderTrends() {
 
   const sum = st.summary;
   $("askAi").disabled = st.summary_status === "running" || busy || !result.videos.length;
-  $("askAi").innerText = st.summary_status === "running" ? "Ollama is thinking..." : "Ask Ollama what's hot";
+  $("askAi").innerText = st.summary_status === "running" ? "AI is thinking..." : "Ask AI what's hot";
   if (sum && (sum.trends.length || sum.picks.length)) {
     $("summary").innerHTML = `<div class="summary">
       ${sum.trends.length ? `<b>What's blowing up right now</b><ul>${sum.trends.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
       <b style="display:block;margin-top:8px">Best to clip</b><ul>${sum.picks.map((p) => `<li><b>#${p.n} ${esc(p.title)}</b> - ${esc(p.why)}</li>`).join("")}</ul>
-      ${sum.source !== "ollama" && sum.error ? `<div class="warn">Ollama couldn't answer (${esc(sum.error)}) - these picks are by the numbers.</div>` : ""}
+      ${sum.source === "numbers" && sum.error ? `<div class="warn">No AI could answer (${esc(sum.error)}) - these picks are by the numbers.</div>` : `<div class="note">Answered by ${esc(sum.source)}</div>`}
     </div>`;
   } else { $("summary").innerHTML = ""; }
 
@@ -1200,8 +1281,63 @@ async function pollDownloads() {
   if (waiting) dlTimer = setTimeout(pollDownloads, 1500);
 }
 
+// ---------- AI engines ----------
+const AI_LINKS = {
+  gemini: ["https://aistudio.google.com/apikey", "AIza..."], groq: ["https://console.groq.com/keys", "gsk_..."],
+  openrouter: ["https://openrouter.ai/settings/keys", "sk-or-..."], anthropic: ["https://console.anthropic.com/settings/keys", "sk-ant-..."],
+  openai: ["https://platform.openai.com/api-keys", "sk-..."], xai: ["https://console.x.ai", "xai-..."],
+};
+let aiState = null;
+function renderAi(st) {
+  aiState = st;
+  $("cloudOn").checked = st.cloud_on;
+  if (!$("aiKeys").children.length) {
+    $("aiKeys").innerHTML = st.providers.map((p) => `
+      <div>
+        <label>${esc(p.label)} key &middot; <span class="tag ${p.free ? "big" : ""}" style="padding:1px 6px">${p.free ? "free" : "paid"}</span> &middot;
+          <a href="${AI_LINKS[p.id][0]}" target="_blank" rel="noopener" style="color:var(--accent)">get a key</a></label>
+        <input type="text" id="key_${p.id}" autocomplete="off" spellcheck="false" placeholder="${AI_LINKS[p.id][1]}">
+        <div class="msg" id="state_${p.id}"></div>
+      </div>`).join("");
+  }
+  for (const p of st.providers) {
+    $("state_" + p.id).innerHTML = p.set ? `Saved (${esc(p.hint)}) &middot; <a href="#" data-clear="${p.id}" style="color:var(--dim)">remove</a>` : "Not set";
+  }
+  $("aiKeys").querySelectorAll("[data-clear]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); saveAi({ ["clear_" + a.dataset.clear + "_key"]: true }); }));
+  const names = st.providers.filter((p) => p.set).map((p) => p.label);
+  $("aiToggle").innerText = st.cloud_on && names.length ? `AI engines: ${names.join(" + ")} + this PC` : "AI engines: this PC only - make it faster";
+  $("aiToggle").classList.toggle("ghost", !!(st.cloud_on && names.length));
+}
+async function loadAi() { try { renderAi(await api("/api/ai")); } catch (e) {} }
+async function saveAi(extra) {
+  $("aiMsg").innerText = "";
+  const body = { cloud_on: $("cloudOn").checked, ...(extra || {}) };
+  for (const p of aiState.providers) body[p.id + "_key"] = $("key_" + p.id).value;
+  try {
+    const st = await api("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    for (const p of st.providers) $("key_" + p.id).value = "";
+    renderAi(st);
+    $("aiMsg").innerText = "Saved.";
+    return true;
+  } catch (e) { $("aiMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; return false; }
+}
+$("aiToggle").onclick = () => $("aiPanel").classList.toggle("hide");
+$("aiSave").onclick = () => saveAi();
+$("cloudOn").onchange = () => saveAi();
+$("aiTest").onclick = async () => {
+  if (!(await saveAi())) return;
+  $("aiMsg").innerText = "Testing...";
+  try {
+    const r = await api("/api/ai/test", { method: "POST" });
+    const labels = Object.fromEntries(aiState.providers.map((p) => [p.id, p.label]));
+    const parts = Object.entries(r).map(([id, v]) => `${esc(labels[id] || id)}: ${v.startsWith("ok") ? `<span style="color:var(--ok)">${esc(v)}</span>` : `<span class="error">${esc(v)}</span>`}`);
+    $("aiMsg").innerHTML = parts.length ? parts.join(" &nbsp; ") : "Add at least one key first.";
+  } catch (e) { $("aiMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+};
+
 (async () => {
   loadSettings();
+  loadAi();
   showTab(store.get("cf_tab") || "find");
   await loadStatus();
   await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads()]);

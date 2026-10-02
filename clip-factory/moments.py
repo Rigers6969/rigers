@@ -218,14 +218,14 @@ def parse_scores(raw: str, wanted_ids: set[int]) -> dict[int, dict]:
 
 
 def score_candidates(
-    candidates: list[dict], use_ai: bool, host: str, model: str,
-    progress: Optional[ProgressCB] = None, timeout: float = 300,
-    cancelled: Callable[[], bool] = lambda: False,
+    candidates: list[dict], brain=None,
+    progress: Optional[ProgressCB] = None, cancelled: Callable[[], bool] = lambda: False,
 ) -> dict:
     """Fills in each candidate's score/title/source. Returns stats.
 
-    Every candidate starts with the built-in score, so whatever happens
-    with Ollama, each one ends up with a valid score and title."""
+    brain: an ai.Brain (asks Gemini/Groq/Ollama, whichever answers), or None
+    for the built-in scorer only. Every candidate starts with the built-in
+    score, so whatever happens with the AIs, each one ends up valid."""
     def report(msg):
         if progress:
             progress(msg)
@@ -233,50 +233,45 @@ def score_candidates(
     for c in candidates:
         c["heuristic"] = heuristic_score(c["text"])
         c["score"], c["title"], c["source"] = c["heuristic"], heuristic_title(c["text"]), "heuristic"
-    stats = {"ai_scored": 0, "fallback": len(candidates), "ai_error": None}
-    if not use_ai or not candidates:
+    stats = {"ai_scored": 0, "fallback": len(candidates), "ai_error": None, "by": {}}
+    if brain is None or not candidates:
         return stats
 
-    batches = [candidates[k:k + BATCH_SIZE] for k in range(0, len(candidates), BATCH_SIZE)]
-    failures_in_a_row = 0
+    size = getattr(brain, "batch_size", BATCH_SIZE)
+    batches = [candidates[k:k + size] for k in range(0, len(candidates), size)]
     for b, batch in enumerate(batches, start=1):
         if cancelled():
             break
-        report(f"Ollama is rating moments: batch {b} of {len(batches)}")
+        report(f"AI is rating moments: batch {b} of {len(batches)}")
         missing = {c["id"]: c for c in batch}
         stop = False
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        for _attempt in range(MAX_ATTEMPTS):
             if not missing:
                 break
             todo = list(missing.values())
-            # ids are renumbered 1..n inside each prompt - small models handle that far better
+            # ids are renumbered 1..n inside each prompt - models handle that far better
             local = {n: c for n, c in enumerate(todo, start=1)}
             listing = "\n\n".join(f"Clip {n} ({c['end'] - c['start']:.0f}s):\n{c['text']}" for n, c in local.items())
             try:
-                raw = _ask_ollama(host, model, PROMPT.format(n=len(local), clips=listing), timeout)
-            except OllamaUnavailable as exc:
+                raw, who = brain.ask(PROMPT.format(n=len(local), clips=listing))
+            except Exception as exc:  # every AI is down or out of free use (the brain already retried)
                 stats["ai_error"], stop = str(exc), True
                 break
-            except Exception as exc:  # timeout, HTTP error - worth another try
-                stats["ai_error"] = str(exc)
-                failures_in_a_row += 1
-                if failures_in_a_row >= 3:
-                    stop = True
-                    break
-                continue
-            failures_in_a_row = 0
             for n, result in parse_scores(raw, set(local)).items():
                 c = local[n]
                 # blend in a little of the built-in score to break ties sensibly
                 c["score"] = round(result["score"] * 0.85 + c["heuristic"] * 0.15, 2)
                 c["title"] = result["title"]
-                c["source"] = "ollama"
+                c["source"] = who
                 missing.pop(c["id"], None)
         if stop:
-            report(f"Ollama stopped answering ({stats['ai_error']}) - the built-in scorer rates the rest.")
+            report(f"No AI is answering ({stats['ai_error']}) - the built-in scorer rates the rest.")
             break
 
-    stats["ai_scored"] = sum(1 for c in candidates if c["source"] == "ollama")
+    for c in candidates:
+        if c["source"] != "heuristic":
+            stats["by"][c["source"]] = stats["by"].get(c["source"], 0) + 1
+    stats["ai_scored"] = sum(stats["by"].values())
     stats["fallback"] = len(candidates) - stats["ai_scored"]
     return stats
 
