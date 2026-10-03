@@ -141,6 +141,16 @@ clipping program give you real permission.
    - **Podcast - split screen** for two people side by side.
 5. Click **Make clips**.
 
+**Every clip comes with everything for posting:**
+- a **title**, **description**, **tags** and **hashtags**, each with a copy
+  button on the clip
+- a **cover** (1080x1920) for YouTube Shorts, Instagram Reels and Facebook
+  Reels, and a **thumbnail** (1280x720) for anything wide. Both use the
+  clip's best frame with the hook in big letters.
+
+Clips made before thumbnails existed: open the run and click **Make
+thumbnails**.
+
 Clips are numbered 1, 2, 3... from most to least viral. Every run is
 saved in `output/<date>-<video name>/`. **Open folder** shows it in File
 Explorer, and **Download all (zip)** gets every finished clip plus a

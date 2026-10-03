@@ -299,7 +299,7 @@ def add_items(items: list[dict]) -> int:
             continue
         q.append({"id": uuid.uuid4().hex[:10], "cid": it.get("cid") or "", "kind": it.get("kind") or "short", "file": f,
                   "title": str(it.get("title") or Path(f).stem)[:100], "description": str(it.get("description") or "")[:4900],
-                  "tags": [str(t)[:40] for t in it.get("tags") or []][:30], "thumb": it.get("thumb") or "",
+                  "tags": [str(t)[:40] for t in it.get("tags") or []][:30], "thumb": it.get("thumb") or "", "cover": it.get("cover") or "",
                   "source": it.get("source") or "", "when": "", "status": "waiting", "video_id": "", "url": "",
                   "error": "", "added": time.strftime("%Y-%m-%d %H:%M")})
         have.add(f)
@@ -487,6 +487,8 @@ def prepare_week(days: int = 7, now: Optional[dt.datetime] = None) -> list[dict]
             _place(src, folder / (name + src.suffix.lower()))
             if it["kind"] == "long" and it.get("thumb") and Path(it["thumb"]).exists():
                 _place(Path(it["thumb"]), folder / (name + " - thumbnail.jpg"))
+            if it.get("cover") and Path(it["cover"]).exists():  # Shorts/Reels cover picture
+                _place(Path(it["cover"]), folder / (name + " - cover.jpg"))
             when = dt.datetime.fromisoformat(it["when"])
             lines.append(f"{'=' * 60}\n{n}. {when:%A %d %B, %H:%M}  ({'Short' if it['kind'] == 'short' else 'full video'})\n"
                          f"File: {name}{src.suffix.lower()}\n\nTITLE:\n{it['title']}\n\nDESCRIPTION:\n{it['description']}\n\n"

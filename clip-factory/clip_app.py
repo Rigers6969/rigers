@@ -30,6 +30,7 @@ import permissions
 import policy
 import publisher
 import renderer
+import thumbnail
 import transcriber
 import trends
 import upload_text
@@ -43,7 +44,7 @@ if not DEFAULT_HOST.startswith("http"):
     DEFAULT_HOST = "http://" + DEFAULT_HOST
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".ts"}
 RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[a-z0-9-]{0,40}$")
-CLIP_FILE_RE = re.compile(r"^clip_\d{3}\.(mp4|jpg)$")
+CLIP_FILE_RE = re.compile(r"^clip_\d{3}(_cover|_thumb)?\.(mp4|jpg)$")
 MAX_CLIPS = 100
 
 app = Flask(__name__)
@@ -94,11 +95,22 @@ def load_run(run_id: str) -> dict | None:
     return run
 
 
+def _make_thumbs(source: Path, start: float, end: float, title: str, run_dir: Path, name: str) -> dict:
+    """{cover, thumb} file names - a thumbnail problem never stops the clip itself."""
+    try:
+        thumbnail.make(source, start, end, title, run_dir / f"{name}_cover.jpg", run_dir / f"{name}_thumb.jpg")
+        return {"cover": f"{name}_cover.jpg", "thumb": f"{name}_thumb.jpg"}
+    except Exception:
+        return {}
+
+
 def public(run: dict) -> dict:
     out = {k: v for k, v in list(run.items()) if k not in ("source", "cancel")}
     out["clips"] = [
         dict(c, url=f"/files/{run['id']}/{c['file']}", download=f"/files/{run['id']}/{c['file']}?dl=1",
-             poster=f"/files/{run['id']}/{c['poster']}" if c.get("poster") else None)
+             poster=f"/files/{run['id']}/{c['poster']}" if c.get("poster") else None,
+             cover=f"/files/{run['id']}/{c['cover']}" if c.get("cover") else None,
+             thumb=f"/files/{run['id']}/{c['thumb']}" if c.get("thumb") else None)
         for c in run.get("clips", [])
     ]
     return out
@@ -277,6 +289,7 @@ def run_pipeline(run: dict) -> None:
                     raise
                 continue
             failures_in_a_row = 0
+            thumbs = _make_thumbs(source, start, end, c["title"], run_dir, name)
             run["clips"].append({
                 "n": n, "file": f"{name}.mp4",
                 "poster": f"{name}.jpg" if (run_dir / f"{name}.jpg").exists() else None,
@@ -286,7 +299,7 @@ def run_pipeline(run: dict) -> None:
                 "download_name": f"{n:03d} - {safe_filename(c['title'])}.mp4",
                 "render_seconds": round(time.time() - began, 1),
                 "policy": _clip_policy(c["policy"], bleeped),
-                "upload": None,
+                "upload": None, **thumbs,
             })
             with texts_lock:
                 run["clips"][-1]["upload"] = texts.get(n) or upload_text.fallback(
@@ -857,6 +870,7 @@ def publish_add():
         for c in run.get("clips", []):
             up = c.get("upload") or {}
             items.append({"file": str(OUTPUT_DIR / run["id"] / c["file"]), "kind": "short", "cid": str(data.get("cid") or ""),
+                          "cover": str(OUTPUT_DIR / run["id"] / c["cover"]) if c.get("cover") else "",
                           "title": up.get("title") or c["title"], "description": up.get("description") or c["title"],
                           "tags": up.get("tags") or [], "source": f"Clip Factory: {run['video']} #{c['n']}"})
     for w in data.get("wayne") or []:
@@ -1132,11 +1146,45 @@ def zip_run(run_id):
         for c in run["clips"]:
             if (run_dir / c["file"]).exists():
                 zf.write(run_dir / c["file"], c.get("download_name") or c["file"])
+        for c in run["clips"]:
+            base = Path(c.get("download_name") or c["file"]).stem
+            for key, label in (("cover", "cover 9x16"), ("thumb", "thumbnail 16x9")):
+                if c.get(key) and (run_dir / c[key]).exists():
+                    zf.write(run_dir / c[key], f"{base} - {label}.jpg")
         zf.writestr("titles.txt", "\n".join(f"{c['n']:03d}  {c['title']}" for c in run["clips"]))
         for c in run["clips"]:  # title + description + tags for each clip, ready to paste
             if c.get("upload"):
                 zf.writestr(f"{c['n']:03d} - upload text.txt", upload_text.as_text(c["upload"]))
     return send_file(zip_path, as_attachment=True, download_name=f"{safe_filename(Path(run['video']).stem)} - clips.zip")
+
+
+@app.route("/api/runs/<run_id>/thumbs", methods=["POST"])
+def run_thumbs(run_id):
+    """Makes the cover + thumbnail for clips made before thumbnails existed (or redoes them all with ?all=1)."""
+    run = load_run(run_id)
+    if not run or not run.get("clips"):
+        return jsonify({"error": "No finished clips yet."}), 404
+    if run.get("status") == "running":
+        return jsonify({"error": "Wait until the clips are finished."}), 409
+    run_dir = OUTPUT_DIR / run_id
+    redo = bool((request.get_json(silent=True) or {}).get("all"))
+    made = 0
+    for c in run["clips"]:
+        if c.get("cover") and not redo and (run_dir / c["cover"]).exists():
+            continue
+        name = Path(c["file"]).stem
+        clip_file = run_dir / c["file"]
+        if not clip_file.exists():
+            continue
+        # from the finished clip itself, so it works even if the original video was moved
+        dur = c.get("length") or (c.get("end", 0) - c.get("start", 0)) or 30
+        title = (c.get("upload") or {}).get("title") or c["title"]
+        got = _make_thumbs(clip_file, 0, float(dur), title, run_dir, name)
+        if got:
+            c.update(got)
+            made += 1
+    save_run(run)
+    return jsonify({"made": made, "run": public(run)})
 
 
 @app.route("/api/runs/<run_id>/open-folder", methods=["POST"])
@@ -1281,6 +1329,8 @@ PAGE = r"""<!DOCTYPE html>
   .librow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
   .librow .info { flex: 1 1 260px; min-width: 0; }
   #libPlayer.hide { display: none !important; }
+  .card .thumbs { display: grid; grid-template-columns: 9fr 16fr; gap: 6px; align-items: start; }
+  .card .thumbs img { width: 100%; display: block; border-radius: 6px; }
   .banner { border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 10px; }
   .banner.manual { background: #3a2f0a; color: #ffcf4d; }
   .banner.auto { background: #12301f; color: var(--ok); }
@@ -1693,6 +1743,7 @@ PAGE = r"""<!DOCTYPE html>
       <h2 id="runTitle" style="margin:0"></h2>
       <div class="row">
         <button class="ghost hide" id="cancelBtn">Stop</button>
+        <button class="ghost hide" id="thumbsBtn">Make thumbnails</button>
         <button class="ghost" id="folderBtn">Open folder</button>
         <a class="btn hide" id="zipBtn">Download all (zip)</a>
       </div>
@@ -1862,6 +1913,11 @@ function clipCard(c) {
         <button class="ghost copydesc">Copy description</button>
         <button class="ghost copytags">Copy tags</button>
       </div>
+      <div class="actions">
+        <button class="ghost copyhash">Copy hashtags</button>
+      </div>
+      ${c.cover ? `<div class="thumbs"><a href="${c.cover}" target="_blank" rel="noopener" title="Cover 9:16"><img src="${c.cover}" alt="Cover"></a><a href="${c.thumb}" target="_blank" rel="noopener" title="Thumbnail 16:9"><img src="${c.thumb}" alt="Thumbnail"></a></div>
+        <div class="actions"><a class="btn ghost" href="${c.cover}" download="${esc(c.n + " - cover.jpg")}">Cover 9:16</a><a class="btn ghost" href="${c.thumb}" download="${esc(c.n + " - thumbnail.jpg")}">Thumbnail 16:9</a></div>` : ""}
       <details class="uptext"><summary class="msg" style="cursor:pointer">Upload text</summary><div class="uptext-body"></div></details>
       <button class="ghost rulescheck" style="padding:6px;font-size:12px">Full rules check</button>
     </div>`;
@@ -1881,6 +1937,7 @@ function clipCard(c) {
   el.querySelector(".copy").onclick = (e) => copy(e.target, c.title, "Copy title");
   el.querySelector(".copydesc").onclick = (e) => copy(e.target, el._upload ? el._upload.description : c.title, "Copy description");
   el.querySelector(".copytags").onclick = (e) => copy(e.target, el._upload ? el._upload.tags.join(", ") : "", "Copy tags");
+  el.querySelector(".copyhash").onclick = (e) => copy(e.target, el._upload ? (el._upload.hashtags || []).map((h) => "#" + h).join(" ") : "", "Copy hashtags");
   setUpload(el, c.upload);
   return el;
 }
@@ -1892,7 +1949,9 @@ function setUpload(el, up) {
   body.innerHTML = `<div class="msg" style="margin-top:6px">Description${up.by && up.by !== "built-in" ? " (written by " + esc(up.by) + ")" : ""}</div>
     <textarea readonly style="min-height:120px;font-size:12px">${esc(up.description)}</textarea>
     <div class="msg" style="margin-top:6px">Tags</div>
-    <textarea readonly style="min-height:60px;font-size:12px">${esc(up.tags.join(", "))}</textarea>`;
+    <textarea readonly style="min-height:60px;font-size:12px">${esc(up.tags.join(", "))}</textarea>
+    <div class="msg" style="margin-top:6px">Hashtags</div>
+    <textarea readonly style="min-height:36px;font-size:12px">${esc((up.hashtags || []).map((h) => "#" + h).join(" "))}</textarea>`;
 }
 
 function pendingCard(n, active) {
@@ -1923,6 +1982,7 @@ async function poll() {
   $("runError").innerText = err; $("runError").classList.toggle("hide", !err);
   $("cancelBtn").classList.toggle("hide", !running);
   $("zipBtn").classList.toggle("hide", !run.clips.length);
+  $("thumbsBtn").classList.toggle("hide", running || !run.clips.some((c) => !c.cover));
   $("zipBtn").href = `/api/runs/${run.id}/zip`;
   $("zipBtn").innerText = running ? `Download finished (${run.clips.length}) as zip` : "Download all (zip)";
 
@@ -1955,6 +2015,13 @@ async function poll() {
 }
 
 $("cancelBtn").onclick = async () => { if (currentRun && confirm("Stop making clips? The finished ones are kept.")) { try { await api(`/api/runs/${currentRun}/cancel`, { method: "POST" }); } catch (e) {} } };
+$("thumbsBtn").onclick = async () => {
+  if (!currentRun) return;
+  $("thumbsBtn").disabled = true; $("thumbsBtn").innerText = "Making thumbnails...";
+  try { await api(`/api/runs/${currentRun}/thumbs`, { method: "POST" }); openRun(currentRun); }
+  catch (e) { alert(e.message); }
+  finally { $("thumbsBtn").disabled = false; $("thumbsBtn").innerText = "Make thumbnails"; }
+};
 $("folderBtn").onclick = async () => { if (!currentRun) return; try { await api(`/api/runs/${currentRun}/open-folder`, { method: "POST" }); } catch (e) { alert(e.message); } };
 
 async function loadRuns() {

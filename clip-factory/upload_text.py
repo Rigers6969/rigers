@@ -209,5 +209,8 @@ def ai_batch(brain, clips: list[dict], source: dict, kind: str, channel_name: st
 
 def as_text(upload: dict) -> str:
     """One clip's upload text as a plain .txt (for the zip)."""
-    return (f"TITLE:\n{upload['title']}\n\nDESCRIPTION:\n{upload['description']}\n\n"
-            f"TAGS (paste into YouTube's Tags box):\n{', '.join(upload['tags'])}\n")
+    tags = ", ".join(upload.get("tags") or [])
+    hashtags = " ".join("#" + h for h in upload.get("hashtags") or [])
+    return (f"TITLE:\n{upload.get('title', '')}\n\nDESCRIPTION:\n{upload.get('description', '')}\n\n"
+            f"TAGS (paste into YouTube's Tags box):\n{tags}\n\n"
+            f"HASHTAGS (Instagram allows 5 at most):\n{hashtags}\n")
