@@ -151,6 +151,20 @@ clipping program give you real permission.
 Clips made before thumbnails existed: open the run and click **Make
 thumbnails**.
 
+**Clipping campaigns (Whop):** open **Clipping campaign** under the
+settings and tick **Use these campaign rules**:
+- **Every title must mention** (e.g. `Preme`): added to titles,
+  descriptions, tags and hashtags when missing.
+- **Never mention** (e.g. `Drake`): removed from all text, and moments that
+  talk about it are skipped.
+- **Clips must be about** (e.g. `Preme`): the AI only picks moments with
+  them.
+- **Campaign logo:** add the PNG the campaign gives you. It goes on every
+  clip, centered and clearly visible, never at an edge (campaigns reject
+  hidden logos). Choose the position, size and opacity.
+
+Untick the box for your normal clips.
+
 Clips are numbered 1, 2, 3... from most to least viral. Every run is
 saved in `output/<date>-<video name>/`. **Open folder** shows it in File
 Explorer, and **Download all (zip)** gets every finished clip plus a

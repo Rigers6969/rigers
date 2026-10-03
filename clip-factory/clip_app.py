@@ -24,6 +24,7 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 
 import ai
 import alerts
+import campaign
 import channel_stats
 import learn
 import downloader
@@ -196,6 +197,8 @@ def run_pipeline(run: dict) -> None:
         update("moments", "Looking for the best moments...", 35, save=True)
         sentences = moments.split_sentences(words, s["max_len"])
         candidates = moments.make_candidates(sentences, s["min_len"], s["max_len"])
+        if s.get("c_ban"):
+            candidates = [c for c in candidates if not campaign.mentions(c["text"], s["c_ban"])]
         if not candidates:
             raise renderer.RenderError(
                 f"Couldn't find any {s['min_len']}-{s['max_len']}s stretch of speech - try a wider clip length."
@@ -212,7 +215,7 @@ def run_pipeline(run: dict) -> None:
             update(message=msg, percent=35 + 15 * done_batches["n"] / batches)
 
         stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled, kind=s["kind"],
-                                         learned=learn.hint_for(s["channel_name"]))
+                                         learned=learn.hint_for(s["channel_name"]) + campaign.ai_hint(s.get("c_focus") or [], s.get("c_ban") or []))
         if cancelled():
             raise transcriber.Cancelled()
         if brain and stats["fallback"]:
@@ -237,6 +240,8 @@ def run_pipeline(run: dict) -> None:
             run["policy_note"] = (f"{blocked} moment{'s' if blocked != 1 else ''} broke YouTube's rules "
                                   f"(slurs, harassment or sexual content) and {'were' if blocked != 1 else 'was'} skipped.")
         picks = moments.pick_best(allowed, s["count"])
+        for c in picks:  # campaign: every title names who it must, and never who it mustn't
+            c["title"] = campaign.fix_title(c["title"], s.get("c_must") or [], s.get("c_ban") or [])
         run["planned"] = len(picks)
         if len(picks) < s["count"]:
             run["note"] = (f"This video only has room for {len(picks)} separate clips of {s['min_len']}-{s['max_len']}s "
@@ -255,6 +260,7 @@ def run_pipeline(run: dict) -> None:
                 if cancelled():
                     return
                 got = upload_text.ai_batch(brain, items[k:k + 10], src, s["kind"], s["channel_name"])
+                got = {n: campaign.fix_upload(u, s.get("c_must") or [], s.get("c_ban") or []) for n, u in got.items()}
                 with texts_lock:
                     texts.update(got)
                     for clip in run["clips"]:
@@ -282,6 +288,8 @@ def run_pipeline(run: dict) -> None:
                     source, start, end, words, c["title"] if s["show_title"] else "",
                     s["layout"], s["captions"], run_dir / f"{name}.mp4", run_dir / f"{name}.jpg",
                     has_audio=info["has_audio"], cancelled=cancelled, bleep=s["bleep"],
+                    watermark={"path": campaign.watermark_path(s["wm"]), "size": s["wm_size"] / 100,
+                               "opacity": s["wm_opacity"] / 100, "y": campaign.WM_POSITIONS[s["wm_pos"]]} if s.get("wm") else None,
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -305,8 +313,8 @@ def run_pipeline(run: dict) -> None:
                 "upload": None, **thumbs,
             })
             with texts_lock:
-                run["clips"][-1]["upload"] = texts.get(n) or upload_text.fallback(
-                    {"title": c["title"], "text": c["text"]}, src, s["kind"], s["channel_name"])
+                run["clips"][-1]["upload"] = texts.get(n) or campaign.fix_upload(upload_text.fallback(
+                    {"title": c["title"], "text": c["text"]}, src, s["kind"], s["channel_name"]), s.get("c_must") or [], s.get("c_ban") or [])
             save_run(run)
 
         made = len(run["clips"])
@@ -526,6 +534,35 @@ def _ollama_up(host: str) -> bool:
         return False
 
 
+@app.route("/api/watermarks", methods=["GET", "POST"])
+def watermarks():
+    """The campaign logos you've added (PNG/JPG/WEBP; stored as PNG so see-through parts stay see-through)."""
+    if request.method == "POST":
+        f = request.files.get("file")
+        if not f or not f.filename:
+            return jsonify({"error": "No file was sent."}), 400
+        if Path(f.filename).suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
+            return jsonify({"error": "Use the logo as a PNG, JPG or WEBP picture."}), 400
+        try:
+            name = campaign.save_watermark(f.read(), f.filename)
+        except Exception:
+            return jsonify({"error": "That file isn't a picture Clip Factory can read."}), 400
+        return jsonify({"name": name, "names": _wm_names()})
+    return jsonify({"names": _wm_names()})
+
+
+def _wm_names() -> list[str]:
+    return sorted(p.name for p in campaign.WM_DIR.glob("*.png")) if campaign.WM_DIR.exists() else []
+
+
+@app.route("/watermarks/<name>")
+def watermark_file(name):
+    p = campaign.watermark_path(name)
+    if not p:
+        return jsonify({"error": "Not found."}), 404
+    return send_file(p, max_age=0)
+
+
 @app.route("/api/upload", methods=["POST"])
 def upload():
     f = request.files.get("file")
@@ -577,6 +614,12 @@ def parse_settings(data: dict) -> dict:
         "kind": data.get("kind") if data.get("kind") in ("podcast", "stream") else "",
         "channel_name": re.sub(r"[\r\n]+", " ", str(data.get("channel_name") or "")).strip()[:60],
         "bleep": bool(data.get("bleep", True)),
+        # clipping campaign (e.g. Whop): words titles must / mustn't have, who it's about, the campaign's logo
+        "c_must": campaign.words(str(data.get("c_must") or "")), "c_ban": campaign.words(str(data.get("c_ban") or "")),
+        "c_focus": campaign.words(str(data.get("c_focus") or "")),
+        "wm": str(data.get("wm") or "") if campaign.watermark_path(str(data.get("wm") or "")) else "",
+        "wm_pos": data.get("wm_pos") if data.get("wm_pos") in campaign.WM_POSITIONS else "lower",
+        "wm_size": _int(data, "wm_size", 30, 10, 80), "wm_opacity": _int(data, "wm_opacity", 100, 60, 100),
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
 
@@ -1796,6 +1839,27 @@ PAGE = r"""<!DOCTYPE html>
     <label class="check"><input type="checkbox" id="showTitle" checked> Put a hook title at the top of each clip</label>
     <label class="check"><input type="checkbox" id="safeMode" checked> Skip moments that break YouTube's rules (slurs, harassment, sexual content)</label>
     <label class="check"><input type="checkbox" id="bleep" checked> Bleep swear words (and show them as F*** in the captions)</label>
+    <details id="campBox" style="margin-top:6px">
+      <summary>Clipping campaign (Whop): logo and caption rules</summary>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="campOn"> <b>Use these campaign rules for the next clips</b></label>
+      <div class="grid" style="margin-top:8px">
+        <div><label for="cMust">Every title must mention</label><input type="text" id="cMust" placeholder="e.g. Preme"></div>
+        <div><label for="cBan">Never mention (and skip moments about)</label><input type="text" id="cBan" placeholder="e.g. Drake"></div>
+        <div><label for="cFocus">Clips must be about</label><input type="text" id="cFocus" placeholder="e.g. Preme"></div>
+      </div>
+      <div class="grid" style="margin-top:8px;align-items:end">
+        <div><label for="wm">Campaign logo (watermark)</label><select id="wm"><option value="">No logo</option></select></div>
+        <div><label for="wmFile">Add a logo (PNG from the campaign)</label><input type="file" id="wmFile" accept=".png,.jpg,.jpeg,.webp"></div>
+        <div style="text-align:center"><img id="wmPrev" alt="" style="max-height:70px;max-width:100%;background:repeating-conic-gradient(#333 0 25%,#222 0 50%) 0 0/16px 16px;border-radius:6px" class="hide"></div>
+      </div>
+      <div class="grid" style="margin-top:8px">
+        <div><label for="wmPos">Logo position</label><select id="wmPos"><option value="upper">Upper middle</option><option value="middle">Middle</option><option value="lower" selected>Lower middle (above the captions)</option></select></div>
+        <div><label for="wmSize">Logo size (% of the width)</label><input type="number" id="wmSize" min="10" max="80" value="30"></div>
+        <div><label for="wmOpacity">Logo opacity (%)</label><input type="number" id="wmOpacity" min="60" max="100" value="100"></div>
+      </div>
+      <div class="msg" style="margin-top:6px">The logo always sits in the middle of the width, never at an edge or corner, so campaigns count it as visible. Untick the box above for your normal clips.</div>
+      <div class="msg" id="wmMsg"></div>
+    </details>
     <details>
       <summary>Advanced</summary>
       <div class="grid" style="margin-top:12px">
@@ -1857,7 +1921,8 @@ const store = {
   },
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
-const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep"];
+const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
+  "campOn", "cMust", "cBan", "cFocus", "wmPos", "wmSize", "wmOpacity"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -1955,8 +2020,38 @@ function clipSettings() {
     layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
+    ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value,
+      wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
 }
+
+// ---------- campaign logo ----------
+function showWm() {
+  const n = $("wm").value;
+  $("wmPrev").classList.toggle("hide", !n);
+  if (n) $("wmPrev").src = "/watermarks/" + encodeURIComponent(n) + "?t=" + Date.now();
+}
+async function loadWatermarks(select) {
+  let d; try { d = await api("/api/watermarks"); } catch (e) { return; }
+  const want = select || store.get("cf_wm") || "";
+  $("wm").innerHTML = '<option value="">No logo</option>' + d.names.map((n) => `<option value="${esc(n)}">${esc(n.replace(/\.png$/, ""))}</option>`).join("");
+  if (d.names.includes(want)) $("wm").value = want;
+  showWm();
+}
+$("wm").onchange = () => { store.set("cf_wm", $("wm").value); showWm(); };
+$("wmFile").onchange = async () => {
+  const f = $("wmFile").files[0]; if (!f) return;
+  const fd = new FormData(); fd.append("file", f);
+  $("wmMsg").innerText = "Adding the logo...";
+  try {
+    const r = await api("/api/watermarks", { method: "POST", body: fd });
+    store.set("cf_wm", r.name); await loadWatermarks(r.name);
+    $("wmMsg").innerHTML = '<span style="color:var(--ok)">Logo added. It will be on every clip while the campaign box is ticked.</span>';
+    if (!$("campOn").checked) { $("campOn").checked = true; saveSettings(); }
+  } catch (e) { $("wmMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  $("wmFile").value = "";
+};
+if (store.get("cf_campOn") === "1") $("campBox").open = true;
 
 function openRun(id) {
   showTab("clips");
@@ -2911,6 +3006,8 @@ $("aiTest").onclick = async () => {
 (async () => {
   await store.load();
   loadSettings();
+  if ($("campOn").checked) $("campBox").open = true;
+  loadWatermarks();
   for (const id of SETTINGS) for (const ev of ["change", "input"]) $(id).addEventListener(ev, saveSettings);  // saved the moment you change it
   const savedKind = store.get("cf_listKind");
   if (savedKind) { const r = document.querySelector(`input[name=listKind][value=${savedKind}]`); if (r) r.checked = true; }

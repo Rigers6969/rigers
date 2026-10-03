@@ -146,8 +146,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     out_path.write_text("".join(lines), encoding="utf-8")
 
 
-def _video_filter(layout: str, ass_name: str | None) -> str:
+def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None) -> str:
+    """wm: {"size": share of the width, "opacity": 0-1, "y": centre as share of the height} - input 1 is the logo."""
     subs = f",subtitles={ass_name}" if ass_name else ""
+    base = _base_filter(layout)
+    if not wm:
+        return base[: -len("[v]")] + subs + "[v]"
+    w = max(40, int(OUT_W * wm["size"])) // 2 * 2
+    return (base[: -len("[v]")] + "[b0];"
+            f"[1:v]scale={w}:-1,format=rgba,colorchannelmixer=aa={wm['opacity']:.2f}[wm];"
+            # captions go on top of the logo, so the logo never hides what's said
+            f"[b0][wm]overlay=x=(W-w)/2:y=H*{wm['y']:.3f}-h/2,format=yuv420p{subs}[v]")
+
+
+def _base_filter(layout: str) -> str:
+    subs = ""
     if layout == "podcast":
         half = OUT_H // 2
         return (
@@ -209,6 +222,7 @@ def render_clip(
     source: Path, start: float, end: float, words: list[dict], title: str,
     layout: str, caption_style: str, out_path: Path, poster_path: Path,
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
+    watermark: dict | None = None,
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
@@ -235,7 +249,11 @@ def render_clip(
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(source.resolve()),
-        "-filter_complex", _video_filter(layout, ass_name) + _audio_filter(mute if has_audio else []), "-map", "[v]",
+    ]
+    if watermark:  # a still logo: overlay repeats its one frame for the whole clip
+        cmd += ["-i", str(Path(watermark["path"]).resolve())]
+    cmd += [
+        "-filter_complex", _video_filter(layout, ass_name, watermark) + _audio_filter(mute if has_audio else []), "-map", "[v]",
     ]
     if has_audio:
         cmd += ["-map", "[a]" if mute else "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "44100"]
