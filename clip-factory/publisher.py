@@ -20,6 +20,7 @@ How it works:
 """
 from __future__ import annotations
 
+import bisect
 import datetime as dt
 import json
 import os
@@ -51,8 +52,17 @@ DEFAULT_SLOTS = {
     "paper":   [{"kind": "long", "days": [0, 3], "time": "17:00"}, {"kind": "short", "days": list(range(7)), "time": "12:00"}],
     "science": [{"kind": "long", "days": [1, 4], "time": "17:00"}, {"kind": "short", "days": list(range(7)), "time": "12:00"}],
     "history": [{"kind": "long", "days": [2, 5], "time": "17:00"}, {"kind": "short", "days": list(range(7)), "time": "12:00"}],
-    "clips":   [{"kind": "short", "days": list(range(7)), "time": t} for t in ("09:00", "15:00", "21:00")],
+    "clips":   [{"kind": "short", "days": list(range(7)), "every": 60, "from": "09:00", "to": "23:00"}],
 }
+# choices for "Shorts per channel" in the Publish tab
+SHORT_PLANS = {
+    "1day": [{"kind": "short", "days": list(range(7)), "time": "12:00"}],
+    "3day": [{"kind": "short", "days": list(range(7)), "time": t} for t in ("09:00", "15:00", "21:00")],
+    "2h":   [{"kind": "short", "days": list(range(7)), "every": 120, "from": "09:00", "to": "23:00"}],
+    "1h":   [{"kind": "short", "days": list(range(7)), "every": 60, "from": "09:00", "to": "23:00"}],
+}
+DEFAULT_GAP = 60   # minutes between any two posts, all channels together
+ISO = "%Y-%m-%dT%H:%M"
 OTHER_SLOTS = [{"kind": "long", "days": [2], "time": "17:00"}, {"kind": "short", "days": list(range(7)), "time": "12:00"}]
 
 _lock = threading.RLock()
@@ -78,6 +88,7 @@ def load_settings() -> dict:
     s.setdefault("connected", {})
     s.setdefault("slots", {})
     s.setdefault("quota", {"date": "", "used": 0})
+    s.setdefault("gap", DEFAULT_GAP)
     return s
 
 
@@ -317,39 +328,119 @@ def remove_item(item_id: str) -> None:
 
 # ---------- scheduling ----------
 
-def _slot_times(slots: list[dict], kind: str, start: dt.datetime, days: int = 60):
+def short_plan(slots: list[dict]) -> str:
+    """Which SHORT_PLANS choice a channel's slots match ("" = custom)."""
+    mine = [r for r in slots if r["kind"] == "short"]
+    return next((k for k, v in SHORT_PLANS.items() if v == mine), "")
+
+
+def set_short_plan(cid: str, plan: str) -> None:
+    if plan not in SHORT_PLANS:
+        raise PublishError("unknown plan")
+    ch = next((c for c in channels() if c["id"] == cid), None)
+    if not ch:
+        raise PublishError("unknown channel")
+    s = load_settings()
+    s["slots"][cid] = [r for r in ch["slots"] if r["kind"] != "short"] + SHORT_PLANS[plan]
+    save_settings(s)
+
+
+def _candidates(slots: list[dict], kind: str, start: dt.datetime, gap: int, days: int = 60):
+    """(time, slot) pairs in time order. A fixed slot (e.g. 12:00) may slide 1-3 gaps later when another
+    channel already posts then; an "every N minutes" rule simply offers every step."""
     rules = [r for r in slots if r["kind"] == kind] or slots
-    for d in range(days):
+    out = []
+    for d in range(days + 1):
         day = (start + dt.timedelta(days=d)).date()
         for r in rules:
-            if day.weekday() in r["days"]:
-                h, m = (int(x) for x in r["time"].split(":"))
-                t = dt.datetime.combine(day, dt.time(h, m))
-                if t > start:
-                    yield t
-    # sorted by the caller
+            if day.weekday() not in r["days"]:
+                continue
+            if r.get("every"):
+                t = dt.datetime.combine(day, dt.time(*(int(x) for x in r.get("from", "09:00").split(":"))))
+                last = dt.datetime.combine(day, dt.time(*(int(x) for x in r.get("to", "23:00").split(":"))))
+                while t <= last:
+                    if t > start:
+                        out.append((t, t))
+                    t += dt.timedelta(minutes=max(15, int(r["every"])))
+            else:
+                base = dt.datetime.combine(day, dt.time(*(int(x) for x in r["time"].split(":"))))
+                for k in range(4 if gap else 1):
+                    t = base + dt.timedelta(minutes=gap * k)
+                    if t > start and t.date() == day:
+                        out.append((t, base))
+    return sorted(set(out))
 
 
-def fill_schedule(now: Optional[dt.datetime] = None) -> int:
-    """Give every waiting item without a time the next free slot of its channel."""
+def _busy(q: list[dict]):
+    """Every planned post time (all channels) and the slots each channel already uses."""
+    live = [i for i in q if i.get("when") and i["status"] != "failed"]
+    times = sorted(dt.datetime.fromisoformat(i["when"]) for i in live)
+    slots = {(i["cid"], i.get("base") or i["when"]) for i in live}
+    return times, slots
+
+
+def _is_free(t: dt.datetime, times: list, gap: int) -> bool:
+    g = dt.timedelta(minutes=max(1, gap))
+    i = bisect.bisect_left(times, t - g + dt.timedelta(seconds=1))
+    return not (i < len(times) and times[i] < t + g)
+
+
+def _assign(it: dict, slots: list[dict], start: dt.datetime, gap: int, times: list, used: set) -> bool:
+    for t, base in _candidates(slots, it["kind"], start, gap):
+        key = (it["cid"], base.strftime(ISO))
+        if key in used or not _is_free(t, times, gap):
+            continue
+        it["when"], it["base"] = t.strftime(ISO), key[1]
+        used.add(key)
+        bisect.insort(times, t)
+        return True
+    return False
+
+
+def fill_schedule(now: Optional[dt.datetime] = None, replan: bool = False) -> int:
+    """Give every waiting item without a time the next free slot of its channel, keeping at least
+    `gap` minutes between any two posts. replan=True first clears the times of all to-do items."""
     now = now or dt.datetime.now()
     start = now + dt.timedelta(minutes=30)
     q = load_queue()
+    gap = int(load_settings()["gap"])
     chans = {c["id"]: c for c in channels()}
-    taken = {(i["cid"], i["when"]) for i in q if i["when"] and i["status"] != "failed"}
+    if replan:
+        for it in q:
+            if it["status"] == "waiting":
+                it["when"], it["base"] = "", ""
+    times, used = _busy(q)
     filled = 0
-    for it in q:
+    for it in sorted(q, key=lambda i: i["added"]):
         if it["when"] or it["status"] != "waiting" or it["cid"] not in chans:
             continue
-        for t in sorted(_slot_times(chans[it["cid"]]["slots"], it["kind"], start)):
-            key = (it["cid"], t.strftime("%Y-%m-%dT%H:%M"))
-            if key not in taken:
-                it["when"] = key[1]
-                taken.add(key)
-                filled += 1
-                break
+        if _assign(it, chans[it["cid"]]["slots"], start, gap, times, used):
+            filled += 1
     save_queue(q)
     return filled
+
+
+def _move_late(item_id: str, now: dt.datetime) -> Optional[str]:
+    """A post that missed its time (PC was off) gets the next free time, so late posts never go out all at once."""
+    with _lock:
+        q = load_queue()
+        it = next((i for i in q if i["id"] == item_id), None)
+        chans = {c["id"]: c for c in channels()}
+        if not it or it["cid"] not in chans:
+            return None
+        times, used = _busy([i for i in q if i["id"] != item_id])
+        if not _assign(it, chans[it["cid"]]["slots"], now + dt.timedelta(minutes=30), int(load_settings()["gap"]), times, used):
+            return None
+        save_queue(q)
+        return it["when"]
+
+
+def per_day() -> float:
+    """Planned posts per day over the coming week (for the quota warning)."""
+    now = dt.datetime.now()
+    week = [i for i in load_queue() if i["status"] == "waiting" and i.get("when")
+            and now <= dt.datetime.fromisoformat(i["when"]) <= now + dt.timedelta(days=7)]
+    return round(len(week) / 7, 1)
 
 
 # ---------- the week, ready for YouTube Studio ----------
@@ -531,6 +622,11 @@ def run_due(now: Optional[dt.datetime] = None) -> int:
     for it in due:
         if quota()["uploads_left"] < 1:
             break
+        if dt.datetime.fromisoformat(it["when"]) < now + dt.timedelta(minutes=20):
+            new = _move_late(it["id"], now)
+            if not new:
+                continue
+            it["when"] = new
         state["uploading"] = it["id"]
         _set(it["id"], status="uploading", error="")
         try:

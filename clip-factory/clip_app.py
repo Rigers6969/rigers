@@ -690,10 +690,12 @@ def publish_state():
     secret = publisher.client_secret_path()
     return jsonify({
         "approved": s["approved"], "client_secret": str(secret) if secret else None,
-        "channels": [{k: c.get(k) for k in ("id", "name", "ref", "connected", "token", "slots")} for c in publisher.channels()],
+        "channels": [dict({k: c.get(k) for k in ("id", "name", "ref", "connected", "token", "slots")},
+                          plan=publisher.short_plan(c["slots"])) for c in publisher.channels()],
         "connecting": publisher.state["connecting"], "connect_error": publisher.state["connect_error"],
         "uploading": publisher.state["uploading"], "queue": _queue_public(), "quota": publisher.quota(),
-        "weekdays": publisher.WEEKDAYS,
+        "weekdays": publisher.WEEKDAYS, "gap": s["gap"], "per_day": publisher.per_day(),
+        "now": time.strftime("%Y-%m-%dT%H:%M:%S"),
     })
 
 
@@ -757,7 +759,22 @@ def publish_add():
 
 @app.route("/api/publish/fill", methods=["POST"])
 def publish_fill():
-    return jsonify({"filled": publisher.fill_schedule()})
+    return jsonify({"filled": publisher.fill_schedule(replan=bool(_publish_body().get("replan")))})
+
+
+@app.route("/api/publish/timing", methods=["POST"])
+def publish_timing():
+    data = _publish_body()
+    try:
+        if "gap" in data:
+            s = publisher.load_settings()
+            s["gap"] = max(0, min(360, int(data["gap"])))
+            publisher.save_settings(s)
+        if data.get("cid") and data.get("plan"):
+            publisher.set_short_plan(str(data["cid"]), str(data["plan"]))
+    except (ValueError, publisher.PublishError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return publish_state()
 
 
 @app.route("/api/publish/item/<item_id>", methods=["POST"])
@@ -1138,6 +1155,13 @@ PAGE = r"""<!DOCTYPE html>
   .qitem .time { font-weight: 800; font-variant-numeric: tabular-nums; }
   .qitem .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
   .qitem .acts button, .qitem .acts a { padding: 5px 10px; font-size: 12px; }
+  .tracker { display: grid; gap: 10px; margin-top: 10px; }
+  .tracker .next { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 12px 14px; border-radius: 10px; background: #14161c; border: 1px solid var(--line); }
+  .tracker .count { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .tracker .late { padding: 10px 14px; border-radius: 10px; background: #3a1414; color: #ff8a8a; font-size: 14px; }
+  .tracker .today { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tracker .today span { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-variant-numeric: tabular-nums; background: #1c1f27; border-left: 4px solid #555; }
+  .tracker .today span.done { opacity: .55; text-decoration: line-through; }
   .banner { border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 10px; }
   .banner.manual { background: #3a2f0a; color: #ffcf4d; }
   .banner.auto { background: #12301f; color: var(--ok); }
@@ -1335,6 +1359,15 @@ PAGE = r"""<!DOCTYPE html>
         <h2 style="margin:0">Schedule</h2>
         <div class="row"><span class="msg" id="quotaMsg"></span><button id="fillBtn">Fill the schedule</button><button class="ghost" id="weekBtn">Get this week ready for YouTube Studio</button></div>
       </div>
+      <div class="tracker" id="tracker"></div>
+      <details style="margin:10px 0"><summary class="msg" style="cursor:pointer">Posting times</summary>
+        <div style="margin-top:10px">
+          <div class="row"><label for="gapSel" style="margin:0">Time between any two posts (all channels)</label>
+            <select id="gapSel" style="width:auto"><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="180">3 hours</option></select></div>
+          <div id="planList" style="margin-top:8px"></div>
+          <div class="row" style="margin-top:8px"><button class="ghost" id="replanBtn">Re-plan all to-do posts</button>
+            <span class="msg">Gives every post that isn't scheduled yet a new time with these settings.</span></div>
+        </div></details>
       <div class="msg" style="margin:6px 0 10px" id="slotsMsg"></div>
       <div id="weekBox" class="hide" style="margin-bottom:12px"></div>
       <div id="modeBanner"></div>
@@ -2174,7 +2207,14 @@ function renderPub() {
   $("addRunCh").innerHTML = d.channels.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
   $("addRunCh").value = keep || (d.channels.find((c) => c.id === "clips") || d.channels[0] || {}).id || "";
   $("quotaMsg").innerText = d.approved ? `YouTube quota today: ${d.quota.uploads_left} uploads left` : "";
-  $("slotsMsg").innerHTML = "Weekly plan: " + d.channels.map((c) => `<b>${esc(c.name)}</b> ` + c.slots.map((r) => `${r.kind === "long" ? "full video" : "Short"} ${r.days.length === 7 ? "daily" : r.days.map((x) => d.weekdays[x]).join("/")} ${r.time}`).join(", ")).join(" · ");
+  const ruleTxt = (r) => `${r.kind === "long" ? "full video" : "Short"} ${r.every ? `every ${r.every >= 60 ? r.every / 60 + "h" : r.every + " min"} ${r.from}-${r.to}` : `${r.days.length === 7 ? "daily" : r.days.map((x) => d.weekdays[x]).join("/")} ${r.time}`}`;
+  $("slotsMsg").innerHTML = "Weekly plan: " + d.channels.map((c) => `<b>${esc(c.name)}</b> ` + c.slots.map(ruleTxt).join(", ")).join(" · ") + ` · at least ${d.gap >= 60 ? d.gap / 60 + " hour" + (d.gap > 60 ? "s" : "") : d.gap + " minutes"} between posts`;
+  $("gapSel").value = String(d.gap);
+  const PLAN_TXT = { "1day": "1 a day (12:00)", "3day": "3 a day (9:00, 15:00, 21:00)", "2h": "1 every 2 hours (9:00-23:00)", "1h": "1 every hour (9:00-23:00)" };
+  $("planList").innerHTML = d.channels.map((c) => `<div class="conn"><b>${esc(c.name)}</b><span class="msg">Shorts:</span>
+    <select data-plan="${esc(c.id)}" style="width:auto">${c.plan ? "" : '<option value="">custom</option>'}${Object.entries(PLAN_TXT).map(([k, v]) => `<option value="${k}" ${k === c.plan ? "selected" : ""}>${v}</option>`).join("")}</select></div>`).join("");
+  $("planList").querySelectorAll("[data-plan]").forEach((sel) => (sel.onchange = async () => { pubData = await postJson("/api/publish/timing", { cid: sel.dataset.plan, plan: sel.value }); renderPub(); }));
+  renderTracker();
   $("modeBanner").innerHTML = d.approved
     ? '<div class="banner auto">Automatic: each video is uploaded up to 3 days before its time, and YouTube publishes it at that time by itself. Open Clip Factory at least every couple of days so it can upload.</div>'
     : '<div class="banner manual">Until Google approves, post each item yourself: click <b>Show file</b>, upload it in YouTube Studio, paste the title, description and tags with the copy buttons, set <b>Schedule</b> to the time shown, then click <b>Scheduled</b>. Tip: do the whole week in one sitting on Sunday.</div>';
@@ -2233,6 +2273,37 @@ function renderPub() {
     });
   });
 }
+function fmtLeft(ms) {
+  const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+  return (h >= 24 ? Math.floor(h / 24) + "d " + (h % 24) + "h " : h ? h + "h " : "") + String(m).padStart(2, "0") + "m " + String(sec).padStart(2, "0") + "s";
+}
+let trackTimer = null, clockSkew = 0;
+function renderTracker() {
+  const d = pubData; if (!d) return;
+  clockSkew = new Date(d.now).getTime() - Date.now();  // follow the app's clock, not the browser's
+  const now = () => Date.now() + clockSkew;
+  const name = (cid) => (d.channels.find((c) => c.id === cid) || {}).name || cid;
+  const planned = d.queue.filter((q) => q.when && q.status !== "failed").map((q) => ({ ...q, t: new Date(q.when).getTime() })).sort((a, b) => a.t - b.t);
+  const draw = () => {
+    const n = now();
+    const next = planned.find((q) => q.t > n);
+    const late = planned.filter((q) => q.t <= n && q.status === "waiting");
+    const today = new Date(n).toDateString();
+    const todays = planned.filter((q) => new Date(q.t).toDateString() === today);
+    let html = next ? `<div class="next"><div><div class="msg">Next post in</div><div class="count">${fmtLeft(next.t - n)}</div></div>
+        <div style="min-width:0"><span class="tag" style="background:${chColor(next.cid)};color:#fff">${esc(name(next.cid))}</span> <b>${esc(next.when.slice(11, 16))}</b>
+        ${next.status === "waiting" && !d.approved ? '<span class="tag maybe">not scheduled in YouTube Studio yet</span>' : ""}<div style="margin-top:4px">${esc(next.title)}</div></div></div>`
+      : '<div class="next"><span class="msg">No posts planned - add videos and click Fill the schedule.</span></div>';
+    if (late.length) html += `<div class="late"><b>${late.length} post${late.length > 1 ? "s" : ""} missed ${late.length > 1 ? "their" : "its"} time</b> (${late.slice(0, 3).map((q) => esc(q.when.slice(5, 16).replace("T", " "))).join(", ")}${late.length > 3 ? "..." : ""}). ${d.approved ? "They get new times automatically, one by one." : "Click <b>Re-plan all to-do posts</b> under Posting times to give them new times."}</div>`;
+    if (todays.length) html += `<div class="today"><span class="msg" style="background:none;border:0;padding:4px 0">Today:</span>${todays.map((q) => `<span class="${q.t <= n ? "done" : ""}" style="border-left-color:${chColor(q.cid)}" title="${esc(name(q.cid) + " - " + q.title)}">${esc(q.when.slice(11, 16))}</span>`).join("")}</div>`;
+    if (d.approved && d.per_day > 6) html += `<div class="msg">About ${d.per_day} posts a day are planned, but YouTube allows about 6 automatic uploads a day until Google raises your quota - the rest wait for the next days.</div>`;
+    $("tracker").innerHTML = html;
+  };
+  draw();
+  clearInterval(trackTimer); trackTimer = setInterval(draw, 1000);
+}
+$("gapSel").onchange = async () => { pubData = await postJson("/api/publish/timing", { gap: +$("gapSel").value }); renderPub(); };
+$("replanBtn").onclick = async () => { const r = await postJson("/api/publish/fill", { replan: true }); await loadPub(); $("replanBtn").innerText = `Re-planned ${r.filled}`; setTimeout(() => ($("replanBtn").innerText = "Re-plan all to-do posts"), 1800); };
 $("fillBtn").onclick = async () => { const r = await api("/api/publish/fill", { method: "POST" }); await loadPub(); $("fillBtn").innerText = `Filled ${r.filled}`; setTimeout(() => ($("fillBtn").innerText = "Fill the schedule"), 1800); };
 $("weekBtn").onclick = async () => {
   $("weekBtn").disabled = true;

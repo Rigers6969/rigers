@@ -189,7 +189,19 @@ them to YouTube at the right times.
 - **Paper Trail:** full video Mon and Thu 17:00, a Short every day at 12:00
 - **Science:** full video Tue and Fri 17:00, a Short every day at 12:00
 - **History:** full video Wed and Sat 17:00, a Short every day at 12:00
-- **Hot Mic Moments:** Shorts every day at 09:00, 15:00 and 21:00
+- **Hot Mic Moments:** a Short every hour, 09:00-23:00
+- **At least 1 hour between any two posts,** all channels together. If two
+  channels want the same time, one moves to the next free hour.
+
+**Change it:** open **Posting times** in the Schedule. Set the time
+between posts (30 minutes to 3 hours), and each channel's Shorts: 1 a day,
+3 a day, every 2 hours, or every hour. Then click **Re-plan all to-do
+posts**.
+
+**Time tracker:** the top of the Schedule counts down to the next post,
+shows today's posts in order, and warns when a post missed its time. In
+automatic mode, missed posts get new times one by one. They never all go
+out at once.
 
 **Setup (once):**
 1. **client_secret.json:** a free Google Cloud file. The tab shows the
