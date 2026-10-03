@@ -229,7 +229,7 @@ KIND_HINTS = {
 def score_candidates(
     candidates: list[dict], brain=None,
     progress: Optional[ProgressCB] = None, cancelled: Callable[[], bool] = lambda: False,
-    kind: str = "",
+    kind: str = "", learned: str = "",
 ) -> dict:
     """Fills in each candidate's score/title/source. Returns stats.
 
@@ -263,7 +263,7 @@ def score_candidates(
             local = {n: c for n, c in enumerate(todo, start=1)}
             listing = "\n\n".join(f"Clip {n} ({c['end'] - c['start']:.0f}s):\n{c['text']}" for n, c in local.items())
             try:
-                raw, who = brain.ask(PROMPT.format(n=len(local), clips=listing, hint=KIND_HINTS.get(kind, "")))
+                raw, who = brain.ask(PROMPT.format(n=len(local), clips=listing, hint=KIND_HINTS.get(kind, "") + learned))
             except Exception as exc:  # every AI is down or out of free use (the brain already retried)
                 stats["ai_error"], stop = str(exc), True
                 break

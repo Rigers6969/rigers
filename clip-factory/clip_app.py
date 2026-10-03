@@ -25,6 +25,7 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 import ai
 import alerts
 import channel_stats
+import learn
 import downloader
 import moments
 import permissions
@@ -210,7 +211,8 @@ def run_pipeline(run: dict) -> None:
                 done_batches["n"] = int(m.group(1)) - 1
             update(message=msg, percent=35 + 15 * done_batches["n"] / batches)
 
-        stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled, kind=s["kind"])
+        stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled, kind=s["kind"],
+                                         learned=learn.hint_for(s["channel_name"]))
         if cancelled():
             raise transcriber.Cancelled()
         if brain and stats["fallback"]:
@@ -1054,6 +1056,15 @@ def stats_refresh():
         return jsonify({"error": "Add at least one channel's @handle first."}), 400
     channel_stats.refresh_async()
     return jsonify({"ok": True}), 202
+
+
+@app.route("/api/learn", methods=["POST"])
+def learn_report():
+    data = request.get_json(silent=True) or {}
+    report = learn.analyze(str(data.get("cid") or ""))
+    if data.get("ai") and report.get("enough"):
+        report["ai"] = learn.explain(report, _brain_from(data))
+    return jsonify(report)
 
 
 @app.route("/api/stats/coach", methods=["POST"])

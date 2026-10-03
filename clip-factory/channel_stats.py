@@ -170,8 +170,12 @@ def fetch_api(ref: str, key: str) -> dict:
         if ids:
             for v in _api("videos", key, part="statistics,contentDetails,snippet", id=",".join(ids)).get("items") or []:
                 secs = _iso_seconds(v.get("contentDetails", {}).get("duration", ""))
-                vids[v["id"]] = {"t": v.get("snippet", {}).get("title", "")[:120], "v": int(v.get("statistics", {}).get("viewCount", 0)),
-                                 "s": secs <= SHORT_MAX_S, "p": (v.get("snippet", {}).get("publishedAt") or "")[:10]}
+                sn = v.get("snippet", {})
+                src = re.search(r"(?m)^From:\s*(.+?)(?:\s*\(@[\w.\-]+\))?\s*$", sn.get("description") or "")
+                vids[v["id"]] = {"t": sn.get("title", "")[:120], "v": int(v.get("statistics", {}).get("viewCount", 0)),
+                                 "s": secs <= SHORT_MAX_S, "p": (sn.get("publishedAt") or "")[:10],
+                                 # for "Learn what works": length, exact posting time, who the clip is from
+                                 "d": secs, "pt": sn.get("publishedAt") or "", "src": src.group(1)[:60] if src else ""}
     return {"title": ch.get("snippet", {}).get("title", ""), "subs": int(st.get("subscriberCount", 0)),
             "views": int(st.get("viewCount", 0)), "videos": int(st.get("videoCount", 0)), "source": "api", "vids": vids}
 
@@ -196,7 +200,8 @@ def fetch_public(ref: str) -> dict:
                 ts = e.get("timestamp")
                 vids[e["id"]] = {"t": (e.get("title") or "")[:120], "v": int(e["view_count"]),
                                  "s": tab == "shorts" or (e.get("duration") or 999) <= SHORT_MAX_S,
-                                 "p": dt.date.fromtimestamp(ts).isoformat() if ts else ""}
+                                 "p": dt.date.fromtimestamp(ts).isoformat() if ts else "",
+                                 "d": e.get("duration") or 0}
     if not loaded:
         raise StatsError(f"couldn't read that channel ({locals().get('last', 'not found')}) - check the @handle")
     return {"title": title, "subs": subs, "views": sum(v["v"] for v in vids.values()), "videos": len(vids),
