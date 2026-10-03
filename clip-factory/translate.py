@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
+
+import requests
 
 LANGS = {
     "sq": "Albanian", "es": "Spanish", "pt": "Brazilian Portuguese", "fr": "French",
@@ -71,6 +74,44 @@ def translate(brain, lines: list[str], lang: str, kind: str = "") -> list[str | 
                 if 1 <= n <= len(ids) and text:
                     out[ids[n - 1]] = text[:200]
     return out
+
+
+# a free translator that needs no key (MyMemory: about 5,000 characters a day per PC, more with an email)
+FREE_URL = "https://api.mymemory.translated.net/get"
+FREE_CODES = {"pt": "pt-BR"}
+free_state = {"used_up": False, "error": ""}
+
+
+def _free_one(text: str, lang: str, email: str = "") -> str | None:
+    if free_state["used_up"] or not text.strip():
+        return None
+    params = {"q": text[:450], "langpair": f"en|{FREE_CODES.get(lang, lang)}"}
+    if email:
+        params["de"] = email
+    try:
+        r = requests.get(FREE_URL, params=params, timeout=20)
+        data = r.json()
+    except Exception as exc:
+        free_state["error"] = f"the free translator didn't answer ({type(exc).__name__})"
+        return None
+    out = str((data.get("responseData") or {}).get("translatedText") or "").strip()
+    status = str(data.get("responseStatus"))
+    if status == "429" or "MYMEMORY WARNING" in out.upper() or "USED ALL AVAILABLE FREE" in out.upper():
+        free_state["used_up"] = True
+        free_state["error"] = "the free translator's daily limit is used up (it resets tomorrow)"
+        return None
+    if status != "200" or not out or out.lower() == text.lower().strip():
+        return None
+    return re.sub(r"\s+", " ", out)[:200]
+
+
+def translate_free(lines: list[str], lang: str, email: str = "") -> list[str | None]:
+    """The same lines through the free translator (used when no AI engine answers)."""
+    if lang not in LANGS:
+        return [None] * len(lines)
+    free_state.update(used_up=False, error="")
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return list(pool.map(lambda t: _free_one(t, lang, email), lines))
 
 
 def timed_words(lines: list[dict], translated: list[str | None]) -> list[dict]:

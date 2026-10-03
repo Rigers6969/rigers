@@ -257,28 +257,37 @@ def run_pipeline(run: dict) -> None:
         caption_sets: dict[int, list[dict]] = {}
         if s.get("lang") and s["captions"] != "none":
             lang_name = translate.LANGS[s["lang"]]
-            if brain is None:
-                run["warning"] = " ".join(filter(None, [run["warning"], f"{lang_name} captions need an AI engine (a free Gemini key "
-                                                        "works best) - these clips have the original captions."]))
-            else:
-                update(message=f"Translating the captions into {lang_name}...")
-                per_clip = [translate.lines_for(words, c["start"] - 0.15, c["end"] + 0.4) for c in picks]
-                flat = [ln["text"] for lines in per_clip for ln in lines]
-                done = translate.translate(brain, flat, s["lang"], s["kind"])
-                k = 0
-                for n, lines in enumerate(per_clip, start=1):
-                    caption_sets[n] = translate.timed_words(lines, done[k:k + len(lines)])
-                    k += len(lines)
-                missing = sum(1 for x in done if x is None)
-                if missing:
-                    run["warning"] = " ".join(filter(None, [run["warning"], f"{missing} of {len(done)} caption lines couldn't be "
-                                                            f"translated and stay in the original language."]))
-                run["engines"]["captions"] = f"{lang_name} ({len(done) - missing} lines translated)"
-        if s.get("lang") and brain is not None:
+            update(message=f"Translating the captions into {lang_name}...")
+            per_clip = [translate.lines_for(words, c["start"] - 0.15, c["end"] + 0.4) for c in picks]
+            flat = [ln["text"] for lines in per_clip for ln in lines]
+            done = translate.translate(brain, flat, s["lang"], s["kind"])
+            by_ai = sum(1 for x in done if x)
+            gaps = [i for i, x in enumerate(done) if x is None]
+            if gaps:  # no AI (or it missed lines): the free translator does the rest
+                update(message=f"Translating {len(gaps)} caption lines with the free translator...")
+                for i, t in zip(gaps, translate.translate_free([flat[i] for i in gaps], s["lang"])):
+                    done[i] = t
+            by_free = sum(1 for x in done if x) - by_ai
+            k = 0
+            for n, lines in enumerate(per_clip, start=1):
+                caption_sets[n] = translate.timed_words(lines, done[k:k + len(lines)])
+                k += len(lines)
+            missing = sum(1 for x in done if x is None)
+            if missing:
+                why = translate.free_state["error"] or "no translator answered"
+                run["warning"] = " ".join(filter(None, [run["warning"], f"{missing} of {len(done)} caption lines couldn't be "
+                                                        f"translated ({why}) and stay in English. Add a free Gemini key in AI engines "
+                                                        "for the best translations."]))
+            who = ", ".join(filter(None, [f"AI: {by_ai}" if by_ai else "", f"free translator: {by_free}" if by_free else ""]))
+            run["engines"]["captions"] = f"{lang_name} - {len(done) - missing} of {len(done)} lines" + (f" ({who})" if who else "")
+        if s.get("lang"):
             # titles the built-in scorer made are in the spoken language - translate them too
             plain = [c for c in picks if c.get("source") == "heuristic"]
             if plain:
                 got = translate.translate(brain, [c["title"] for c in plain], s["lang"], s["kind"])
+                miss = [i for i, t in enumerate(got) if not t]
+                for i, t in zip(miss, translate.translate_free([plain[i]["title"] for i in miss], s["lang"]) if miss else []):
+                    got[i] = t
                 for c, t in zip(plain, got):
                     if t:
                         c["title"] = campaign.fix_title(policy.clean_title(t.replace("***", "").strip()), s.get("c_must") or [], s.get("c_ban") or [])
@@ -1990,7 +1999,7 @@ PAGE = r"""<!DOCTYPE html>
           <option value="de">German - translated</option>
           <option value="it">Italian - translated</option>
           <option value="tr">Turkish - translated</option>
-        </select></div>
+        </select><div class="msg hide" id="langNote" style="font-size:12px;margin-top:4px">Translated by your AI engine (a free Gemini key is best). Without one, a free translator is used (about 10-15 clips a day).</div></div>
       <div><label>Ollama model</label><select id="model"></select></div>
     </div>
     <div id="gpBox" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
@@ -2207,6 +2216,8 @@ async function loadGameplay() {
 }
 function showGameplayBox() { const on = $("layout").value === "gameplay"; $("gpBox").classList.toggle("hide", !on); if (on) loadGameplay(); }
 $("layout").addEventListener("change", showGameplayBox);
+const showLangNote = () => $("langNote").classList.toggle("hide", !$("lang").value);
+$("lang").addEventListener("change", showLangNote);
 $("gpFile").onchange = async () => {
   const f = $("gpFile").files[0]; if (!f) return;
   const fd = new FormData(); fd.append("file", f);
@@ -3256,6 +3267,7 @@ $("aiTest").onclick = async () => {
   if ($("campOn").checked) $("campBox").open = true;
   loadWatermarks();
   showGameplayBox();
+  showLangNote();
   for (const id of SETTINGS) for (const ev of ["change", "input"]) $(id).addEventListener(ev, saveSettings);  // saved the moment you change it
   const savedKind = store.get("cf_listKind");
   if (savedKind) { const r = document.querySelector(`input[name=listKind][value=${savedKind}]`); if (r) r.checked = true; }
