@@ -148,6 +148,14 @@ clipping program give you real permission.
      can get your clips claimed.
 5. Click **Make clips**.
 
+**Captions in another language** (e.g. English clips for an Albanian
+channel): set **Captions and titles in** to **Albanian (Shqip)**. The AI
+translates what's said into natural, spoken Albanian, and the captions still
+light up word by word with the voice. Titles, descriptions, hashtags and
+thumbnails come out in Albanian too, and the voices stay original. It
+needs an AI engine; a free Gemini key translates best. Spanish,
+Portuguese, French, German, Italian and Turkish work the same way.
+
 **Every clip comes with everything for posting:**
 - a **title**, **description**, **tags** and **hashtags**, each with a copy
   button on the clip

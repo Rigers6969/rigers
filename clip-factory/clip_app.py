@@ -36,6 +36,7 @@ import publisher
 import renderer
 import thumbnail
 import transcriber
+import translate
 import trends
 import upload_text
 
@@ -217,7 +218,9 @@ def run_pipeline(run: dict) -> None:
             update(message=msg, percent=35 + 15 * done_batches["n"] / batches)
 
         stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled, kind=s["kind"],
-                                         learned=learn.hint_for(s["channel_name"]) + campaign.ai_hint(s.get("c_focus") or [], s.get("c_ban") or []))
+                                         learned=learn.hint_for(s["channel_name"]) + campaign.ai_hint(s.get("c_focus") or [], s.get("c_ban") or [])
+                                         + (f"\nWrite every title in {translate.LANGS[s['lang']]}, for {translate.LANGS[s['lang']]} viewers."
+                                            if s.get("lang") else ""))
         if cancelled():
             raise transcriber.Cancelled()
         if brain and stats["fallback"]:
@@ -250,6 +253,35 @@ def run_pipeline(run: dict) -> None:
                            f"(they never overlap), so you'll get {len(picks)} instead of {s['count']}.")
         update("render", f"Found {len(picks)} moments - cutting clip 1...", 50, save=True)
         games = _GameplayPicker(s.get("gameplay", "")) if s["layout"] == "gameplay" else None
+        # captions in another language: translate every clip's lines now, in big batches (one AI call per ~40 lines)
+        caption_sets: dict[int, list[dict]] = {}
+        if s.get("lang") and s["captions"] != "none":
+            lang_name = translate.LANGS[s["lang"]]
+            if brain is None:
+                run["warning"] = " ".join(filter(None, [run["warning"], f"{lang_name} captions need an AI engine (a free Gemini key "
+                                                        "works best) - these clips have the original captions."]))
+            else:
+                update(message=f"Translating the captions into {lang_name}...")
+                per_clip = [translate.lines_for(words, c["start"] - 0.15, c["end"] + 0.4) for c in picks]
+                flat = [ln["text"] for lines in per_clip for ln in lines]
+                done = translate.translate(brain, flat, s["lang"], s["kind"])
+                k = 0
+                for n, lines in enumerate(per_clip, start=1):
+                    caption_sets[n] = translate.timed_words(lines, done[k:k + len(lines)])
+                    k += len(lines)
+                missing = sum(1 for x in done if x is None)
+                if missing:
+                    run["warning"] = " ".join(filter(None, [run["warning"], f"{missing} of {len(done)} caption lines couldn't be "
+                                                            f"translated and stay in the original language."]))
+                run["engines"]["captions"] = f"{lang_name} ({len(done) - missing} lines translated)"
+        if s.get("lang") and brain is not None:
+            # titles the built-in scorer made are in the spoken language - translate them too
+            plain = [c for c in picks if c.get("source") == "heuristic"]
+            if plain:
+                got = translate.translate(brain, [c["title"] for c in plain], s["lang"], s["kind"])
+                for c, t in zip(plain, got):
+                    if t:
+                        c["title"] = campaign.fix_title(policy.clean_title(t.replace("***", "").strip()), s.get("c_must") or [], s.get("c_ban") or [])
         if games and not games.files:
             raise renderer.RenderError("The 'clip + gameplay' layout needs at least one gameplay video - add one under Layout.")
         # in the gameplay layout the logo stays on the clip (top half), never on the gameplay
@@ -266,7 +298,7 @@ def run_pipeline(run: dict) -> None:
             for k in range(0, len(items), 10):
                 if cancelled():
                     return
-                got = upload_text.ai_batch(brain, items[k:k + 10], src, s["kind"], s["channel_name"])
+                got = upload_text.ai_batch(brain, items[k:k + 10], src, s["kind"], s["channel_name"], s.get("lang", ""))
                 got = {n: campaign.fix_upload(u, s.get("c_must") or [], s.get("c_ban") or [], s.get("c_tags")) for n, u in got.items()}
                 with texts_lock:
                     texts.update(got)
@@ -301,6 +333,7 @@ def run_pipeline(run: dict) -> None:
                     watermark={"path": campaign.watermark_path(s["wm"]), "size": s["wm_size"] / 100,
                                "opacity": s["wm_opacity"] / 100, "y": wm_y} if s.get("wm") else None,
                     gameplay=games.next(end - start) if games else None,
+                    caption_words=caption_sets.get(n),
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -324,8 +357,11 @@ def run_pipeline(run: dict) -> None:
                 "upload": None, **thumbs,
             })
             with texts_lock:
-                run["clips"][-1]["upload"] = texts.get(n) or campaign.fix_upload(upload_text.fallback(
-                    {"title": c["title"], "text": c["text"]}, src, s["kind"], s["channel_name"]), s.get("c_must") or [], s.get("c_ban") or [], s.get("c_tags"))
+                fb = upload_text.fallback({"title": c["title"], "text": c["text"]}, src, s["kind"], s["channel_name"])
+                fb["description"] = translate.localize_description(fb["description"], s.get("lang", ""), s["channel_name"])
+                if s.get("lang"):  # the built-in hook line is the spoken words - use the (translated) title instead
+                    fb["description"] = "\n".join([c["title"]] + fb["description"].splitlines()[1:])
+                run["clips"][-1]["upload"] = texts.get(n) or campaign.fix_upload(fb, s.get("c_must") or [], s.get("c_ban") or [], s.get("c_tags"))
             save_run(run)
 
         made = len(run["clips"])
@@ -713,6 +749,7 @@ def parse_settings(data: dict) -> dict:
         "wm": str(data.get("wm") or "") if campaign.watermark_path(str(data.get("wm") or "")) else "",
         "wm_pos": data.get("wm_pos") if data.get("wm_pos") in campaign.WM_POSITIONS else "lower",
         "wm_size": _int(data, "wm_size", 30, 10, 80), "wm_opacity": _int(data, "wm_opacity", 100, 60, 100),
+        "lang": data.get("lang") if data.get("lang") in translate.LANGS else "",
         "gameplay": str(data.get("gameplay") or "") if _gameplay_file(str(data.get("gameplay") or "")) else "",
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
@@ -1943,6 +1980,17 @@ PAGE = r"""<!DOCTYPE html>
           <option value="simple">Simple white</option>
           <option value="none">No captions</option>
         </select></div>
+      <div><label for="lang">Captions and titles in</label>
+        <select id="lang">
+          <option value="">The language they speak</option>
+          <option value="sq">Albanian (Shqip) - translated</option>
+          <option value="es">Spanish - translated</option>
+          <option value="pt">Portuguese (Brazil) - translated</option>
+          <option value="fr">French - translated</option>
+          <option value="de">German - translated</option>
+          <option value="it">Italian - translated</option>
+          <option value="tr">Turkish - translated</option>
+        </select></div>
       <div><label>Ollama model</label><select id="model"></select></div>
     </div>
     <div id="gpBox" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
@@ -2044,7 +2092,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2142,7 +2190,7 @@ function clipSettings() {
     layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
-    gameplay: $("gpSel").value,
+    gameplay: $("gpSel").value, lang: $("lang").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };

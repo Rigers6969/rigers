@@ -232,7 +232,7 @@ def render_clip(
     source: Path, start: float, end: float, words: list[dict], title: str,
     layout: str, caption_style: str, out_path: Path, poster_path: Path,
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
-    watermark: dict | None = None, gameplay: dict | None = None,
+    watermark: dict | None = None, gameplay: dict | None = None, caption_words: list[dict] | None = None,
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
@@ -249,6 +249,11 @@ def render_clip(
             if policy.swear_strength(w["text"]):
                 mute.append((max(0.0, w["start"] - 0.05), min(duration, w["end"] + 0.05)))
                 w["text"] = policy.censor(w["text"])
+    if caption_words is not None:  # translated captions: shown instead; the bleeping above still follows the real audio
+        clip_words = [
+            {"start": max(0.0, w["start"] - start), "end": min(duration, w["end"] - start), "text": w["text"]}
+            for w in caption_words if w["start"] >= start - 0.05 and w["start"] < end
+        ]
     ass_name = None
     if title or caption_style != "none":
         # ffmpeg runs inside the output folder and gets just the file name:

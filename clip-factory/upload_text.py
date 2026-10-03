@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 import policy
+import translate
 
 STOP = set("""a about above after again against all am an and any are aren't as at be because been before being below
 between both but by can can't cannot could couldn't did didn't do does doesn't doing don't down during each few for
@@ -54,7 +55,7 @@ def save_source(video: Path, info: dict) -> None:
 
 
 def _hashtag(text: str) -> str:
-    words = re.findall(r"[A-Za-z0-9]+", text)
+    words = re.findall(r"[^\W_]+", text)  # any language's letters (ë, ç, ñ, ü...)
     return "".join(w[:1].upper() + w[1:] for w in words)[:30]
 
 
@@ -89,7 +90,7 @@ def keywords(text: str, n: int = 6, title: str = "") -> list[str]:
         if len(w) > 3 and w not in STOP and not policy.swear_strength(w) and w not in out:
             out.append(w)
 
-    for w in re.findall(r"[A-Za-z][A-Za-z'-]+", title):
+    for w in re.findall(r"[^\W\d_][\w'-]+", title):
         add(w)
     for w, _ in Counter(re.findall(r"(?<=[a-z,]\s)[A-Z][a-z]{2,}\b", text)).most_common(4):
         add(w)
@@ -149,7 +150,7 @@ For EACH clip below write:
 - "hook": one punchy sentence for the top of the description that makes people want to watch (no swear words, no clickbait lies, max 150 characters)
 - "tags": 6-10 search tags (short lowercase phrases people would search for; names of people and topics in the clip)
 - "hashtags": 2-3 hashtags without the # sign
-
+{lang_line}
 Answer ONLY with JSON in exactly this shape, one entry per clip id:
 {{"clips": [{{"id": 1, "hook": "...", "tags": ["...", "..."], "hashtags": ["...", "..."]}}]}}
 
@@ -158,7 +159,7 @@ Clips:
 """
 
 
-def ai_batch(brain, clips: list[dict], source: dict, kind: str, channel_name: str = "") -> dict[int, dict]:
+def ai_batch(brain, clips: list[dict], source: dict, kind: str, channel_name: str = "", lang: str = "") -> dict[int, dict]:
     """{clip n: upload text} for the clips the AI answered well; the rest are left out (use fallback)."""
     if brain is None or not clips:
         return {}
@@ -177,7 +178,9 @@ def ai_batch(brain, clips: list[dict], source: dict, kind: str, channel_name: st
         if not missing:
             break
         try:
-            raw, who = brain.ask(PROMPT.format(about=about, clips=listing if len(missing) == len(local) else
+            raw, who = brain.ask(PROMPT.format(about=about, lang_line=(
+                f"Write the hook, tags and hashtags in {translate.LANGS[lang]} (the clips are posted for {translate.LANGS[lang]} speakers).\n"
+                if lang in translate.LANGS else ""), clips=listing if len(missing) == len(local) else
                                                "\n\n".join(f'Clip {i} - title "{c["title"]}":\n{c["text"][:1200]}' for i, c in missing.items())))
         except Exception:
             break
@@ -202,6 +205,7 @@ def ai_batch(brain, clips: list[dict], source: dict, kind: str, channel_name: st
             if not c or not hook or len(tags) < 3:
                 continue
             text = compose(c, hook, tags, [str(h) for h in item.get("hashtags") or []], source, kind, channel_name)
+            text["description"] = translate.localize_description(text["description"], lang, channel_name)
             text["by"] = who
             out[c["n"]] = text
     return out
