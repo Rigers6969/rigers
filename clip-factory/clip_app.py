@@ -332,7 +332,14 @@ def run_pipeline(run: dict) -> None:
 
 @app.route("/")
 def index():
-    return PAGE
+    try:  # written by the updater: "abc1234 2026-10-03 12:00"
+        ver = (APP_DIR / ".version").read_text(encoding="utf-8").strip()
+    except OSError:
+        ver = ""
+    label = f"Version {ver.split()[0]} &middot; updated {' '.join(ver.split()[1:])}" if ver else ""
+    resp = app.make_response(PAGE.replace("<!--VERSION-->", label))
+    resp.headers["Cache-Control"] = "no-store"  # always the newest page after an update
+    return resp
 
 
 @app.route("/api/status")
@@ -1368,7 +1375,7 @@ PAGE = r"""<!DOCTYPE html>
 </head>
 <body>
 <div class="wrap">
-  <h1>Clip <span>Factory</span></h1>
+  <h1>Clip <span>Factory</span> <small class="msg" style="font-size:12px;font-weight:400"><!--VERSION--></small></h1>
   <p class="sub">Find what's going viral &rarr; download it &rarr; get vertical Shorts with captions. AI picks the best moments; clip 1 is ready to download while the rest are still being made.</p>
   <div id="sysError" class="panel error hide"></div>
   <div class="tabs">

@@ -19,3 +19,4 @@ client_secret*.json
 to-upload/
 prefs.json
 prefs.tmp
+.version

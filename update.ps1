@@ -9,7 +9,8 @@
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$Zip = "https://github.com/Rigers6969/rigers/archive/refs/heads/claude/sweet-dijkstra-lyzrb5.zip"
+$Branch = "claude/sweet-dijkstra-lyzrb5"
+$Zip = "https://github.com/Rigers6969/rigers/archive/refs/heads/$Branch.zip"
 $Home2 = $env:USERPROFILE
 $ClipHome = Join-Path $Home2 "ClipFactory"
 $DataFiles = @("ai_keys.json", "my_channels.json", "publisher.json", "publish_queue.json", "client_secret.json",
@@ -97,7 +98,7 @@ function Make-Shortcut($name, $target, $workdir) {
 
 try {
     Say ""
-    Say "Clip Factory updater v3" DarkGray
+    Say "Clip Factory updater v4" DarkGray
     Say "Looking for Clip Factory on this PC (can take a minute)..." Cyan
     $copies = @(Find-Copies)
     $full = $null
@@ -111,6 +112,22 @@ try {
     $tmp = Join-Path $env:TEMP "_update_tmp"
     if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force }
     New-Item -ItemType Directory -Path $tmp | Out-Null
+    # the exact newest version (by its commit), so GitHub's cache can never hand out an old copy
+    $sha = $null
+    try {
+        $info = Invoke-RestMethod -Uri "https://api.github.com/repos/Rigers6969/rigers/commits/$Branch" -Headers @{ "User-Agent" = "clip-factory-updater" } -UseBasicParsing
+        $sha = $info.sha
+        $Zip = "https://github.com/Rigers6969/rigers/archive/$sha.zip"
+    } catch { }
+    # a Clip Factory that is still open would keep showing the old version - close it first
+    try {
+        $running = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object { $_.CommandLine -and $_.CommandLine -match "clip_app\.py" })
+        if ($running.Count) {
+            Say "Closing the Clip Factory that is still open..." Cyan
+            $running | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            Start-Sleep -Seconds 2
+        }
+    } catch { }
     Say "Downloading the newest version..." Cyan
     Invoke-WebRequest -Uri $Zip -OutFile (Join-Path $tmp "new.zip") -UseBasicParsing
     Expand-Archive -Path (Join-Path $tmp "new.zip") -DestinationPath $tmp -Force
@@ -135,11 +152,13 @@ try {
         Set-Content -LiteralPath $marker -Value (Get-Date -Format "yyyy-MM-dd HH:mm")
     }
 
+    $version = if ($sha) { $sha.Substring(0, 7) } else { "latest" }
+    Set-Content -LiteralPath (Join-Path $clip ".version") -Value ("$version " + (Get-Date -Format "yyyy-MM-dd HH:mm"))
     $ok1 = Make-Shortcut "Clip Factory" (Join-Path $clip "start.bat") $clip
     $ok2 = Make-Shortcut "Update Clip Factory" (Join-Path $clip "update.bat") $clip
 
     Say ""
-    Say "Done - Clip Factory is up to date." Green
+    Say "Done - Clip Factory is up to date (version $version)." Green
     Say "Folder: $clip"
     if ($ok1 -and $ok2) { Say "On your Desktop: 'Clip Factory' starts it, 'Update Clip Factory' updates it." Green }
     if ($copies.Count -gt 1) {
