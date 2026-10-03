@@ -1598,7 +1598,7 @@ PAGE = r"""<!DOCTYPE html>
       <h2>Download a video from a link</h2>
       <div class="row">
         <input type="text" id="linkInput" style="flex:1 1 320px" placeholder="Paste a YouTube, Twitch or Kick link...">
-        <select id="quality" style="width:auto"><option value="1080">1080p</option><option value="720">720p (smaller, faster)</option></select>
+        <select id="quality" style="width:auto"><option value="2160">4K (sharpest crops, big + slow)</option><option value="1440">1440p (sharper crops)</option><option value="1080" selected>1080p</option><option value="720">720p (smaller, faster)</option></select>
         <button id="linkDl" class="ghost">Download</button>
         <button id="linkDlClip">Download + make clips</button>
       </div>
@@ -2044,7 +2044,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 

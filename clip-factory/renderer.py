@@ -167,16 +167,16 @@ def _base_filter(layout: str) -> str:
         half = OUT_H // 2
         return (
             # the clip on top, the gameplay (input 1, already looped and muted) underneath; stop with the clip
-            f"[0:v]scale={OUT_W}:{half}:force_original_aspect_ratio=increase,crop={OUT_W}:{half},setsar=1[top];"
-            f"[1:v]scale={OUT_W}:{half}:force_original_aspect_ratio=increase,crop={OUT_W}:{half},setsar=1,fps=30[bottom];"
+            f"[0:v]scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1[top];"
+            f"[1:v]scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1,fps=30[bottom];"
             f"[top][bottom]vstack=inputs=2:shortest=1,format=yuv420p[v]"
         )
     if layout == "podcast":
         half = OUT_H // 2
         return (
             f"[0:v]split=2[l][r];"
-            f"[l]crop=iw/2:ih:0:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase,crop={OUT_W}:{half},setsar=1[top];"
-            f"[r]crop=iw/2:ih:iw/2:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase,crop={OUT_W}:{half},setsar=1[bottom];"
+            f"[l]crop=iw/2:ih:0:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1[top];"
+            f"[r]crop=iw/2:ih:iw/2:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1[bottom];"
             f"[top][bottom]vstack=inputs=2,format=yuv420p{subs}[v]"
         )
     if layout == "fit":
@@ -184,11 +184,11 @@ def _base_filter(layout: str) -> str:
             # the blur is done on a small copy - much faster on a CPU, looks the same
             f"[0:v]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=10:2,"
             f"scale={OUT_W}:{OUT_H},setsar=1[bg];"
-            f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=decrease,setsar=1[fg];"
+            f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p{subs}[v]"
         )
     return (
-        f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,"
+        f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,"
         f"crop={OUT_W}:{OUT_H},setsar=1,format=yuv420p{subs}[v]"
     )
 

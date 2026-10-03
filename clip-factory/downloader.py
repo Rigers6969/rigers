@@ -22,7 +22,7 @@ from trends import _QuietLogger, clean_error
 
 APP_DIR = Path(__file__).resolve().parent
 INPUT_DIR = APP_DIR / "input"
-QUALITIES = {"1080": 1080, "720": 720}
+QUALITIES = {"2160": 2160, "1440": 1440, "1080": 1080, "720": 720}
 
 downloads: dict[str, dict] = {}
 _queue: "queue.Queue[str]" = queue.Queue()
@@ -155,7 +155,8 @@ def _download(d: dict) -> None:
     height = QUALITIES[d["quality"]]
     opts = {
         "format": "bv*+ba/b",
-        # the best picture up to 1080p (or 720p), preferring H.264 - fastest for ffmpeg to cut later
+        # the best picture up to the chosen height, preferring H.264 (fastest for ffmpeg to cut later);
+        # above 1080p YouTube only has VP9/AV1, which is picked automatically
         "format_sort": [f"res:{height}", "vcodec:h264", "acodec:m4a"],
         "merge_output_format": "mp4",
         "outtmpl": str(INPUT_DIR / "%(title).80B [%(id)s].%(ext)s"),
