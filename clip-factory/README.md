@@ -180,6 +180,22 @@ Shows every channel's views together, measured against your goal, e.g.
   those numbers (e.g. 1.2K), so small changes can look bumpy.
 - Watch hours aren't public. YouTube Studio's **Earn** tab has those.
 
+## My videos (sixth tab): everything in one place
+
+Every video, without searching through folders:
+- **Clips I made:** every clip, with its picture. **Play**, **Download**,
+  **Download all (zip)**, or **Open** the run.
+- **Downloaded videos:** what you downloaded. **Play**, **Make clips**
+  (opens it in Make clips), or **Show file**.
+- **Wayne Factory videos:** finished videos and Shorts from Wayne Factory.
+
+Use the search box to find one by title.
+
+**Everything is saved, once:** your channels, settings, AI keys, schedule,
+logins and videos are all kept in this folder (`clip-factory`). They're
+there every time you open Clip Factory, even in another browser, and
+updates never delete them.
+
 ## Publish (fifth tab): the auto publisher
 
 Puts every video for all 4 channels on one weekly schedule, then uploads

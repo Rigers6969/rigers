@@ -342,6 +342,115 @@ def inputs():
     return jsonify({"files": [{"name": p.name, "size_mb": round(p.stat().st_size / 1e6)} for p in files]})
 
 
+# ---------- saved page settings (in prefs.json, so they stay even if the browser forgets) ----------
+
+PREFS_FILE = APP_DIR / "prefs.json"
+PREF_KEY_RE = re.compile(r"^cf_[A-Za-z_]{1,40}$")
+_prefs_lock = threading.Lock()
+
+
+def _load_prefs() -> dict:
+    try:
+        data = json.loads(PREFS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+@app.route("/api/prefs", methods=["GET", "POST"])
+def prefs():
+    if request.method == "GET":
+        return jsonify(_load_prefs())
+    data = request.get_json(silent=True) or {}
+    with _prefs_lock:
+        cur = _load_prefs()
+        for k, v in data.items():
+            if PREF_KEY_RE.match(str(k)) and len(cur) < 200:
+                cur[k] = str(v)[:500]
+        tmp = PREFS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cur, indent=1), encoding="utf-8")
+        tmp.replace(PREFS_FILE)
+    return jsonify({"ok": True})
+
+
+# ---------- My videos (everything in one list) ----------
+
+def _lib_roots() -> list[Path]:
+    return [INPUT_DIR, OUTPUT_DIR] + list(publisher.CONTENT_DIRS)
+
+
+def _lib_file(raw: str) -> Path | None:
+    """Only files inside the app's video folders can be played or shown."""
+    try:
+        path = Path(raw).resolve()
+    except (OSError, ValueError):
+        return None
+    if not path.is_file():
+        return None
+    for root in _lib_roots():
+        try:
+            path.relative_to(root.resolve())
+            return path
+        except ValueError:
+            continue
+    return None
+
+
+@app.route("/api/library")
+def library():
+    queued = {i["file"] for i in publisher.load_queue()}
+    downloaded = []
+    if INPUT_DIR.exists():
+        for f in sorted((x for x in INPUT_DIR.iterdir() if x.is_file() and x.suffix.lower() in VIDEO_EXTS),
+                        key=lambda x: x.stat().st_mtime, reverse=True):
+            src = upload_text.source_for(f)
+            st = f.stat()
+            downloaded.append({"name": f.name, "path": str(f), "size_mb": round(st.st_size / 1e6),
+                               "date": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime)),
+                               "title": src.get("title") or f.stem, "channel": src.get("channel") or "",
+                               "url": src.get("webpage_url") or src.get("url") or ""})
+    clip_runs = []
+    if OUTPUT_DIR.exists():
+        for d in sorted(OUTPUT_DIR.iterdir(), reverse=True):
+            run = load_run(d.name) if d.is_dir() else None
+            if not run or not run.get("clips"):
+                continue
+            clips = []
+            for c in run["clips"]:
+                f = OUTPUT_DIR / run["id"] / c["file"]
+                if f.exists():
+                    clips.append({"n": c["n"], "title": (c.get("upload") or {}).get("title") or c["title"], "path": str(f),
+                                  "poster": f"/files/{run['id']}/{c['poster']}" if c.get("poster") else None,
+                                  "url": f"/files/{run['id']}/{c['file']}", "queued": str(f) in queued})
+            if clips:
+                clip_runs.append({"id": run["id"], "video": run["video"], "created": run.get("created"), "clips": clips})
+    return jsonify({"downloaded": downloaded, "runs": clip_runs, "wayne": publisher.wayne_videos(),
+                    "folders": {"downloaded": str(INPUT_DIR), "clips": str(OUTPUT_DIR)}})
+
+
+@app.route("/api/library/file")
+def library_file():
+    path = _lib_file(request.args.get("p", ""))
+    if not path:
+        return jsonify({"error": "Not found."}), 404
+    return send_file(path, conditional=True, as_attachment=bool(request.args.get("dl")), download_name=path.name)
+
+
+@app.route("/api/library/reveal", methods=["POST"])
+def library_reveal():
+    path = _lib_file(str((request.get_json(silent=True) or {}).get("p") or ""))
+    if not path:
+        return jsonify({"error": "The file isn't there any more."}), 404
+    try:
+        if os.name == "nt":
+            subprocess.Popen(["explorer", "/select,", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path.parent)])
+    except Exception as exc:
+        return jsonify({"error": str(exc), "path": str(path)}), 500
+    return jsonify({"ok": True, "path": str(path)})
+
+
 @app.route("/api/models")
 def models():
     host = request.args.get("host") or DEFAULT_HOST
@@ -1077,7 +1186,7 @@ PAGE = r"""<!DOCTYPE html>
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 18px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
   label { display: block; font-size: 13px; color: var(--dim); margin-bottom: 5px; }
-  input[type=text], input[type=number], select { width: 100%; background:#0d0f13; color: var(--text); border:1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 14px; }
+  input[type=text], input[type=number], input[type=search], select { width: 100%; background:#0d0f13; color: var(--text); border:1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 14px; }
   .check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; margin-top: 8px; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .or { color: var(--dim); font-size: 13px; margin: 12px 0 8px; }
@@ -1162,6 +1271,16 @@ PAGE = r"""<!DOCTYPE html>
   .tracker .today { display: flex; gap: 6px; flex-wrap: wrap; }
   .tracker .today span { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-variant-numeric: tabular-nums; background: #1c1f27; border-left: 4px solid #555; }
   .tracker .today span.done { opacity: .55; text-decoration: line-through; }
+  .libgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
+  .libcard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #14161c; display: flex; flex-direction: column; }
+  .libcard .thumb { aspect-ratio: 9 / 16; background: #000 center / cover no-repeat; cursor: pointer; max-height: 240px; }
+  .libcard .body { padding: 8px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .libcard .t { font-size: 13px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+  .libcard .acts { display: flex; gap: 4px; flex-wrap: wrap; margin-top: auto; }
+  .libcard .acts button, .libcard .acts a { padding: 4px 8px; font-size: 12px; }
+  .librow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+  .librow .info { flex: 1 1 260px; min-width: 0; }
+  #libPlayer.hide { display: none !important; }
   .banner { border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 10px; }
   .banner.manual { background: #3a2f0a; color: #ffcf4d; }
   .banner.auto { background: #12301f; color: var(--ok); }
@@ -1208,6 +1327,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="tabBtnRules" data-tab="rules">YouTube rules</button>
     <button id="tabBtnStats" data-tab="stats">My channels</button>
     <button id="tabBtnPub" data-tab="pub">Publish</button>
+    <button id="tabBtnLib" data-tab="lib">My videos</button>
     <button id="aiToggle" class="ghost" style="margin-left:auto">AI engines: ...</button>
   </div>
 
@@ -1301,6 +1421,29 @@ PAGE = r"""<!DOCTYPE html>
       <div id="summary"></div>
       <div class="warn hide" id="failedMsg"></div>
       <div class="vids" id="vids"></div>
+    </div>
+  </div>
+
+  <div id="tabLib" class="hide">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">My videos</h2>
+        <div class="row"><input id="libSearch" type="search" placeholder="Search..." style="width:200px"><button class="ghost" id="libRefresh">Refresh</button></div>
+      </div>
+      <div class="msg" style="margin-top:6px">Everything is kept on this PC and stays here every time you open Clip Factory. Nothing is deleted unless you delete it yourself.</div>
+      <div class="row" style="margin-top:10px" id="libFilter">
+        <label class="check" style="margin:0"><input type="radio" name="libKind" value="all" checked> All</label>
+        <label class="check" style="margin:0"><input type="radio" name="libKind" value="clips"> Clips I made</label>
+        <label class="check" style="margin:0"><input type="radio" name="libKind" value="downloaded"> Downloaded videos</label>
+        <label class="check" style="margin:0"><input type="radio" name="libKind" value="wayne"> Wayne Factory videos</label>
+      </div>
+    </div>
+    <div id="libList"></div>
+    <div id="libPlayer" class="hide" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="max-width:min(92vw,900px);width:100%">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><b id="libPlayerTitle" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b><button class="ghost" id="libPlayerClose">Close</button></div>
+        <video id="libVideo" controls playsinline style="width:100%;max-height:80vh;background:#000;border-radius:10px"></video>
+      </div>
     </div>
   </div>
 
@@ -1572,8 +1715,21 @@ PAGE = r"""<!DOCTYPE html>
 <script>
 const $ = (id) => document.getElementById(id);
 function esc(s) { const d = document.createElement("div"); d.innerText = s == null ? "" : String(s); return d.innerHTML; }
-const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-                set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+// page settings are saved in the Clip Factory folder (prefs.json), so they stay even if the browser forgets
+const store = {
+  cache: {}, pending: {}, timer: null,
+  get(k) { if (k in this.cache) return this.cache[k]; try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) {
+    v = String(v); this.cache[k] = v; this.pending[k] = v;
+    try { localStorage.setItem(k, v); } catch (e) {}
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      const body = JSON.stringify(this.pending); this.pending = {};
+      fetch("/api/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => {});
+    }, 300);
+  },
+  async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
+};
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
@@ -1811,7 +1967,7 @@ async function loadRuns() {
 
 // ---------- Find viral videos ----------
 function showTab(name) {
-  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"], ["tabPub", "tabBtnPub", "pub"]]) {
+  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"], ["tabPub", "tabBtnPub", "pub"], ["tabLib", "tabBtnLib", "lib"]]) {
     $(tab).classList.toggle("hide", name !== id);
     $(btn).classList.toggle("on", name === id);
   }
@@ -2135,6 +2291,67 @@ $("updBtn").onclick = async () => {
         <div class="msg" style="white-space:pre-wrap">${esc(pg.detail).slice(0, 1500)}</div></div>`).join("");
   } catch (e) { $("updResult").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
 };
+
+// ---------- My videos ----------
+let libData = null;
+const libUrl = (path, dl) => "/api/library/file?p=" + encodeURIComponent(path) + (dl ? "&dl=1" : "");
+async function loadLib() {
+  const lk = store.get("cf_libKind"), radio = lk && document.querySelector(`input[name=libKind][value=${lk}]`);
+  if (radio) radio.checked = true;
+  try { libData = await api("/api/library"); } catch (e) { $("libList").innerHTML = `<div class="panel error">${esc(e.message)}</div>`; return; }
+  renderLib();
+}
+function playLib(title, src) {
+  $("libPlayerTitle").innerText = title; $("libVideo").src = src; $("libPlayer").classList.remove("hide"); $("libVideo").play().catch(() => {});
+}
+$("libPlayerClose").onclick = () => { $("libVideo").pause(); $("libVideo").removeAttribute("src"); $("libVideo").load(); $("libPlayer").classList.add("hide"); };
+$("libPlayer").onclick = (e) => { if (e.target === $("libPlayer")) $("libPlayerClose").onclick(); };
+function renderLib() {
+  const d = libData; if (!d) return;
+  const q = $("libSearch").value.trim().toLowerCase();
+  const kind = (document.querySelector("input[name=libKind]:checked") || {}).value || "all";
+  const hit = (...xs) => !q || xs.some((x) => String(x || "").toLowerCase().includes(q));
+  let html = "";
+  if (kind === "all" || kind === "clips") {
+    const runs = d.runs.map((r) => ({ ...r, clips: r.clips.filter((c) => hit(c.title, r.video)) })).filter((r) => r.clips.length);
+    html += `<div class="panel"><h2>Clips I made <span class="msg">(${runs.reduce((a, r) => a + r.clips.length, 0)})</span></h2>` +
+      (runs.length ? runs.map((r) => `<div style="margin-top:14px"><div class="row" style="justify-content:space-between"><div style="min-width:0"><b>${esc(r.video)}</b> <span class="msg">${esc(r.created || "")} · ${r.clips.length} clips</span></div>
+          <div class="row"><button class="ghost" data-lrun="${esc(r.id)}" style="padding:5px 10px;font-size:12px">Open</button><a class="btn ghost" href="/api/runs/${encodeURIComponent(r.id)}/zip" style="padding:5px 10px;font-size:12px">Download all (zip)</a><button class="ghost" data-lfolder="${esc(r.id)}" style="padding:5px 10px;font-size:12px">Show folder</button></div></div>
+          <div class="libgrid">${r.clips.map((c) => `<div class="libcard"><div class="thumb" data-lplay="${esc(c.url)}" data-ltitle="${esc(c.title)}" style="${c.poster ? `background-image:url('${esc(c.poster)}')` : ""}" title="Play"></div>
+            <div class="body"><div class="t">${c.n}. ${esc(c.title)}</div>${c.queued ? '<span class="tag big" style="align-self:flex-start">In the schedule</span>' : ""}
+            <div class="acts"><button class="ghost" data-lplay="${esc(c.url)}" data-ltitle="${esc(c.title)}">Play</button><a class="btn ghost" href="${esc(c.url)}?dl=1">Download</a></div></div></div>`).join("")}</div></div>`).join("")
+        : '<div class="msg">No clips yet - make some in the Make clips tab.</div>') + "</div>";
+  }
+  if (kind === "all" || kind === "downloaded") {
+    const files = d.downloaded.filter((f) => hit(f.title, f.name, f.channel));
+    html += `<div class="panel"><h2>Downloaded videos <span class="msg">(${files.length})</span></h2>` +
+      (files.length ? files.map((f) => `<div class="librow"><div class="info"><b>${esc(f.title)}</b><br><span class="msg">${esc(f.channel ? f.channel + " · " : "")}${f.size_mb} MB · ${esc(f.date)}</span>${f.url ? ` · <a href="${esc(f.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:13px">original</a>` : ""}</div>
+          <button class="ghost" data-lplay="${esc(libUrl(f.path))}" data-ltitle="${esc(f.title)}" style="padding:5px 10px;font-size:12px">Play</button>
+          <button data-lmake="${esc(f.name)}" style="padding:5px 10px;font-size:12px">Make clips</button>
+          <button class="ghost" data-lreveal="${esc(f.path)}" style="padding:5px 10px;font-size:12px">Show file</button></div>`).join("")
+        : '<div class="msg">No downloaded videos yet - find and download some in the Find viral videos tab.</div>') + "</div>";
+  }
+  if (kind === "all" || kind === "wayne") {
+    const vids = d.wayne.filter((w) => hit(w.title, w.source));
+    html += `<div class="panel"><h2>Wayne Factory videos <span class="msg">(${vids.length})</span></h2>` +
+      (vids.length ? vids.map((w) => `<div class="librow"><div class="info"><b>${esc(w.title)}</b><br><span class="msg">${w.kind === "short" ? "Short" : "Full video"} · ${esc(w.source)}</span>${w.queued ? ' <span class="tag big">In the schedule</span>' : ""}</div>
+          <button class="ghost" data-lplay="${esc(libUrl(w.file))}" data-ltitle="${esc(w.title)}" style="padding:5px 10px;font-size:12px">Play</button>
+          <a class="btn ghost" href="${esc(libUrl(w.file, true))}" style="padding:5px 10px;font-size:12px">Download</a>
+          <button class="ghost" data-lreveal="${esc(w.file)}" style="padding:5px 10px;font-size:12px">Show file</button></div>`).join("")
+        : '<div class="msg">No finished Wayne Factory videos found.</div>') + "</div>";
+  }
+  $("libList").innerHTML = html;
+  const L = $("libList");
+  L.querySelectorAll("[data-lplay]").forEach((b) => (b.onclick = () => playLib(b.dataset.ltitle, b.dataset.lplay)));
+  L.querySelectorAll("[data-lrun]").forEach((b) => (b.onclick = () => openRun(b.dataset.lrun)));
+  L.querySelectorAll("[data-lfolder]").forEach((b) => (b.onclick = async () => { try { await api(`/api/runs/${encodeURIComponent(b.dataset.lfolder)}/open-folder`, { method: "POST" }); b.innerText = "Opened"; } catch (e) { b.innerText = e.message.slice(0, 50); } }));
+  L.querySelectorAll("[data-lreveal]").forEach((b) => (b.onclick = async () => { try { await postJson("/api/library/reveal", { p: b.dataset.lreveal }); b.innerText = "Opened"; } catch (e) { b.innerText = e.message.slice(0, 50); } }));
+  L.querySelectorAll("[data-lmake]").forEach((b) => (b.onclick = async () => { showTab("clips"); await loadInputs(b.dataset.lmake); $("inputSel").scrollIntoView({ behavior: "smooth", block: "center" }); }));
+}
+$("libSearch").oninput = () => renderLib();
+document.querySelectorAll("input[name=libKind]").forEach((r) => (r.onchange = () => { store.set("cf_libKind", r.value); renderLib(); }));
+$("libRefresh").onclick = () => loadLib();
+$("tabBtnLib").addEventListener("click", () => loadLib());
 
 // ---------- Publish ----------
 let pubData = null, pubTimer = null;
@@ -2519,7 +2736,9 @@ $("aiTest").onclick = async () => {
 };
 
 (async () => {
+  await store.load();
   loadSettings();
+  for (const id of SETTINGS) for (const ev of ["change", "input"]) $(id).addEventListener(ev, saveSettings);  // saved the moment you change it
   const savedKind = store.get("cf_listKind");
   if (savedKind) { const r = document.querySelector(`input[name=listKind][value=${savedKind}]`); if (r) r.checked = true; }
   loadAi();
@@ -2528,6 +2747,7 @@ $("aiTest").onclick = async () => {
   await loadStatus();
   await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms(), loadStats(), loadPub()]);
   if (store.get("cf_tab") === "pub") loadPubSources();
+  if (store.get("cf_tab") === "lib") loadLib();
 })();
 </script>
 </body>
