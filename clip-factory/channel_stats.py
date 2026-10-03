@@ -32,6 +32,7 @@ APP_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = APP_DIR / "my_channels.json"
 SNAP_FILE = APP_DIR / "channel_snapshots.json"
 API = os.environ.get("CF_YT_API_BASE", "https://www.googleapis.com/youtube/v3")
+on_snapshot: list = []    # called with each new snapshot (phone alerts use it)
 MAX_SNAPSHOTS = 400        # ~4 months at a few a day
 VIDEOS_PER_CHANNEL = 50    # recent uploads tracked one by one
 SHORT_MAX_S = 180          # Shorts can be up to 3 minutes
@@ -237,6 +238,11 @@ def take_snapshot() -> dict:
         snaps = load_snapshots()
         snaps.append(snap)
         SNAP_FILE.write_text(json.dumps(snaps[-MAX_SNAPSHOTS:]), encoding="utf-8")
+    for hook in on_snapshot:
+        try:
+            hook(snap)
+        except Exception:
+            pass
     return snap
 
 

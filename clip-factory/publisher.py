@@ -67,6 +67,7 @@ ISO = "%Y-%m-%dT%H:%M"
 OTHER_SLOTS = [{"kind": "long", "days": [2], "time": "17:00"}, {"kind": "short", "days": list(range(7)), "time": "12:00"}]
 
 _lock = threading.RLock()
+on_fail: list = []   # called with (item, error) when an automatic upload fails (phone alerts use it)
 state = {"connecting": None, "connect_error": None, "uploading": None, "last_error": None}
 
 
@@ -643,6 +644,11 @@ def run_due(now: Optional[dt.datetime] = None) -> int:
             break
         except PublishError as exc:
             _set(it["id"], status="failed", error=str(exc))
+            for hook in on_fail:
+                try:
+                    hook(it, str(exc))
+                except Exception:
+                    pass
         except Exception as exc:
             _set(it["id"], status="failed", error=f"unexpected problem: {exc}"[:300])
         finally:

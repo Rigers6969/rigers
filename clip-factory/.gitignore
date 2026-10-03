@@ -20,3 +20,5 @@ to-upload/
 prefs.json
 prefs.tmp
 .version
+alerts.json
+alerts.tmp

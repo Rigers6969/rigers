@@ -23,6 +23,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_file, send_from_directory
 
 import ai
+import alerts
 import channel_stats
 import downloader
 import moments
@@ -308,6 +309,10 @@ def run_pipeline(run: dict) -> None:
 
         made = len(run["clips"])
         run["status"] = "done"
+        try:
+            alerts.clips_done(run)
+        except Exception:
+            pass
         update("done", f"Done - {made} clip{'s' if made != 1 else ''} ready.", 100)
     except transcriber.Cancelled:
         run["status"] = "cancelled"
@@ -391,6 +396,39 @@ def prefs():
         tmp.write_text(json.dumps(cur, indent=1), encoding="utf-8")
         tmp.replace(PREFS_FILE)
     return jsonify({"ok": True})
+
+
+# ---------- Phone alerts ----------
+
+def _alerts_public() -> dict:
+    cfg = alerts.load()
+    return {"enabled": cfg["enabled"], "topic": cfg["topic"], "server": cfg["server"], "on": cfg["on"], "kinds": alerts.KINDS,
+            "viral_gain": cfg["viral_gain"], "streamer_vph": cfg["streamer_vph"], "last_error": alerts.state["last_error"],
+            "last_sent": alerts.state["last_sent"], "scanning": alerts.state["scanning"],
+            "link": f"{cfg['server'].rstrip('/')}/{cfg['topic']}"}
+
+
+@app.route("/api/alerts", methods=["GET", "POST"])
+def alerts_settings():
+    if request.method == "POST":
+        alerts.update(request.get_json(silent=True) or {})
+    return jsonify(_alerts_public())
+
+
+@app.route("/api/alerts/test", methods=["POST"])
+def alerts_test():
+    try:
+        alerts.send("Clip Factory is connected", "Your phone alerts work. You'll get a message like this when something happens.",
+                    ["tada"], force=True)
+    except Exception as exc:
+        return jsonify({"error": f"Couldn't send it: {exc}"}), 502
+    return jsonify({"ok": True})
+
+
+@app.route("/api/alerts/scan", methods=["POST"])
+def alerts_scan():
+    threading.Thread(target=lambda: alerts.scan_streamers(force=True), daemon=True).start()
+    return jsonify({"ok": True}), 202
 
 
 # ---------- My videos (everything in one list) ----------
@@ -1576,6 +1614,25 @@ PAGE = r"""<!DOCTYPE html>
   </div>
 
   <div id="tabStats" class="hide">
+    <div class="panel" id="alertsPanel">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Phone alerts</h2>
+        <label class="check" style="margin:0"><input type="checkbox" id="alOn"> <b>On</b></label>
+      </div>
+      <div class="msg" style="margin-top:6px">Get a message on your phone when clips are ready, when one of your videos goes viral, or when a streamer is blowing up. Free, no account.</div>
+      <ol class="msg" style="margin:10px 0 0;padding-left:20px;line-height:1.8">
+        <li>On your phone, install <b>ntfy</b> (<a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener" style="color:var(--accent)">Android</a> / <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener" style="color:var(--accent)">iPhone</a>).</li>
+        <li>Open it, tap <b>+</b>, and type this name exactly: <code id="alTopic" style="font-size:15px;color:var(--text)"></code> <button class="ghost" id="alCopy" style="padding:3px 10px;font-size:12px">Copy</button> Then tap <b>Subscribe</b>.</li>
+        <li>Tick <b>On</b> above, then <button class="ghost" id="alTest" style="padding:3px 10px;font-size:12px">Send a test</button> - it should appear on your phone in a few seconds.</li>
+      </ol>
+      <div class="msg" style="margin-top:4px">Keep the name private: anyone who knows it could read your alerts. <button class="ghost" id="alNew" style="padding:3px 10px;font-size:12px">Make a new name</button></div>
+      <div id="alKinds" style="margin-top:10px"></div>
+      <div class="grid" style="margin-top:6px">
+        <div><label for="alViral">"Going viral" = views gained in ~3 hours</label><input type="number" id="alViral" min="100" step="1000"></div>
+        <div><label for="alVph">"Blowing up" = a streamer video's views per hour</label><input type="number" id="alVph" min="100" step="1000"></div>
+      </div>
+      <div class="row" style="margin-top:8px"><button class="ghost" id="alScan">Check streamers now</button><span class="msg" id="alMsg"></span></div>
+    </div>
     <div class="panel">
       <div class="row" style="justify-content:space-between">
         <h2 style="margin:0">All my channels</h2>
@@ -2371,6 +2428,32 @@ $("updBtn").onclick = async () => {
   } catch (e) { $("updResult").innerHTML = `<div class="error">${esc(e.message)}</div>`; }
 };
 
+// ---------- Phone alerts ----------
+let alData = null;
+async function loadAlerts() { try { alData = await api("/api/alerts"); renderAlerts(); } catch (e) {} }
+function renderAlerts() {
+  const d = alData; if (!d) return;
+  $("alOn").checked = d.enabled; $("alTopic").innerText = d.topic;
+  $("alKinds").innerHTML = Object.entries(d.kinds).map(([k, label]) => `<label class="check" style="margin:2px 0"><input type="checkbox" data-alk="${k}" ${d.on[k] ? "checked" : ""}> ${esc(label)}</label>`).join("");
+  $("alKinds").querySelectorAll("[data-alk]").forEach((c) => (c.onchange = () => saveAlerts({ on: { [c.dataset.alk]: c.checked } })));
+  if (document.activeElement !== $("alViral")) $("alViral").value = d.viral_gain;
+  if (document.activeElement !== $("alVph")) $("alVph").value = d.streamer_vph;
+  $("alMsg").innerHTML = d.last_error ? `<span class="error">Last alert failed: ${esc(d.last_error)}</span>` : d.scanning ? "Checking streamers..." : d.last_sent ? `Last alert sent ${esc(d.last_sent)}` : "";
+}
+async function saveAlerts(body) { try { alData = await postJson("/api/alerts", body); renderAlerts(); } catch (e) { $("alMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; } }
+$("alOn").onchange = () => saveAlerts({ enabled: $("alOn").checked });
+$("alViral").onchange = () => saveAlerts({ viral_gain: +$("alViral").value });
+$("alVph").onchange = () => saveAlerts({ streamer_vph: +$("alVph").value });
+$("alCopy").onclick = async () => { try { await navigator.clipboard.writeText(alData.topic); $("alCopy").innerText = "Copied"; } catch (e) { $("alCopy").innerText = "Can't copy"; } setTimeout(() => ($("alCopy").innerText = "Copy"), 1500); };
+$("alNew").onclick = () => { if (confirm("Make a new name? You'll have to subscribe to the new one on your phone.")) saveAlerts({ new_topic: true }); };
+$("alTest").onclick = async () => {
+  $("alTest").disabled = true;
+  try { await postJson("/api/alerts/test"); $("alMsg").innerHTML = '<span style="color:var(--ok)">Sent - check your phone.</span>'; }
+  catch (e) { $("alMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  finally { $("alTest").disabled = false; }
+};
+$("alScan").onclick = async () => { await postJson("/api/alerts/scan"); $("alMsg").innerText = "Checking your streamers - any that are blowing up will be sent to your phone."; setTimeout(loadAlerts, 15000); };
+
 // ---------- My videos ----------
 let libData = null;
 const libUrl = (path, dl) => "/api/library/file?p=" + encodeURIComponent(path) + (dl ? "&dl=1" : "");
@@ -2824,7 +2907,7 @@ $("aiTest").onclick = async () => {
   loadRules();
   showTab(store.get("cf_tab") || "find");
   await loadStatus();
-  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms(), loadStats(), loadPub()]);
+  await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms(), loadStats(), loadPub(), loadAlerts()]);
   if (store.get("cf_tab") === "pub") loadPubSources();
   if (store.get("cf_tab") === "lib") loadLib();
 })();
@@ -2837,6 +2920,8 @@ $("aiTest").onclick = async () => {
 if __name__ == "__main__":
     _load_last_trends()
     channel_stats.start_background()
+    publisher.on_fail.append(alerts.upload_failed)
+    alerts.start_background()
     publisher.start_background()
     INPUT_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)

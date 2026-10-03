@@ -193,6 +193,26 @@ Shows every channel's views together, measured against your goal, e.g.
   those numbers (e.g. 1.2K), so small changes can look bumpy.
 - Watch hours aren't public. YouTube Studio's **Earn** tab has those.
 
+## Phone alerts (in the My channels tab)
+
+Messages on your phone through **ntfy**, a free app for Android and
+iPhone, with no account:
+- **Clips are ready** when a clip run finishes.
+- **One of my videos is going viral:** a video gains 10K+ views in about
+  3 hours, or passes 10K, 50K, 100K, 500K, 1M... views.
+- **A streamer is blowing up:** a new video from your streamer list gets
+  20K+ views an hour, so you can clip it first. Checked every 2 hours.
+- **30 minutes before a post** you haven't scheduled in YouTube Studio
+  yet.
+- **An automatic upload failed.**
+- **Weekly report** on Monday morning: views this week and your goal.
+
+**Setup:** install ntfy on your phone, tap **+**, type the name the panel
+shows, then tick **On** and click **Send a test**. You can change the
+numbers and turn each alert on or off.
+
+Alerts come from Clip Factory, so it has to be running on the PC.
+
 ## My videos (sixth tab): everything in one place
 
 Every video, without searching through folders:
