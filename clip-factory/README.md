@@ -139,6 +139,13 @@ clipping program give you real permission.
    - **Whole picture + blurred background** for gameplay or screen
      recordings.
    - **Podcast - split screen** for two people side by side.
+   - **Clip on top + gameplay below** puts your clip in the top half and
+     a gameplay video (Minecraft parkour, GTA driving...) in the bottom
+     half, with no sound, to keep people watching. Add gameplay videos
+     with **Add a gameplay video**, or put them in the `gameplay` folder.
+     Each clip gets a random part of one. **Record the gameplay
+     yourself** (e.g. with OBS); gameplay downloaded from other YouTubers
+     can get your clips claimed.
 5. Click **Make clips**.
 
 **Every clip comes with everything for posting:**

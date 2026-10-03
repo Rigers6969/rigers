@@ -42,6 +42,7 @@ import upload_text
 APP_DIR = Path(__file__).resolve().parent
 INPUT_DIR = APP_DIR / "input"
 OUTPUT_DIR = APP_DIR / "output"
+GAMEPLAY_DIR = APP_DIR / "gameplay"   # background gameplay videos for the "clip + gameplay" layout
 PORT = 5003
 DEFAULT_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 if not DEFAULT_HOST.startswith("http"):
@@ -248,6 +249,11 @@ def run_pipeline(run: dict) -> None:
             run["note"] = (f"This video only has room for {len(picks)} separate clips of {s['min_len']}-{s['max_len']}s "
                            f"(they never overlap), so you'll get {len(picks)} instead of {s['count']}.")
         update("render", f"Found {len(picks)} moments - cutting clip 1...", 50, save=True)
+        games = _GameplayPicker(s.get("gameplay", "")) if s["layout"] == "gameplay" else None
+        if games and not games.files:
+            raise renderer.RenderError("The 'clip + gameplay' layout needs at least one gameplay video - add one under Layout.")
+        # in the gameplay layout the logo stays on the clip (top half), never on the gameplay
+        wm_y = ({"upper": 0.2, "middle": 0.3, "lower": 0.4} if s["layout"] == "gameplay" else campaign.WM_POSITIONS)[s["wm_pos"]]
 
         # upload text (description + tags) for every clip: the built-in writer is instant; when an AI is
         # available it writes better ones alongside the rendering, and they replace the built-in ones
@@ -282,6 +288,9 @@ def run_pipeline(run: dict) -> None:
             update(message=f"Cutting clip {n} of {len(picks)}...", percent=50 + 50 * (n - 1) / len(picks))
             start = max(0.0, c["start"] - 0.15)
             end = min(duration, c["end"] + 0.4)
+            if end - start < 2:  # a moment past the end of the video (can't be cut) - skip it
+                run["failed"].append({"n": n, "error": "This moment is past the end of the video."})
+                continue
             name = f"clip_{n:03d}"
             began = time.time()
             try:
@@ -290,7 +299,8 @@ def run_pipeline(run: dict) -> None:
                     s["layout"], s["captions"], run_dir / f"{name}.mp4", run_dir / f"{name}.jpg",
                     has_audio=info["has_audio"], cancelled=cancelled, bleep=s["bleep"],
                     watermark={"path": campaign.watermark_path(s["wm"]), "size": s["wm_size"] / 100,
-                               "opacity": s["wm_opacity"] / 100, "y": campaign.WM_POSITIONS[s["wm_pos"]]} if s.get("wm") else None,
+                               "opacity": s["wm_opacity"] / 100, "y": wm_y} if s.get("wm") else None,
+                    gameplay=games.next(end - start) if games else None,
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -553,6 +563,34 @@ def campaign_remove(cid):
     return jsonify({"campaigns": whop.ranked()})
 
 
+@app.route("/api/gameplay", methods=["GET", "POST"])
+def gameplay_library():
+    if request.method == "POST":
+        f = request.files.get("file")
+        if not f or not f.filename:
+            return jsonify({"error": "No file was sent."}), 400
+        if Path(f.filename).suffix.lower() not in renderer.GAME_EXTS:
+            return jsonify({"error": "Use a video file (MP4, MOV, MKV or WEBM)."}), 400
+        GAMEPLAY_DIR.mkdir(exist_ok=True)
+        name = safe_filename(Path(f.filename).stem, 60) + Path(f.filename).suffix.lower()
+        f.save(GAMEPLAY_DIR / name)
+    return jsonify({"files": [{"name": p.name, "size_mb": round(p.stat().st_size / 1e6)} for p in _gameplay_files()],
+                    "folder": str(GAMEPLAY_DIR)})
+
+
+@app.route("/api/gameplay/open-folder", methods=["POST"])
+def gameplay_folder():
+    GAMEPLAY_DIR.mkdir(exist_ok=True)
+    try:
+        if os.name == "nt":
+            os.startfile(GAMEPLAY_DIR)  # noqa: S606 - opens File Explorer on this PC
+        else:
+            subprocess.Popen(["xdg-open", str(GAMEPLAY_DIR)])
+    except Exception as exc:
+        return jsonify({"error": str(exc), "path": str(GAMEPLAY_DIR)}), 500
+    return jsonify({"ok": True, "path": str(GAMEPLAY_DIR)})
+
+
 @app.route("/api/watermarks", methods=["GET", "POST"])
 def watermarks():
     """The campaign logos you've added (PNG/JPG/WEBP; stored as PNG so see-through parts stay see-through)."""
@@ -613,6 +651,41 @@ class StartError(Exception):
         self.code = code
 
 
+def _gameplay_files() -> list[Path]:
+    if not GAMEPLAY_DIR.exists():
+        return []
+    return sorted(p for p in GAMEPLAY_DIR.iterdir() if p.is_file() and p.suffix.lower() in renderer.GAME_EXTS)
+
+
+def _gameplay_file(name: str) -> Path | None:
+    return next((p for p in _gameplay_files() if p.name == name), None) if name else None
+
+
+class _GameplayPicker:
+    """Gives each clip a gameplay video (the chosen one, or the library in a shuffled rotation) and a random start."""
+    def __init__(self, chosen: str):
+        import random
+        self.rnd = random.Random()
+        one = _gameplay_file(chosen)
+        self.files = [one] if one else _gameplay_files()
+        self.rnd.shuffle(self.files)
+        self.lengths: dict[Path, float] = {}
+        self.i = 0
+
+    def next(self, clip_len: float) -> dict | None:
+        if not self.files:
+            return None
+        f = self.files[self.i % len(self.files)]
+        self.i += 1
+        if f not in self.lengths:
+            try:
+                self.lengths[f] = renderer.probe(f)["duration"]
+            except renderer.RenderError:
+                self.lengths[f] = 0
+        room = max(0.0, self.lengths[f] - clip_len - 1)
+        return {"path": f, "offset": self.rnd.uniform(0, room) if room else 0.0}
+
+
 def parse_settings(data: dict) -> dict:
     min_len = _int(data, "min_len", 20, 5, 170)
     max_len = _int(data, "max_len", 60, 10, 180)
@@ -640,6 +713,7 @@ def parse_settings(data: dict) -> dict:
         "wm": str(data.get("wm") or "") if campaign.watermark_path(str(data.get("wm") or "")) else "",
         "wm_pos": data.get("wm_pos") if data.get("wm_pos") in campaign.WM_POSITIONS else "lower",
         "wm_size": _int(data, "wm_size", 30, 10, 80), "wm_opacity": _int(data, "wm_opacity", 100, 60, 100),
+        "gameplay": str(data.get("gameplay") or "") if _gameplay_file(str(data.get("gameplay") or "")) else "",
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
 
@@ -1861,6 +1935,7 @@ PAGE = r"""<!DOCTYPE html>
           <option value="crop">Fill screen (one person talking)</option>
           <option value="fit">Whole picture + blurred background</option>
           <option value="podcast">Podcast - two people, split screen</option>
+          <option value="gameplay">Clip on top + gameplay below (Minecraft, GTA...)</option>
         </select></div>
       <div><label>Captions</label>
         <select id="captions">
@@ -1869,6 +1944,15 @@ PAGE = r"""<!DOCTYPE html>
           <option value="none">No captions</option>
         </select></div>
       <div><label>Ollama model</label><select id="model"></select></div>
+    </div>
+    <div id="gpBox" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
+      <div class="grid" style="align-items:end">
+        <div><label for="gpSel">Gameplay under the clip</label><select id="gpSel"><option value="">Mix all my gameplay videos</option></select></div>
+        <div><label for="gpFile">Add a gameplay video</label><input type="file" id="gpFile" accept=".mp4,.mov,.mkv,.webm,.m4v"></div>
+        <div><button class="ghost" id="gpFolder">Open the gameplay folder</button></div>
+      </div>
+      <div class="msg" id="gpMsg" style="margin-top:6px"></div>
+      <div class="msg" style="margin-top:6px">Each clip gets a random part of the gameplay, with no sound. <b>Use gameplay you recorded yourself</b> (e.g. Minecraft parkour or GTA driving, recorded with OBS) - gameplay downloaded from other YouTubers can get your clips claimed.</div>
     </div>
     <label class="check"><input type="checkbox" id="useAi" checked> Let AI pick the viral moments (otherwise a built-in scorer does)</label>
     <div style="max-width:420px;margin:4px 0 6px"><label for="channelName">Your channel name (used at the end of each description)</label><input type="text" id="channelName" placeholder="e.g. Hot Mic Moments"></div>
@@ -1960,7 +2044,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2058,10 +2142,32 @@ function clipSettings() {
     layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
+    gameplay: $("gpSel").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
 }
+
+// ---------- gameplay videos (clip + gameplay layout) ----------
+async function loadGameplay() {
+  let d; try { d = await api("/api/gameplay"); } catch (e) { return; }
+  const want = $("gpSel").value || store.get("cf_gpSel") || "";
+  $("gpSel").innerHTML = '<option value="">Mix all my gameplay videos</option>' + d.files.map((f) => `<option value="${esc(f.name)}">${esc(f.name)} (${f.size_mb} MB)</option>`).join("");
+  if (d.files.some((f) => f.name === want)) $("gpSel").value = want;
+  $("gpMsg").innerHTML = d.files.length ? `${d.files.length} gameplay video${d.files.length > 1 ? "s" : ""} ready.`
+    : '<span class="error">No gameplay videos yet - add one (a few minutes of gameplay is enough).</span>';
+}
+function showGameplayBox() { const on = $("layout").value === "gameplay"; $("gpBox").classList.toggle("hide", !on); if (on) loadGameplay(); }
+$("layout").addEventListener("change", showGameplayBox);
+$("gpFile").onchange = async () => {
+  const f = $("gpFile").files[0]; if (!f) return;
+  const fd = new FormData(); fd.append("file", f);
+  $("gpMsg").innerText = `Adding ${f.name} (${Math.round(f.size / 1e6)} MB)...`;
+  try { await api("/api/gameplay", { method: "POST", body: fd }); await loadGameplay(); }
+  catch (e) { $("gpMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  $("gpFile").value = "";
+};
+$("gpFolder").onclick = async () => { try { const r = await postJson("/api/gameplay/open-folder"); $("gpMsg").innerText = "Opened: " + r.path + " - put gameplay videos there, then change the layout again to refresh."; } catch (e) { $("gpMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; } };
 
 // ---------- campaign logo ----------
 function showWm() {
@@ -3101,6 +3207,7 @@ $("aiTest").onclick = async () => {
   loadSettings();
   if ($("campOn").checked) $("campBox").open = true;
   loadWatermarks();
+  showGameplayBox();
   for (const id of SETTINGS) for (const ev of ["change", "input"]) $(id).addEventListener(ev, saveSettings);  // saved the moment you change it
   const savedKind = store.get("cf_listKind");
   if (savedKind) { const r = document.querySelector(`input[name=listKind][value=${savedKind}]`); if (r) r.checked = true; }
