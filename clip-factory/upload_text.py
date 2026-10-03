@@ -106,6 +106,8 @@ def base_tags(source: dict, kind: str) -> list[str]:
     tags = ["shorts"]
     if kind == "podcast":
         tags += ["podcast", "podcast clips"]
+    elif kind == "stream":
+        tags += ["stream highlights", "streamer clips"]
     if source.get("channel"):
         tags += [source["channel"].lower(), f"{source['channel'].lower()} clips"]
     return tags
@@ -124,7 +126,7 @@ def compose(clip: dict, hook: str, tags: list[str], hashtags: list[str], source:
     tags_all = _clean_tags(list(tags) + base_tags(source, kind))
     tags_all = tags_all[:15]
     hs = []
-    for h in ["Shorts"] + (["Podcast"] if kind == "podcast" else []) + ([_hashtag(source["channel"])] if source.get("channel") else []) + list(hashtags):
+    for h in ["Shorts"] + (["Podcast"] if kind == "podcast" else ["StreamHighlights"] if kind == "stream" else []) + ([_hashtag(source["channel"])] if source.get("channel") else []) + list(hashtags):
         h = _hashtag(h)
         if h and h.lower() not in {x.lower() for x in hs} and not policy.swear_strength(h):
             hs.append(h)
@@ -166,6 +168,8 @@ def ai_batch(brain, clips: list[dict], source: dict, kind: str, channel_name: st
         about = f' from "{source.get("title") or "a video"}" by {source["channel"]}'
     elif kind == "podcast":
         about = " from a podcast"
+    elif kind == "stream":
+        about = " from a live stream"
     listing = "\n\n".join(f'Clip {i} - title "{c["title"]}":\n{c["text"][:1200]}' for i, c in local.items())
     out: dict[int, dict] = {}
     for _ in range(3):

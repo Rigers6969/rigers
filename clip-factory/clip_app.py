@@ -514,7 +514,7 @@ def parse_settings(data: dict) -> dict:
         "whisper": data.get("whisper") if data.get("whisper") in ("base", "small", "medium") else "base",
         "use_ai": bool(data.get("use_ai", True)),
         "safe_mode": bool(data.get("safe_mode", True)),
-        "kind": "podcast" if data.get("kind") == "podcast" else "",
+        "kind": data.get("kind") if data.get("kind") in ("podcast", "stream") else "",
         "channel_name": re.sub(r"[\r\n]+", " ", str(data.get("channel_name") or "")).strip()[:60],
         "bleep": bool(data.get("bleep", True)),
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
@@ -1642,8 +1642,9 @@ PAGE = r"""<!DOCTYPE html>
     <div class="row" style="margin-bottom:12px">
       <label style="margin:0">Type of video:</label>
       <select id="kind" style="width:auto">
-        <option value="">Stream, gaming, vlog...</option>
+        <option value="stream">Streamer (Twitch, Kick, YouTube live)</option>
         <option value="podcast">Podcast / interview</option>
+        <option value="">Other (gaming, vlog...)</option>
       </select>
       <span class="msg" id="kindNote"></span>
     </div>
@@ -2009,13 +2010,17 @@ async function loadStreamers() {
   $("episodesOnly").checked = pod;
   // clips made from here use podcast settings when podcasts are picked
   if (pod && $("kind").value !== "podcast") { $("kind").value = "podcast"; applyKind(); }
-  if (!pod && $("kind").value === "podcast") { $("kind").value = ""; applyKind(); }
+  if (!pod && $("kind").value === "podcast") { $("kind").value = "stream"; applyKind(); }
 }
 document.querySelectorAll("input[name=listKind]").forEach((r) => (r.onchange = () => { store.set("cf_listKind", listKind()); loadStreamers(); }));
 function applyKind() {
   if ($("kind").value === "podcast") {
     $("layout").value = "podcast"; $("minLen").value = 30; $("maxLen").value = 90;
     $("kindNote").innerText = "Podcast settings: split screen, 30-90 s clips, AI looks for hot takes, stories and debates.";
+  } else if ($("kind").value === "stream") {
+    if ($("layout").value === "podcast") $("layout").value = "crop";
+    $("minLen").value = 15; $("maxLen").value = 45;
+    $("kindNote").innerText = "Streamer settings: 15-45 s clips, AI looks for big reactions, rage, fails, chat moments and collabs.";
   } else {
     if ($("layout").value === "podcast") $("layout").value = "crop";
     $("minLen").value = 20; $("maxLen").value = 60;

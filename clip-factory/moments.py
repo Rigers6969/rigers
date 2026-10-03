@@ -221,6 +221,7 @@ def parse_scores(raw: str, wanted_ids: set[int]) -> dict[int, dict]:
 
 
 KIND_HINTS = {
+    "stream": "\nThis video is a live stream (Twitch, Kick or YouTube live). The best stream clips are: a huge reaction (screaming, rage, laughing fit), a clutch or epic fail moment, a funny or awkward interaction with chat, a guest or collab, a donation/TTS message that causes a reaction, a prank, a shocking IRL moment, or a heated argument. Waiting, loading screens, quiet gameplay, reading chat with no reaction, AFK breaks, \"starting soon\" screens and sponsor reads are bad clips.",
     "podcast": "\nThis video is a podcast conversation. The best podcast clips are: a strong or controversial opinion, a surprising personal story, a funny exchange or punchline, a heated debate, a shocking fact, or advice people will want to share. Small talk, ad reads, sponsor segments and \"welcome to the show\" intros are bad clips.",
 }
 

@@ -129,14 +129,17 @@ clipping program give you real permission.
 1. **Pick the video.** Choose it from the list (anything you put in the
    `input` folder shows up there), upload it, or paste its path
    (right-click the file, then **Copy as path**).
-2. **How many clips:** 1-100. **Clip length:** 20-60 s works well for
+2. **Video type:** **Streamer** (Twitch, Kick, YouTube live) makes 15-45 s
+   clips of big reactions, rage, fails and chat moments, for Chat Lost It.
+   **Podcast** makes 30-90 s split-screen clips of hot takes and stories.
+3. **How many clips:** 1-100. **Clip length:** 20-60 s works well for
    Shorts, Reels and TikTok.
-3. **Layout:**
+4. **Layout:**
    - **Fill screen** for one person talking to the camera.
    - **Whole picture + blurred background** for gameplay or screen
      recordings.
    - **Podcast - split screen** for two people side by side.
-4. Click **Make clips**.
+5. Click **Make clips**.
 
 Clips are numbered 1, 2, 3... from most to least viral. Every run is
 saved in `output/<date>-<video name>/`. **Open folder** shows it in File

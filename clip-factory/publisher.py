@@ -53,6 +53,7 @@ DEFAULT_SLOTS = {
     "science": [{"kind": "long", "days": [1, 4], "time": "17:00"}, {"kind": "short", "days": list(range(7)), "time": "12:00"}],
     "history": [{"kind": "long", "days": [2, 5], "time": "17:00"}, {"kind": "short", "days": list(range(7)), "time": "12:00"}],
     "clips":   [{"kind": "short", "days": list(range(7)), "every": 60, "from": "09:00", "to": "23:00"}],
+    "streams": [{"kind": "short", "days": list(range(7)), "time": t} for t in ("10:00", "14:00", "18:00", "22:00")],
 }
 # choices for "Shorts per channel" in the Publish tab
 SHORT_PLANS = {
@@ -224,7 +225,8 @@ def _probe_vertical(path: Path) -> bool:
 
 # other words Wayne Factory's channel names may use for the 4 challenge channels
 ALIASES = {"paper": ["paper trail", "paper", "business", "fraud", "collapse"], "history": ["history"],
-           "science": ["forgotten lab", "science", "lab"], "clips": ["hot mic", "clip", "podcast"]}
+           "science": ["forgotten lab", "science", "lab"], "clips": ["hot mic", "clip", "podcast"],
+           "streams": ["chat lost it", "stream", "twitch", "kick"]}
 
 
 def _guess_channel(name: str) -> str:

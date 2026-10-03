@@ -42,12 +42,15 @@ DEFAULT_CONFIG = {
         {"id": "history", "name": "History", "ref": ""},
         {"id": "science", "name": "Science", "ref": ""},
         {"id": "clips", "name": "Hot Mic Moments", "ref": ""},
+        {"id": "streams", "name": "Chat Lost It", "ref": ""},
     ],
     "goal_views": 10_000_000,
     "start": "2026-10-03",
     "deadline": "2026-12-01",
     "api_key": "",
+    "added": [],   # channels added to everyone's list once (removing one later keeps it removed)
 }
+NEW_CHANNELS = [{"id": "streams", "name": "Chat Lost It", "ref": ""}]
 _lock = threading.Lock()
 
 
@@ -63,6 +66,13 @@ def load_config() -> dict:
         saved = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
         if isinstance(saved, dict):
             cfg.update({k: v for k, v in saved.items() if k in DEFAULT_CONFIG})
+            new = [c for c in NEW_CHANNELS if c["id"] not in cfg["added"]]
+            if new:  # a channel added after this list was saved: put it in once
+                for c in new:
+                    if all(x["id"] != c["id"] for x in cfg["channels"]) and len(cfg["channels"]) < 8:
+                        cfg["channels"].append(dict(c))
+                    cfg["added"].append(c["id"])
+                CONFIG_FILE.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
     except (OSError, json.JSONDecodeError):
         pass
     return cfg

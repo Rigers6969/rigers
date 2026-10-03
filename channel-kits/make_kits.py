@@ -1,4 +1,4 @@
-"""Draws the logo, banner and watermark for both channels.
+"""Draws the logo, banner, watermark (and Facebook/Instagram images) for each channel.
 Run:  python make_kits.py   (needs: pip install pillow)
 Fonts: ../fonts (Anton, Archivo Black - SIL Open Font License, free for commercial use)."""
 from pathlib import Path
@@ -149,7 +149,106 @@ def hot_mic(out: Path):
     bn.convert("RGB").save(out / "banner_2560x1440.png")
 
 
+# ---------------- Chat Lost It (streamer clips) ----------------
+NIGHT, VIOLET, LIME, SOFT = (10, 8, 18, 255), (139, 92, 246, 255), (163, 255, 18, 255), (200, 196, 214, 255)
+
+
+def bubble_layer(size, cx, cy, s, fill=VIOLET, mark=LIME):
+    """A chat bubble with "!!" in it, scaled by s around (cx, cy)."""
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    w, h = 1.0 * s, 0.72 * s
+    x0, y0 = cx - w / 2, cy - h / 2 - 0.06 * s
+    d.rounded_rectangle((x0, y0, x0 + w, y0 + h), radius=0.2 * s, fill=fill)
+    d.polygon([(x0 + 0.2 * w, y0 + h - 2), (x0 + 0.42 * w, y0 + h - 2), (x0 + 0.16 * w, y0 + h + 0.24 * s)], fill=fill)
+    bar_w, gap = 0.11 * s, 0.09 * s
+    for i in (-1, 1):
+        bx = cx + i * (bar_w / 2 + gap / 2)
+        d.rounded_rectangle((bx - bar_w / 2, y0 + 0.12 * h, bx + bar_w / 2, y0 + 0.64 * h), radius=bar_w / 2, fill=mark)
+        d.ellipse((bx - bar_w * 0.62, y0 + 0.72 * h, bx + bar_w * 0.62, y0 + 0.72 * h + bar_w * 1.24), fill=mark)
+    return layer
+
+
+def burst_layer(size, cx, cy, r1, r2, n=12, color=LIME, width=10, skip_below=False):
+    import math
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    for k in range(n):
+        a = 2 * math.pi * k / n + 0.13
+        if skip_below and math.sin(a) > 0.2:  # keep the lines off the name under the bubble
+            continue
+        d.line([(cx + r1 * math.cos(a), cy + r1 * math.sin(a)), (cx + r2 * math.cos(a), cy + r2 * math.sin(a))], fill=color, width=width)
+    return layer
+
+
+def chat_lost_it(out: Path):
+    out.mkdir(parents=True, exist_ok=True)
+    # logo 800x800 - YouTube, Instagram and Facebook all show it as a circle
+    img = Image.new("RGBA", (800, 800), NIGHT)
+    glow(img, burst_layer((800, 800), 400, 350, 245, 300, n=14, color=(163, 255, 18, 150), width=12, skip_below=True), 6)
+    glow(img, bubble_layer((800, 800), 400, 350, 380), 26)
+    centered(ImageDraw.Draw(img), (400, 660), "CHAT LOST IT", font(ANTON, 92), (255, 255, 255, 255))
+    img.convert("RGB").save(out / "logo_800x800.png")
+    # watermark 150x150
+    wm = Image.new("RGBA", (150, 150), (0, 0, 0, 0))
+    ImageDraw.Draw(wm).ellipse((4, 4, 146, 146), fill=NIGHT)
+    wm.alpha_composite(bubble_layer((150, 150), 75, 78, 96))
+    wm.save(out / "watermark_150x150.png")
+
+    def backdrop(W, H):
+        bg = Image.new("RGBA", (W, H), NIGHT)
+        for x, y, r, col in ((0.1, 0.2, 0.25, VIOLET), (0.92, 0.85, 0.3, VIOLET), (0.85, 0.12, 0.15, LIME)):
+            blob = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            R = r * W
+            ImageDraw.Draw(blob).ellipse((x * W - R, y * H - R, x * W + R, y * H + R), fill=(col[0], col[1], col[2], 60))
+            bg.alpha_composite(blob.filter(ImageFilter.GaussianBlur(W // 20)))
+        msgs = overlay(bg)  # faint "chat" lines on the right, like a stream chat scrolling
+        m = ImageDraw.Draw(msgs)
+        for i in range(30):
+            y = int(H * 0.04 + i * H * 0.033)
+            x = int(W * (0.80 + 0.03 * (i % 3)))
+            m.rounded_rectangle((x, y, x + int(W * (0.05 + 0.04 * ((i * 7) % 5) / 4)), y + int(H * 0.014)), radius=6,
+                                fill=(255, 255, 255, 16) if i % 4 else (163, 255, 18, 34))
+        bg.alpha_composite(msgs)
+        return bg
+
+    # YouTube banner 2560x1440 - phones show only the middle 1546x423 (y 508-931)
+    W, H = 2560, 1440
+    bn = backdrop(W, H)
+    glow(bn, bubble_layer((W, H), 720, 720, 300), 24)
+    d = ImageDraw.Draw(bn)
+    centered(d, (1430, 650), "CHAT LOST IT", font(ANTON, 160), (255, 255, 255, 255))
+    centered(d, (1430, 775), "THE CRAZIEST MOMENTS FROM LIVE STREAMS", font(ARCHIVO, 40), LIME)
+    centered(d, (1430, 860), "NEW CLIPS EVERY DAY", font(ARCHIVO, 30), SOFT)
+    bn.convert("RGB").save(out / "youtube_banner_2560x1440.png")
+
+    # Facebook cover 1640x624 - phones crop the sides, so everything sits in the middle ~1000 px
+    W, H = 1640, 624
+    fb = backdrop(W, H)
+    glow(fb, bubble_layer((W, H), 470, 300, 210), 18)
+    d = ImageDraw.Draw(fb)
+    centered(d, (930, 250), "CHAT LOST IT", font(ANTON, 120), (255, 255, 255, 255))
+    centered(d, (930, 350), "THE CRAZIEST STREAM MOMENTS", font(ARCHIVO, 34), LIME)
+    centered(d, (930, 410), "NEW CLIPS EVERY DAY", font(ARCHIVO, 24), SOFT)
+    fb.convert("RGB").save(out / "facebook_cover_1640x624.png")
+
+    # Instagram story highlight covers 1080x1920 (Instagram shows the middle as a circle)
+    for label, icon in (("BEST OF", "bubble"), ("FUNNY", "bubble"), ("RAGE", "burst"), ("NEW", "bubble")):
+        hl = Image.new("RGBA", (1080, 1920), NIGHT)
+        ring = overlay(hl)
+        ImageDraw.Draw(ring).ellipse((540 - 330, 960 - 330, 540 + 330, 960 + 330), outline=(139, 92, 246, 255), width=14)
+        hl.alpha_composite(ring)
+        if icon == "burst":
+            glow(hl, burst_layer((1080, 1920), 540, 900, 120, 210, n=10, width=16), 6)
+            glow(hl, bubble_layer((1080, 1920), 540, 900, 200, fill=(255, 59, 48, 255), mark=(255, 255, 255, 255)), 12)
+        else:
+            glow(hl, bubble_layer((1080, 1920), 540, 900, 260), 14)
+        centered(ImageDraw.Draw(hl), (540, 1130), label, font(ANTON, 90), (255, 255, 255, 255))
+        hl.convert("RGB").save(out / f"instagram_highlight_{label.lower().replace(' ', '_')}.png")
+
+
 if __name__ == "__main__":
     forgotten_lab(HERE / "the-forgotten-lab")
     hot_mic(HERE / "hot-mic-moments")
-    print("Done - see the-forgotten-lab/ and hot-mic-moments/")
+    chat_lost_it(HERE / "chat-lost-it")
+    print("Done - see the-forgotten-lab/, hot-mic-moments/ and chat-lost-it/")

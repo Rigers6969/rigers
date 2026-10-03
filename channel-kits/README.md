@@ -1,12 +1,14 @@
 # Channel kits
 
-Everything two channels need, ready to copy into YouTube Studio:
+Everything each channel needs, ready to copy into YouTube Studio (and Instagram and Facebook for Chat Lost It):
 
 1. **The Forgotten Lab** is the science/history story channel: the
    documentaries made with Wayne Factory, like Henrietta Lacks, the
    Radium Girls, Patient H.M. and Semmelweis.
 2. **Hot Mic Moments** is the podcast clips channel: the Shorts made with
    Clip Factory's podcast mode.
+3. **Chat Lost It** is the streamer clips channel, on YouTube, Instagram
+   and Facebook: the clips made with Clip Factory's streamer mode.
 
 Each folder has a **logo** (800x800), a **banner** (2560x1440, with all
 text inside the area phones show) and a **watermark** (150x150). To
@@ -22,7 +24,7 @@ YouTube. If either is taken, use one of the alternatives listed.
 | File | Goes in |
 |---|---|
 | `logo_800x800.png` | Picture |
-| `banner_2560x1440.png` | Banner image |
+| `banner_2560x1440.png` (Chat Lost It: `youtube_banner_2560x1440.png`) | Banner image |
 | `watermark_150x150.png` | Video watermark, display time "Entire video" |
 
 ---
@@ -225,7 +227,125 @@ Clip Factory's podcast mode already does most of this.
 
 ---
 
-## Settings for both channels
+## 3. Chat Lost It (streamer clips: YouTube, Instagram, Facebook)
+
+| | |
+|---|---|
+| **Name** | Chat Lost It |
+| **Handle** | @ChatLostIt on all three (if taken: @ChatLostItClips, @ChatLostItTV) |
+| **Other names** | Stream Meltdowns, Clipped Live, Live & Unfiltered, Stream Heat |
+| **Tagline** | The craziest moments from live streams |
+| **Category** | Entertainment (YouTube) · Video Creator (Instagram, Facebook) |
+| **Colours** | Night `#0A0812`, violet `#8B5CF6`, lime `#A3FF12`, white |
+| **Fonts** | Anton (titles), Archivo Black (small text) |
+| **Schedule** | **3-4 clips a day** on each platform: 10:00, 14:00, 18:00, 22:00. The Publish tab already uses these times. |
+
+### The files (folder `chat-lost-it`)
+
+| File | Where it goes |
+|---|---|
+| `logo_800x800.png` | Profile picture on **YouTube, Instagram and Facebook** (all three show it as a circle) |
+| `youtube_banner_2560x1440.png` | YouTube Studio → Customization → Branding → Banner image |
+| `watermark_150x150.png` | YouTube Studio → Branding → Video watermark ("Entire video") |
+| `facebook_cover_1640x624.png` | Facebook Page → Edit cover photo |
+| `instagram_highlight_*.png` | Instagram story highlight covers: **Best of**, **Funny**, **Rage**, **New** |
+
+### YouTube
+
+**About:**
+```
+The craziest moments from live streams - rage quits, huge reactions, fails, chat chaos and the clips everyone is talking about.
+
+New clips every day.
+
+Every clip credits the streamer, with a link to their channel. We clip streamers who allow it. If you're a streamer and want a clip removed, email [your email] and we'll take it down the same day.
+```
+
+**Keywords:**
+```
+stream clips, streamer moments, twitch clips, kick clips, best stream moments, rage quit, funny stream moments, streamer highlights, stream fails
+```
+
+**Playlists:** one per streamer ("Best of [streamer]"), plus **Rage Quits**,
+**Funniest Moments**, **Chat Went Crazy**, **IRL Moments**.
+
+### Instagram
+
+1. Create the account as **@ChatLostIt**, then Settings → **Account type
+   and tools** → **Switch to professional account** → **Creator** →
+   category **Video Creator**.
+2. **Name** (searchable): `Chat Lost It | Stream Clips`
+3. **Bio** (150 characters max):
+   ```
+   The craziest moments from live streams 🎮
+   Rage quits, reactions & chat chaos
+   New clips every day 👇
+   ```
+4. **Link:** your YouTube channel.
+5. Post every clip as a **Reel** (9:16, the same file as the YouTube Short).
+   Make 4 story highlights with the highlight covers.
+6. **Hashtags:** Instagram allows **5 at most** per post or Reel, so use 3-5:
+   the streamer's name plus 2-4 from `#streamclips #streamer #twitchclips
+   #kickclips #gaming #funnyclips`.
+
+### Facebook
+
+1. Create a **Page** named **Chat Lost It** (category: Video Creator), with
+   the logo and the cover.
+2. **Intro / bio:**
+   ```
+   The craziest moments from live streams - new clips every day.
+   ```
+3. Post every clip as a **Reel**. Add the same title and credit line.
+4. **Money on Facebook:** Facebook's Content Monetization is still
+   **invite-only**. Turn on the Professional Dashboard, keep posting, and
+   accept the invitation when it comes.
+5. **Important:** since July 2025 Facebook cuts the reach and monetization
+   of Pages that repost other people's videos **without adding anything**.
+   The captions, hook title and cut you add in Clip Factory are what make
+   each clip yours. Never post a plain re-upload.
+
+### Every clip, the same way
+
+In Clip Factory, choose **Streamer (Twitch, Kick, YouTube live)** as the
+video type. The AI then looks for big reactions, rage, fails, chat moments
+and collabs, and makes 15-45 second clips.
+
+- **Only clip streamers who allow it.** Many big streamers welcome
+  clippers, and some pay per view through clipping programs. Check with
+  **Can I clip them?** for YouTube channels, and read the streamer's
+  rules (e.g. "tag me").
+- **Music:** streams often play copyrighted music in the background. That
+  gets clips claimed or muted. Skip those moments, or turn the music down.
+- **Add value:** word-by-word captions, a hook title on top, and the best
+  15-45 seconds, not a minute of waiting.
+- **Title:** what happens, honest, with no swear words. For example: "He
+  Rage Quit After Losing $10,000 on Stream".
+- **Credit, every time:**
+  ```
+  [One line: what happens in this clip]
+
+  From: [streamer] [@their handle]
+  Full stream: [link]
+
+  #shorts #streamhighlights
+  ```
+- **Pinned comment:** a question, e.g. "Would you have quit?"
+- **Never** clip anything sexual, very violent or hateful, even if it went
+  viral. It kills monetization on YouTube and Facebook.
+
+### Monetization path
+
+- **YouTube** is the main money: **1,000 subscribers + 10 million Shorts
+  views in 90 days**. From February 1, 2027, new channels need 20
+  million.
+- **Instagram and Facebook** bring followers and views to YouTube. Facebook
+  can pay too once it invites you. Streamer clipping programs can pay per
+  view from day one.
+
+---
+
+## Settings for every channel
 
 All of these are in YouTube Studio.
 
