@@ -26,6 +26,7 @@ import ai
 import alerts
 import campaign
 import channel_stats
+import whop
 import learn
 import downloader
 import moments
@@ -260,7 +261,7 @@ def run_pipeline(run: dict) -> None:
                 if cancelled():
                     return
                 got = upload_text.ai_batch(brain, items[k:k + 10], src, s["kind"], s["channel_name"])
-                got = {n: campaign.fix_upload(u, s.get("c_must") or [], s.get("c_ban") or []) for n, u in got.items()}
+                got = {n: campaign.fix_upload(u, s.get("c_must") or [], s.get("c_ban") or [], s.get("c_tags")) for n, u in got.items()}
                 with texts_lock:
                     texts.update(got)
                     for clip in run["clips"]:
@@ -314,7 +315,7 @@ def run_pipeline(run: dict) -> None:
             })
             with texts_lock:
                 run["clips"][-1]["upload"] = texts.get(n) or campaign.fix_upload(upload_text.fallback(
-                    {"title": c["title"], "text": c["text"]}, src, s["kind"], s["channel_name"]), s.get("c_must") or [], s.get("c_ban") or [])
+                    {"title": c["title"], "text": c["text"]}, src, s["kind"], s["channel_name"]), s.get("c_must") or [], s.get("c_ban") or [], s.get("c_tags"))
             save_run(run)
 
         made = len(run["clips"])
@@ -534,6 +535,24 @@ def _ollama_up(host: str) -> bool:
         return False
 
 
+@app.route("/api/campaigns", methods=["GET", "POST"])
+def campaigns():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        try:
+            c = whop.add(str(data.get("text") or ""), _brain_from(data) if data.get("use_ai", True) else None)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"added": dict(c, text=None), "campaigns": whop.ranked()})
+    return jsonify({"campaigns": whop.ranked()})
+
+
+@app.route("/api/campaigns/<cid>/remove", methods=["POST"])
+def campaign_remove(cid):
+    whop.remove(cid)
+    return jsonify({"campaigns": whop.ranked()})
+
+
 @app.route("/api/watermarks", methods=["GET", "POST"])
 def watermarks():
     """The campaign logos you've added (PNG/JPG/WEBP; stored as PNG so see-through parts stay see-through)."""
@@ -617,6 +636,7 @@ def parse_settings(data: dict) -> dict:
         # clipping campaign (e.g. Whop): words titles must / mustn't have, who it's about, the campaign's logo
         "c_must": campaign.words(str(data.get("c_must") or "")), "c_ban": campaign.words(str(data.get("c_ban") or "")),
         "c_focus": campaign.words(str(data.get("c_focus") or "")),
+        "c_tags": [w.lstrip("#") for w in campaign.words(str(data.get("c_tags") or "").replace(" ", ","))],
         "wm": str(data.get("wm") or "") if campaign.watermark_path(str(data.get("wm") or "")) else "",
         "wm_pos": data.get("wm_pos") if data.get("wm_pos") in campaign.WM_POSITIONS else "lower",
         "wm_size": _int(data, "wm_size", 30, 10, 80), "wm_opacity": _int(data, "wm_opacity", 100, 60, 100),
@@ -1477,6 +1497,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="tabBtnStats" data-tab="stats">My channels</button>
     <button id="tabBtnPub" data-tab="pub">Publish</button>
     <button id="tabBtnLib" data-tab="lib">My videos</button>
+    <button id="tabBtnCamp" data-tab="camp">Campaigns ($)</button>
     <button id="aiToggle" class="ghost" style="margin-left:auto">AI engines: ...</button>
   </div>
 
@@ -1571,6 +1592,21 @@ PAGE = r"""<!DOCTYPE html>
       <div class="warn hide" id="failedMsg"></div>
       <div class="vids" id="vids"></div>
     </div>
+  </div>
+
+  <div id="tabCamp" class="hide">
+    <div class="panel">
+      <h2>Clipping campaigns (Whop)</h2>
+      <ol class="msg" style="margin:6px 0 0;padding-left:20px;line-height:1.8">
+        <li>On <a href="https://whop.com/discover/" target="_blank" rel="noopener" style="color:var(--accent)">whop.com</a> open <b>Content Rewards</b> and click a campaign.</li>
+        <li>Press <b>Ctrl+A</b>, then <b>Ctrl+C</b> (copies the whole page).</li>
+        <li>Click in the box below and press <b>Ctrl+V</b>, then <b>Read it</b>.</li>
+      </ol>
+      <textarea id="campText" placeholder="Paste the whole campaign page here..." style="min-height:120px;margin-top:10px"></textarea>
+      <div class="row" style="margin-top:8px"><button id="campRead">Read it</button><label class="check" style="margin:0"><input type="checkbox" id="campAi" checked> Let the AI read the rules too</label><span class="msg" id="campMsg"></span></div>
+      <div class="msg" style="margin-top:6px">Clip Factory reads the pay, budget, links and every rule, and tells you if it's worth it. Paste as many campaigns as you like - the best ones go to the top.</div>
+    </div>
+    <div id="campList"></div>
   </div>
 
   <div id="tabLib" class="hide">
@@ -1846,7 +1882,9 @@ PAGE = r"""<!DOCTYPE html>
         <div><label for="cMust">Every title must mention</label><input type="text" id="cMust" placeholder="e.g. Preme"></div>
         <div><label for="cBan">Never mention (and skip moments about)</label><input type="text" id="cBan" placeholder="e.g. Drake"></div>
         <div><label for="cFocus">Clips must be about</label><input type="text" id="cFocus" placeholder="e.g. Preme"></div>
+        <div><label for="cTags">Required hashtags</label><input type="text" id="cTags" placeholder="e.g. #preme #kick"></div>
       </div>
+      <div class="msg" id="campFrom"></div>
       <div class="grid" style="margin-top:8px;align-items:end">
         <div><label for="wm">Campaign logo (watermark)</label><select id="wm"><option value="">No logo</option></select></div>
         <div><label for="wmFile">Add a logo (PNG from the campaign)</label><input type="file" id="wmFile" accept=".png,.jpg,.jpeg,.webp"></div>
@@ -1922,7 +1960,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "wmPos", "wmSize", "wmOpacity"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2020,7 +2058,7 @@ function clipSettings() {
     layout: $("layout").value, captions: $("captions").value, show_title: $("showTitle").checked,
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
-    ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value,
+    ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
 }
@@ -2205,7 +2243,7 @@ async function loadRuns() {
 
 // ---------- Find viral videos ----------
 function showTab(name) {
-  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"], ["tabPub", "tabBtnPub", "pub"], ["tabLib", "tabBtnLib", "lib"]]) {
+  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"], ["tabPub", "tabBtnPub", "pub"], ["tabLib", "tabBtnLib", "lib"], ["tabCamp", "tabBtnCamp", "camp"]]) {
     $(tab).classList.toggle("hide", name !== id);
     $(btn).classList.toggle("on", name === id);
   }
@@ -2559,6 +2597,61 @@ $("alTest").onclick = async () => {
   finally { $("alTest").disabled = false; }
 };
 $("alScan").onclick = async () => { await postJson("/api/alerts/scan"); $("alMsg").innerText = "Checking your streamers - any that are blowing up will be sent to your phone."; setTimeout(loadAlerts, 15000); };
+
+// ---------- Campaigns ----------
+let campData = [];
+async function loadCampaigns() { try { campData = (await api("/api/campaigns")).campaigns; renderCampaigns(); } catch (e) {} }
+const VERDICT_CLS = { Good: "big", OK: "maybe", Skip: "no" };
+function renderCampaigns() {
+  if (!campData.length) { $("campList").innerHTML = '<div class="panel msg">No campaigns yet - paste one above.</div>'; return; }
+  $("campList").innerHTML = campData.map((c, i) => `<div class="panel">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(c.name)}</h2><span class="tag ${VERDICT_CLS[c.verdict] || ""}" style="font-size:14px">${esc(c.verdict)}</span></div>
+    <div class="row" style="margin-top:6px">${Object.entries(c.cpm).map(([p, v]) => `<span class="tag">${esc(p)}: $${v.toFixed(2)} / 1K</span>`).join("")}
+      ${c.budget_left != null ? `<span class="tag">$${Math.round(c.budget_left).toLocaleString()} left</span>` : ""}${c.min_payout != null ? `<span class="tag">min payout $${c.min_payout}</span>` : ""}</div>
+    <ul class="msg" style="margin:8px 0 0;padding-left:20px;line-height:1.6">${c.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}${c.example ? `<li>${esc(c.example)}</li>` : ""}</ul>
+    <div class="grid" style="margin-top:10px">
+      <div><div class="msg">Clips must mention</div><b>${esc(c.must.join(", ") || "-")}</b></div>
+      <div><div class="msg">Never mention</div><b>${esc(c.ban.join(", ") || "-")}</b></div>
+      <div><div class="msg">Clips must be about</div><b>${esc(c.focus.join(", ") || "-")}</b></div>
+      <div><div class="msg">Hashtags / tags</div><b>${esc([...c.hashtags.map((h) => "#" + h), ...c.tag_accounts.map((a) => "@" + a)].join(" ") || "-")}</b></div>
+    </div>
+    ${c.sources.length ? `<div style="margin-top:8px"><span class="msg">Video to clip:</span> ${c.sources.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(u)}</a>`).join(" · ")}</div>` : ""}
+    ${c.files.length ? `<div style="margin-top:4px"><span class="msg">${c.watermark ? "Logo / files to download:" : "Files:"}</span> ${c.files.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--accent)">open</a>`).join(" · ")}</div>` : ""}
+    ${c.watch_out.length ? `<div class="error" style="margin-top:8px">${c.watch_out.map(esc).join("<br>")}</div>` : ""}
+    <details style="margin-top:8px"><summary class="msg" style="cursor:pointer">All the rules (${c.checklist.length}) - read before posting</summary>
+      <ul style="margin:6px 0 0;padding-left:20px;line-height:1.7;font-size:14px">${c.checklist.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></details>
+    <div class="row" style="margin-top:10px"><button data-cuse="${i}">Use for my next clips</button><button class="ghost" data-crem="${esc(c.id)}">Remove</button>
+      <span class="msg">Read by ${esc(c.read_by)} · added ${esc(c.added)}</span></div>
+  </div>`).join("");
+  $("campList").querySelectorAll("[data-cuse]").forEach((b) => (b.onclick = () => useCampaign(campData[+b.dataset.cuse])));
+  $("campList").querySelectorAll("[data-crem]").forEach((b) => (b.onclick = async () => { campData = (await postJson(`/api/campaigns/${b.dataset.crem}/remove`)).campaigns; renderCampaigns(); }));
+}
+function useCampaign(c) {
+  if (c.kind && $("kind").value !== c.kind) { $("kind").value = c.kind; applyKind(); }
+  $("campOn").checked = true; $("cMust").value = c.must.join(", "); $("cBan").value = c.ban.join(", ");
+  $("cFocus").value = c.focus.join(", "); $("cTags").value = c.hashtags.map((h) => "#" + h).join(" ");
+  // a channel page (kick.com/preme) isn't one video - only a real video link goes into the downloader
+  const isVideo = (u) => /kick\.com\/[^/]+\/videos\/|twitch\.tv\/videos\/|youtube\.com\/(watch|live\/)|youtu\.be\//i.test(u);
+  const video = c.sources.find(isVideo), channel = c.sources.find((u) => !isVideo(u));
+  if (video) $("linkInput").value = video;
+  saveSettings();
+  $("campFrom").innerHTML = `Rules from <b>${esc(c.name)}</b>.` + (c.watermark ? ` <span class="error">This campaign needs its logo:</span> ${c.files.length ? `<a href="${esc(c.files[0])}" target="_blank" rel="noopener" style="color:var(--accent)">open the file</a>, download it, then` : ""} add it with <b>Add a logo</b> below.` : "")
+    + (video ? ` The video link is already in <b>Find viral videos</b> → <b>Download a video from a link</b>.`
+      : channel ? ` Open <a href="${esc(channel)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(channel)}</a>, click the stream under <b>Videos</b>, copy its link and paste it in <b>Find viral videos</b> → <b>Download a video from a link</b>.` : "");
+  showTab("clips"); $("campBox").open = true; $("campBox").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+$("campRead").onclick = async () => {
+  const text = $("campText").value.trim();
+  if (!text) { $("campMsg").innerHTML = '<span class="error">Paste the campaign page first.</span>'; return; }
+  $("campRead").disabled = true; $("campMsg").innerText = $("campAi").checked ? "Reading (the AI takes a few seconds)..." : "Reading...";
+  try {
+    const r = await postJson("/api/campaigns", { text, use_ai: $("campAi").checked, host: $("host").value, model: $("model").value });
+    campData = r.campaigns; renderCampaigns(); $("campText").value = "";
+    $("campMsg").innerHTML = `<span style="color:var(--ok)">Read: ${esc(r.added.name)} - ${esc(r.added.verdict)}</span>`;
+  } catch (e) { $("campMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  finally { $("campRead").disabled = false; }
+};
+$("tabBtnCamp").addEventListener("click", () => loadCampaigns());
 
 // ---------- My videos ----------
 let libData = null;
@@ -3018,6 +3111,7 @@ $("aiTest").onclick = async () => {
   await Promise.all([loadInputs(), loadModels(), loadRuns(), loadStreamers(), pollTrends(), pollDownloads(), pollPerms(), loadStats(), loadPub(), loadAlerts()]);
   if (store.get("cf_tab") === "pub") loadPubSources();
   if (store.get("cf_tab") === "lib") loadLib();
+  if (store.get("cf_tab") === "camp") loadCampaigns();
 })();
 </script>
 </body>

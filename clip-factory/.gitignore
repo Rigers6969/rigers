@@ -24,3 +24,5 @@ alerts.json
 alerts.tmp
 insights.json
 watermarks/
+campaigns.json
+campaigns.tmp

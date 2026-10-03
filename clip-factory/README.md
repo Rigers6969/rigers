@@ -227,6 +227,32 @@ numbers and turn each alert on or off.
 
 Alerts come from Clip Factory, so it has to be running on the PC.
 
+## Campaigns ($): get paid per view (Whop)
+
+Whop's **Content Rewards** campaigns pay you per 1,000 views for clips of
+a creator. This tab reads a campaign and tells you if it's worth it.
+
+1. On whop.com open **Content Rewards** and click a campaign.
+2. Press **Ctrl+A**, then **Ctrl+C**.
+3. Paste it into the box and click **Read it**.
+
+For each campaign it shows:
+- the pay per 1,000 views on each platform, after Whop's 10%
+- the budget left, and how many views a clip needs before it pays
+- a verdict, **Good**, **OK** or **Skip**, with an example of what 10 clips
+  could earn
+- who to mention, who never to mention, required hashtags, the video to
+  clip and the logo to download
+- **every rule**, as a checklist to read before posting
+
+**Use for my next clips** fills in Make clips for you: video type, the
+campaign rules, the hashtags and the video link. Add the campaign's logo
+there, then make the clips.
+
+Numbers and links come straight from the page. The AI only adds the
+plain-language checklist, and a name it suggests is kept only if it is
+really on the page.
+
 ## My videos (sixth tab): everything in one place
 
 Every video, without searching through folders:

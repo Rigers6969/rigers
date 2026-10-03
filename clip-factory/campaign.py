@@ -51,9 +51,10 @@ def fix_title(title: str, must: list[str], ban: list[str]) -> str:
     return title[:100]
 
 
-def fix_upload(up: dict | None, must: list[str], ban: list[str]) -> dict | None:
-    """Applies the rules to a clip's title, description, tags and hashtags."""
-    if not up or (not must and not ban):
+def fix_upload(up: dict | None, must: list[str], ban: list[str], extra: list[str] | None = None) -> dict | None:
+    """Applies the rules to a clip's title, description, tags and hashtags (extra = hashtags the campaign requires)."""
+    extra = [re.sub(r"\W+", "", h) for h in extra or [] if re.sub(r"\W+", "", h)]
+    if not up or (not must and not ban and not extra):
         return up
     up = dict(up)
     up["title"] = fix_title(up.get("title", ""), must, ban)
@@ -65,6 +66,9 @@ def fix_upload(up: dict | None, must: list[str], ban: list[str]) -> dict | None:
         if not _has("\n".join(lines), m):
             lines[0] = f"{m}: {lines[0]}".strip()
     hashtags = [h for h in up.get("hashtags") or [] if not mentions(h, ban)]
+    for h in reversed(extra):  # required hashtags first, so they survive the 5-hashtag limit
+        if h.lower() not in {x.lower() for x in hashtags}:
+            hashtags.insert(1 if hashtags and hashtags[0].lower() == "shorts" else 0, h)
     for m in must:
         tag = re.sub(r"\W+", "", m)
         if tag and tag.lower() not in {h.lower() for h in hashtags}:
