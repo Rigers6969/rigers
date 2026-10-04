@@ -464,6 +464,23 @@ are busy or used up.
   video's audio and text are sent to those companies to be processed.
 - Turn cloud AI off any time and everything runs on your PC again.
 
+### OmniRoute (your own free AI router)
+
+[OmniRoute](https://omniroute.online/) runs on your PC and gives one
+address in front of many AIs, including lots of free ones. When one is busy
+or used up, it switches by itself. Clip Factory can use it **first** for
+picking moments, titles, translations, campaigns and the coach:
+
+1. Install Node.js (nodejs.org), then in PowerShell run
+   `npm install -g omniroute`.
+2. Start it with `omniroute` and keep that window open. Its dashboard is
+   http://localhost:20128, where you can add free providers.
+3. In Clip Factory: **AI engines** -> tick **Use OmniRoute** -> **Test the
+   keys**. The address and the model (`auto/best-free`) are already filled in.
+
+If OmniRoute isn't running, Clip Factory skips it at once and uses the next
+AI.
+
 ## How it avoids mistakes
 
 - **Cuts.** Clips always start and end on a full sentence, never in the

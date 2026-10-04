@@ -39,11 +39,14 @@ CLOUD = {
     "anthropic":  ("Claude",     os.environ.get("CF_ANTHROPIC_BASE", "https://api.anthropic.com/v1"), "claude-sonnet-5-5", False),
     "openai":     ("ChatGPT",    os.environ.get("CF_OPENAI_BASE", "https://api.openai.com/v1"), "gpt-5-mini", False),
     "xai":        ("Grok",       os.environ.get("CF_XAI_BASE", "https://api.x.ai/v1"), "grok-4-fast-non-reasoning", False),
+    # OmniRoute: a free AI router you run on this PC - one address in front of many (free) AIs, with its own fallback
+    "omniroute":  ("OmniRoute",  "http://localhost:20128/v1", "auto/best-free", True),
 }
 ORDER = ["gemini", "groq", "openrouter", "anthropic", "openai", "xai"]  # free first, then paid
 TRANSCRIBERS = {"groq": "whisper-large-v3-turbo", "openai": "whisper-1"}  # both give word timings
 
-DEFAULTS = {"cloud_on": False, **{f"{n}_key": "" for n in CLOUD}}
+DEFAULTS = {"cloud_on": False, **{f"{n}_key": "" for n in CLOUD},
+            "omni_on": False, "omni_url": CLOUD["omniroute"][1], "omni_model": CLOUD["omniroute"][2]}
 CHUNK_S = 600       # audio is sent in 10-minute pieces (well under the 25 MB upload limits)
 OVERLAP_S = 2.0     # each piece starts 2 s early so no word is cut in half at the seams
 MAX_WAIT_S = 90     # a rate limit longer than this means "used up for now" -> next AI
@@ -91,6 +94,11 @@ def save_keys(update: dict) -> dict:
                 data[k] = str(update[k]).strip()
         if "cloud_on" in update:
             data["cloud_on"] = bool(update["cloud_on"])
+        if "omni_on" in update:
+            data["omni_on"] = bool(update["omni_on"])
+        for k in ("omni_url", "omni_model"):
+            if update.get(k):
+                data[k] = str(update[k]).strip()
         KEYS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return data
 
@@ -186,6 +194,9 @@ def _pick(ids: list[str], name: str) -> Optional[str]:
     if name == "xai":
         grok = [i for i in ids if "grok" in i and "code" not in i]
         return newest([i for i in grok if "fast" in i or "mini" in i]) or newest(grok)
+    if name == "omniroute":  # its own routing aliases pick (and switch between) the best free models
+        return next((i for pref in ("auto/best-free", "auto/best", "auto") for i in ids if i == pref), None) or \
+            next((i for i in ids if i.startswith("auto")), ids[0] if ids else None)
     if name == "anthropic":
         claude = [i for i in ids if i.startswith("claude")]
         return newest([i for i in claude if "sonnet" in i]) or newest([i for i in claude if "haiku" in i]) or newest(claude)
@@ -238,6 +249,24 @@ class OpenAIStyle(Provider):
             except (KeyError, IndexError, ValueError, TypeError) as exc:
                 raise Temporary(f"{self.label} sent an unexpected answer") from exc
         raise Temporary(f"{self.label} model problem")
+
+
+class OmniRouteLLM(OpenAIStyle):
+    """OmniRoute on this PC (or another address you set). The key is optional - only if you made one in its dashboard."""
+
+    def __init__(self, base: str, key: str = "", model: str = ""):
+        super().__init__("omniroute", key)
+        self.base = (base or CLOUD["omniroute"][1]).rstrip("/")
+        self.model = model or CLOUD["omniroute"][2]
+        self.batch_size = 20
+
+    def ask(self, prompt: str) -> str:
+        try:
+            return super().ask(prompt)
+        except Temporary as exc:
+            if "can't reach" in str(exc):  # not running: skip it for this run instead of waiting on it
+                raise ProviderDown("OmniRoute isn't running on this PC - start it (omniroute) or untick it in AI engines") from exc
+            raise
 
 
 class GeminiLLM(Provider):
@@ -414,6 +443,8 @@ def build_brain(settings: dict, keys: dict, report=None) -> Optional[Brain]:
     if not settings.get("use_ai", True):
         return None
     providers: list[Provider] = []
+    if keys.get("omni_on"):  # your own router first: it already switches between many free AIs by itself
+        providers.append(OmniRouteLLM(keys.get("omni_url"), keys.get("omniroute_key", ""), keys.get("omni_model")))
     if keys.get("cloud_on"):
         providers += [make_provider(n, keys[f"{n}_key"]) for n in ORDER if keys.get(f"{n}_key")]
     providers.append(OllamaLLM(settings.get("host") or "http://localhost:11434", settings.get("model") or "llama3"))
@@ -424,6 +455,16 @@ def test_keys(keys: dict) -> dict:
     """{name: 'ok' | problem} with a tiny real request to each AI that has a key."""
     out = {}
     prompt = 'Answer ONLY with this JSON: {"ok": true}'
+    if keys.get("omni_on"):
+        try:
+            raw = OmniRouteLLM(keys.get("omni_url"), keys.get("omniroute_key", ""), keys.get("omni_model")).ask(prompt)
+            out["omniroute"] = "ok" if "ok" in raw.lower() else "answered, but strangely"
+        except Cooldown:
+            out["omniroute"] = "ok (busy right now)"
+        except (ProviderDown, Temporary) as exc:
+            out["omniroute"] = str(exc)
+        except Exception as exc:
+            out["omniroute"] = f"problem: {exc}"
     for name in ORDER:
         key = keys.get(f"{name}_key")
         if not key:

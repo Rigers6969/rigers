@@ -815,7 +815,8 @@ def start():
 
 def _ai_public() -> dict:
     k = ai.load_keys()
-    return {"cloud_on": k["cloud_on"], "providers": [
+    return {"cloud_on": k["cloud_on"], "omni_on": k["omni_on"], "omni_url": k["omni_url"], "omni_model": k["omni_model"],
+            "omni_key": ai.key_hint(k.get("omniroute_key", "")), "providers": [
         {"id": n, "label": ai.CLOUD[n][0], "free": ai.CLOUD[n][3], "set": bool(k[f"{n}_key"]), "hint": ai.key_hint(k[f"{n}_key"])}
         for n in ai.ORDER]}
 
@@ -825,6 +826,25 @@ def ai_settings():
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         update = {"cloud_on": bool(data.get("cloud_on"))}
+        if "omni_on" in data:
+            update["omni_on"] = bool(data.get("omni_on"))
+            url = str(data.get("omni_url") or "").strip().rstrip("/")
+            if url:
+                if not re.fullmatch(r"https?://[\w.\-]+(:\d{1,5})?(/[\w.\-/]*)?", url):
+                    return jsonify({"error": "The OmniRoute address should look like http://localhost:20128/v1"}), 400
+                update["omni_url"] = url if url.endswith("/v1") else url + "/v1"
+            model = str(data.get("omni_model") or "").strip()
+            if model:
+                if not re.fullmatch(r"[\w.\-/:]{1,120}", model):
+                    return jsonify({"error": "That OmniRoute model name doesn't look right."}), 400
+                update["omni_model"] = model
+            okey = str(data.get("omniroute_key") or "").strip()
+            if data.get("clear_omniroute_key"):
+                update["omniroute_key"] = ""
+            elif okey:
+                if not re.fullmatch(r"[A-Za-z0-9_\-.]{6,300}", okey):
+                    return jsonify({"error": "That OmniRoute key doesn't look right - copy it again."}), 400
+                update["omniroute_key"] = okey
         for name in ai.ORDER:
             field = f"{name}_key"
             value = str(data.get(field) or "").strip()
@@ -1667,7 +1687,17 @@ PAGE = r"""<!DOCTYPE html>
     <div class="msg" style="margin:8px 0 14px">
       Add a key for any AI you want - only those get used. <b>Free</b> ones are always tried first; <b>paid</b> ones only when the free ones are busy or used up.<br>
       Writing down the speech: Groq &rarr; ChatGPT (OpenAI) &rarr; this PC.
-      Picking the viral moments: Gemini &rarr; Groq &rarr; OpenRouter &rarr; Claude &rarr; ChatGPT &rarr; Grok &rarr; Ollama on this PC &rarr; built-in scorer.
+      Picking the viral moments: OmniRoute (if on) &rarr; Gemini &rarr; Groq &rarr; OpenRouter &rarr; Claude &rarr; ChatGPT &rarr; Grok &rarr; Ollama on this PC &rarr; built-in scorer.
+    </div>
+    <div style="margin-bottom:14px;padding:12px;border:1px solid var(--line);border-radius:10px">
+      <label class="check" style="margin:0"><input type="checkbox" id="omniOn"> <b>Use OmniRoute</b> - your own free AI router on this PC, tried first
+        (<a href="https://omniroute.online/" target="_blank" rel="noopener" style="color:var(--accent)">what is it?</a>)</label>
+      <div class="grid" style="margin-top:8px">
+        <div><label for="omniUrl">Address</label><input type="text" id="omniUrl" placeholder="http://localhost:20128/v1"></div>
+        <div><label for="omniModel">Model</label><input type="text" id="omniModel" placeholder="auto/best-free"></div>
+        <div><label for="omniKey">Key (only if you made one in OmniRoute)</label><input type="text" id="omniKey" autocomplete="off" spellcheck="false" placeholder="optional"><div class="msg" id="omniKeyState"></div></div>
+      </div>
+      <div class="msg" style="margin-top:6px">Install once: get Node.js from nodejs.org, then in PowerShell run <code>npm install -g omniroute</code> and start it with <code>omniroute</code> (keep that window open). Its dashboard is <a href="http://localhost:20128" target="_blank" rel="noopener" style="color:var(--accent)">localhost:20128</a>. If it isn't running, Clip Factory simply uses the next AI.</div>
     </div>
     <div class="grid" id="aiKeys"></div>
     <div class="row" style="margin-top:14px">
@@ -3334,6 +3364,11 @@ let aiState = null;
 function renderAi(st) {
   aiState = st;
   $("cloudOn").checked = st.cloud_on;
+  $("omniOn").checked = st.omni_on;
+  if (document.activeElement !== $("omniUrl")) $("omniUrl").value = st.omni_url;
+  if (document.activeElement !== $("omniModel")) $("omniModel").value = st.omni_model;
+  $("omniKeyState").innerHTML = st.omni_key ? `Saved (${esc(st.omni_key)}) &middot; <a href="#" id="omniClear" style="color:var(--dim)">remove</a>` : "";
+  if ($("omniClear")) $("omniClear").onclick = (e) => { e.preventDefault(); saveAi({ clear_omniroute_key: true }); };
   if (!$("aiKeys").children.length) {
     $("aiKeys").innerHTML = st.providers.map((p) => `
       <div>
@@ -3347,18 +3382,20 @@ function renderAi(st) {
     $("state_" + p.id).innerHTML = p.set ? `Saved (${esc(p.hint)}) &middot; <a href="#" data-clear="${p.id}" style="color:var(--dim)">remove</a>` : "Not set";
   }
   $("aiKeys").querySelectorAll("[data-clear]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); saveAi({ ["clear_" + a.dataset.clear + "_key"]: true }); }));
-  const names = st.providers.filter((p) => p.set).map((p) => p.label);
-  $("aiToggle").innerText = st.cloud_on && names.length ? `AI engines: ${names.join(" + ")} + this PC` : "AI engines: this PC only - make it faster";
-  $("aiToggle").classList.toggle("ghost", !!(st.cloud_on && names.length));
+  const names = [...(st.omni_on ? ["OmniRoute"] : []), ...(st.cloud_on ? st.providers.filter((p) => p.set).map((p) => p.label) : [])];
+  $("aiToggle").innerText = names.length ? `AI engines: ${names.join(" + ")} + this PC` : "AI engines: this PC only - make it faster";
+  $("aiToggle").classList.toggle("ghost", !!names.length);
 }
 async function loadAi() { try { renderAi(await api("/api/ai")); } catch (e) {} }
 async function saveAi(extra) {
   $("aiMsg").innerText = "";
-  const body = { cloud_on: $("cloudOn").checked, ...(extra || {}) };
+  const body = { cloud_on: $("cloudOn").checked, omni_on: $("omniOn").checked, omni_url: $("omniUrl").value, omni_model: $("omniModel").value,
+    omniroute_key: $("omniKey").value, ...(extra || {}) };
   for (const p of aiState.providers) body[p.id + "_key"] = $("key_" + p.id).value;
   try {
     const st = await api("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     for (const p of st.providers) $("key_" + p.id).value = "";
+    $("omniKey").value = "";
     renderAi(st);
     $("aiMsg").innerText = "Saved.";
     return true;
@@ -3367,12 +3404,13 @@ async function saveAi(extra) {
 $("aiToggle").onclick = () => $("aiPanel").classList.toggle("hide");
 $("aiSave").onclick = () => saveAi();
 $("cloudOn").onchange = () => saveAi();
+$("omniOn").onchange = () => saveAi();
 $("aiTest").onclick = async () => {
   if (!(await saveAi())) return;
   $("aiMsg").innerText = "Testing...";
   try {
     const r = await api("/api/ai/test", { method: "POST" });
-    const labels = Object.fromEntries(aiState.providers.map((p) => [p.id, p.label]));
+    const labels = { omniroute: "OmniRoute", ...Object.fromEntries(aiState.providers.map((p) => [p.id, p.label])) };
     const parts = Object.entries(r).map(([id, v]) => `${esc(labels[id] || id)}: ${v.startsWith("ok") ? `<span style="color:var(--ok)">${esc(v)}</span>` : `<span class="error">${esc(v)}</span>`}`);
     $("aiMsg").innerHTML = parts.length ? parts.join(" &nbsp; ") : "Add at least one key first.";
   } catch (e) { $("aiMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
