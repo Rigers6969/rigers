@@ -155,6 +155,27 @@ this PC only.
      can get your clips claimed.
 5. Click **Make clips**.
 
+**Viral captions** (setting **Captions**):
+- **Pop:** 1-2 huge words at a time. The word being said pops in big and
+  yellow, strong words (money, never, insane...) are green.
+- **Box:** the word being said sits in a coloured box (the TikTok look).
+- **Story:** big, bold, slanted key words and small filler words that
+  build up word by word, with the last key word underlined (the podcast
+  clip look: *PROCRASTINATING / is choosing / to delay*).
+- **Word-by-word** and **Simple** are the classic captions.
+
+**Captions on the screen:** **In the middle** (the default, best for
+Shorts) or **Lower third**. **Emoji pops** puts an emoji above the
+captions when a matching word is said (laugh 😂, money 💰, insane 🔥...),
+at most 4 per clip.
+
+**Background music (no copyright):** add a track with **Add a track** (or
+put MP3s in the `music` folder), then choose it, or **Mix all my tracks**
+for a different one per clip. The music gets quieter by itself whenever
+someone talks. Get the music from **YouTube Studio → Audio Library** and
+filter **Attribution not required**. Never use songs from Spotify or
+TikTok: they get your clips claimed.
+
 **Captions in another language** (e.g. English clips for an Albanian
 channel): set **Captions and titles in** to **Albanian (Shqip)**. The AI
 translates what's said into natural, spoken Albanian, and the captions still

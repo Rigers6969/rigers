@@ -18,11 +18,14 @@ from pathlib import Path
 from typing import Callable
 
 import policy
+import styles
 
 OUT_W, OUT_H = 1080, 1920
 LAYOUTS = ("crop", "fit", "podcast", "gameplay")
 GAME_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
-CAPTION_STYLES = ("highlight", "simple", "none")
+CAPTION_STYLES = ("highlight", "simple", "pop", "box", "story", "none")
+CAPTION_POSITIONS = ("middle", "low")
+MUSIC_EXTS = {".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac"}
 
 YELLOW = "&H0000E5FF&"  # ASS colours are BGR
 
@@ -66,6 +69,16 @@ def probe(path: Path) -> dict:
     }
 
 
+def media_duration(path: Path) -> float:
+    """Length in seconds of any audio or video file (0 if unknown)."""
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True, timeout=60).stdout.strip()
+        return float(out or 0)
+    except (subprocess.SubprocessError, ValueError, OSError):
+        return 0.0
+
+
 def _ass_time(seconds: float) -> str:
     cs = int(round(max(0.0, seconds) * 100))
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
@@ -91,10 +104,23 @@ def group_words(words: list[dict], max_words: int = 3, max_chars: int = 18) -> l
     return groups
 
 
-def build_ass(words: list[dict], title: str, duration: float, layout: str, caption_style: str, out_path: Path) -> None:
+def caption_anchor(layout: str, position: str) -> tuple[int, int, int]:
+    """(x, y, ASS alignment) where the captions sit."""
+    if layout in ("podcast", "gameplay") or position == "middle":
+        return OUT_W // 2, OUT_H // 2, 5
+    if layout == "fit":
+        return OUT_W // 2, OUT_H - round(OUT_H * 0.19), 2
+    return OUT_W // 2, OUT_H - round(OUT_H * 0.27), 2
+
+
+def build_ass(words: list[dict], title: str, duration: float, layout: str, caption_style: str, out_path: Path,
+              position: str = "middle") -> None:
     """words are already shifted so 0 = the start of the clip."""
     cap_align = 2  # bottom centre
-    if layout in ("podcast", "gameplay"):
+    if position == "middle" and layout not in ("podcast", "gameplay"):
+        cap_align, cap_margin = 5, 0  # the middle of the screen
+        title_margin = round(OUT_H * (0.15 if layout == "fit" else 0.10))
+    elif layout in ("podcast", "gameplay"):
         cap_align, cap_margin = 5, 0  # right on the seam between the two halves
         title_margin = round(OUT_H * 0.05)
     elif layout == "fit":
@@ -116,14 +142,23 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,Arial,{cap_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,7,3,{cap_align},60,60,{cap_margin},1
 Style: Title,Arial,{title_size},&H00000000,&H000000FF,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,16,0,8,90,90,{title_margin},1
-
+{styles.styles_block(round(OUT_W * 0.085))}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """]
     if title:
         lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(duration)},Title,,0,0,0,,{_ass_text(title)}\n")
 
-    if caption_style != "none":
+    if caption_style in styles.STYLES:
+        x, y, an = caption_anchor(layout, position)
+        if caption_style == "pop":
+            lines += styles.pop_events(group_words(words, 2, 14), duration, x, y, an)
+        elif caption_style == "box":
+            lines += styles.box_events(group_words(words, 3, 18), duration, x, y, an)
+        else:  # story: centred block, in the clip's half for split layouts
+            top, bottom = (OUT_H * 0.08, OUT_H * 0.46) if layout == "gameplay" else (OUT_H * 0.28, OUT_H * 0.72)
+            lines += styles.story_events(words, duration, int(top), int(bottom))
+    elif caption_style != "none":
         groups = group_words(words)
         for g, group in enumerate(groups):
             g_start = group[0]["start"]
@@ -147,18 +182,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     out_path.write_text("".join(lines), encoding="utf-8")
 
 
-def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_input: int = 1) -> str:
+def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_input: int = 1,
+                  pops: list | None = None, fonts: str = "") -> str:
     """wm: {"size": share of the width, "opacity": 0-1, "y": centre as share of the height} - input wm_input is the logo.
-    The gameplay layout's second video is input 1."""
-    subs = f",subtitles={ass_name}" if ass_name else ""
-    base = _base_filter(layout)
-    if not wm:
-        return base[: -len("[v]")] + subs + "[v]"
-    w = max(40, int(OUT_W * wm["size"])) // 2 * 2
-    return (base[: -len("[v]")] + "[b0];"
-            f"[{wm_input}:v]scale={w}:-1,format=rgba,colorchannelmixer=aa={wm['opacity']:.2f}[wm];"
-            # captions go on top of the logo, so the logo never hides what's said
-            f"[b0][wm]overlay=x=(W-w)/2:y=H*{wm['y']:.3f}-h/2,format=yuv420p{subs}[v]")
+    pops: [(input, start, end, x, y)] emoji pictures. The gameplay layout's second video is input 1."""
+    subs = (f",subtitles={ass_name}" + (f":fontsdir={fonts}" if fonts else "")) if ass_name else ""
+    chain = _base_filter(layout)[: -len("[v]")] + "[b0]"
+    cur = "b0"
+    if wm:
+        w = max(40, int(OUT_W * wm["size"])) // 2 * 2
+        chain += (f";[{wm_input}:v]scale={w}:-1,format=rgba,colorchannelmixer=aa={wm['opacity']:.2f}[wm];"
+                  f"[{cur}][wm]overlay=x=(W-w)/2:y=H*{wm['y']:.3f}-h/2[b1]")
+        cur = "b1"
+    for n, (idx, a, b, x, y) in enumerate(pops or []):
+        # pops in (grows from 60% in 0.15 s), then fades out
+        chain += (f";[{idx}:v]format=rgba,scale=230:230,fade=t=in:st={a:.2f}:d=0.15:alpha=1,"
+                  f"fade=t=out:st={max(a, b - 0.2):.2f}:d=0.2:alpha=1[e{n}];"
+                  f"[{cur}][e{n}]overlay=x={x}:y={y}:enable='between(t,{a:.2f},{b:.2f})'[p{n}]")
+        cur = f"p{n}"
+    # captions last, on top of everything, so nothing hides what's said
+    return chain + f";[{cur}]format=yuv420p{subs}[v]"
 
 
 def _base_filter(layout: str) -> str:
@@ -193,12 +236,26 @@ def _base_filter(layout: str) -> str:
     )
 
 
-def _audio_filter(mute: list[tuple[float, float]]) -> str:
-    """Silences the given (start, end) stretches - the "bleep"."""
-    if not mute:
+def _audio_filter(mute: list[tuple[float, float]], music_input: int | None = None, music_volume: float = 0.18,
+                  duration: float = 0.0) -> str:
+    """Silences the given (start, end) stretches - the "bleep" - and mixes in background music that gets
+    quieter whenever someone speaks (ducking). Output label [a] (or nothing to change)."""
+    if not mute and music_input is None:
         return ""
-    when = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in mute)
-    return f";[0:a:0]volume=enable='{when}':volume=0[a]"
+    speech = "[0:a:0]"
+    out = ""
+    if mute:
+        when = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in mute)
+        out += f";[0:a:0]volume=enable='{when}':volume=0" + ("[sp]" if music_input is not None else "[a]")
+        speech = "[sp]"
+    if music_input is not None:
+        fade_out = max(0.0, duration - 1.2)
+        out += (f";{speech}asplit=2[s1][s2];"
+                f"[{music_input}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume={music_volume:.2f},"
+                f"afade=t=in:d=0.6,afade=t=out:st={fade_out:.2f}:d=1.2[mu];"
+                f"[mu][s2]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=350[duck];"
+                f"[s1][duck]amix=inputs=2:duration=first:normalize=0[a]")
+    return out
 
 
 def _run(cmd: list[str], cwd: Path, cancelled: Callable[[], bool], timeout: float) -> None:
@@ -233,6 +290,7 @@ def render_clip(
     layout: str, caption_style: str, out_path: Path, poster_path: Path,
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
     watermark: dict | None = None, gameplay: dict | None = None, caption_words: list[dict] | None = None,
+    caption_pos: str = "middle", emojis: bool = False, music: dict | None = None,
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
@@ -259,7 +317,7 @@ def render_clip(
         # ffmpeg runs inside the output folder and gets just the file name:
         # Windows paths (C:\...) break ffmpeg's subtitles filter otherwise
         ass_name = out_path.stem + ".ass"
-        build_ass(clip_words, title, duration, layout, caption_style, out_dir / ass_name)
+        build_ass(clip_words, title, duration, layout, caption_style, out_dir / ass_name, caption_pos)
     tmp_name = out_path.stem + ".part.mp4"
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -270,14 +328,33 @@ def render_clip(
             raise RenderError("The gameplay layout needs a gameplay video - add one under Layout.")
         # looped forever from a random point; only its picture is used (the clip's sound stays)
         cmd += ["-stream_loop", "-1", "-ss", f"{gameplay.get('offset', 0):.2f}", "-i", str(Path(gameplay["path"]).resolve())]
+    n_in = 2 if layout == "gameplay" else 1
+    wm_input = n_in
     if watermark:  # a still logo: overlay repeats its one frame for the whole clip
         cmd += ["-i", str(Path(watermark["path"]).resolve())]
+        n_in += 1
+    pops = []
+    if emojis and caption_style != "none":
+        x, y, an = caption_anchor(layout, caption_pos)
+        top = y - (420 if an == 5 else 560)  # above the captions
+        if caption_style == "story":
+            top = int(OUT_H * (0.02 if layout == "gameplay" else 0.17))
+        for a, b, code in styles.emoji_moments(clip_words, duration):
+            cmd += ["-loop", "1", "-t", f"{duration:.3f}", "-i", str((styles.EMOJI_DIR / f"{code}.png").resolve())]
+            pops.append((n_in, a, b, OUT_W // 2 - 115, max(20, top)))
+            n_in += 1
+    music_input = None
+    if music and has_audio:  # background music: looped from a random point, ducked under the voices
+        cmd += ["-stream_loop", "-1", "-ss", f"{music.get('offset', 0):.2f}", "-i", str(Path(music["path"]).resolve())]
+        music_input = n_in
+        n_in += 1
+    audio = _audio_filter(mute if has_audio else [], music_input, music.get("volume", 0.18) if music else 0.18, duration)
     cmd += [
-        "-filter_complex", _video_filter(layout, ass_name, watermark, 2 if layout == "gameplay" else 1)
-        + _audio_filter(mute if has_audio else []), "-map", "[v]", "-t", f"{duration:.3f}",
+        "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "")
+        + audio, "-map", "[v]", "-t", f"{duration:.3f}",
     ]
     if has_audio:
-        cmd += ["-map", "[a]" if mute else "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "44100"]
+        cmd += ["-map", "[a]" if audio else "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "44100"]
     cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", "30",
             "-movflags", "+faststart", "-f", "mp4", tmp_name]
     try:

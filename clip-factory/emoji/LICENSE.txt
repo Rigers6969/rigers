@@ -1,0 +1,5 @@
+The emoji pictures in this folder are from Twemoji
+Copyright 2019-2024 Twitter, Inc. and other contributors (https://github.com/jdecked/twemoji)
+Graphics licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+
+They were converted from the original SVG files to 256x256 PNG; nothing else was changed.

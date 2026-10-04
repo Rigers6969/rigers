@@ -45,6 +45,8 @@ APP_DIR = Path(__file__).resolve().parent
 INPUT_DIR = APP_DIR / "input"
 OUTPUT_DIR = APP_DIR / "output"
 GAMEPLAY_DIR = APP_DIR / "gameplay"   # background gameplay videos for the "clip + gameplay" layout
+MUSIC_DIR = APP_DIR / "music"         # no-copyright background music (e.g. from YouTube's Audio Library)
+MUSIC_VOLUMES = {"low": 0.12, "medium": 0.2, "high": 0.3}
 PORT = 5003
 DEFAULT_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 if not DEFAULT_HOST.startswith("http"):
@@ -254,6 +256,10 @@ def run_pipeline(run: dict) -> None:
                            f"(they never overlap), so you'll get {len(picks)} instead of {s['count']}.")
         update("render", f"Found {len(picks)} moments - cutting clip 1...", 50, save=True)
         games = _GameplayPicker(s.get("gameplay", "")) if s["layout"] == "gameplay" else None
+        tunes = _MusicPicker("" if s.get("music") == "mix" else s.get("music", "")) if s.get("music") else None
+        if tunes and not tunes.files:
+            run["warning"] = " ".join(filter(None, [run["warning"], "Background music is on, but the music folder is empty - add a track under Captions."]))
+            tunes = None
         # captions in another language: translate every clip's lines now, in big batches (one AI call per ~40 lines)
         caption_sets: dict[int, list[dict]] = {}
         if s.get("lang") and s["captions"] != "none":
@@ -343,6 +349,8 @@ def run_pipeline(run: dict) -> None:
                     watermark={"path": campaign.watermark_path(s["wm"]), "size": s["wm_size"] / 100,
                                "opacity": s["wm_opacity"] / 100, "y": wm_y} if s.get("wm") else None,
                     gameplay=games.next(end - start) if games else None,
+                    caption_pos=s.get("caption_pos", "middle"), emojis=s.get("emojis", False),
+                    music=tunes.next(end - start, MUSIC_VOLUMES[s.get("music_vol", "low")]) if tunes else None,
                     caption_words=caption_sets.get(n),
                 )
             except renderer.Cancelled:
@@ -609,6 +617,33 @@ def campaign_remove(cid):
     return jsonify({"campaigns": whop.ranked()})
 
 
+@app.route("/api/music", methods=["GET", "POST"])
+def music_library():
+    if request.method == "POST":
+        f = request.files.get("file")
+        if not f or not f.filename:
+            return jsonify({"error": "No file was sent."}), 400
+        if Path(f.filename).suffix.lower() not in renderer.MUSIC_EXTS:
+            return jsonify({"error": "Use a music file (MP3, M4A, WAV, OGG)."}), 400
+        MUSIC_DIR.mkdir(exist_ok=True)
+        name = safe_filename(Path(f.filename).stem, 60) + Path(f.filename).suffix.lower()
+        f.save(MUSIC_DIR / name)
+    return jsonify({"files": [{"name": p.name, "size_mb": round(p.stat().st_size / 1e6, 1)} for p in _music_files()]})
+
+
+@app.route("/api/music/open-folder", methods=["POST"])
+def music_folder():
+    MUSIC_DIR.mkdir(exist_ok=True)
+    try:
+        if os.name == "nt":
+            os.startfile(MUSIC_DIR)  # noqa: S606 - opens File Explorer on this PC
+        else:
+            subprocess.Popen(["xdg-open", str(MUSIC_DIR)])
+    except Exception as exc:
+        return jsonify({"error": str(exc), "path": str(MUSIC_DIR)}), 500
+    return jsonify({"ok": True, "path": str(MUSIC_DIR)})
+
+
 @app.route("/api/gameplay", methods=["GET", "POST"])
 def gameplay_library():
     if request.method == "POST":
@@ -707,6 +742,34 @@ def _gameplay_file(name: str) -> Path | None:
     return next((p for p in _gameplay_files() if p.name == name), None) if name else None
 
 
+def _music_files() -> list[Path]:
+    if not MUSIC_DIR.exists():
+        return []
+    return sorted(p for p in MUSIC_DIR.iterdir() if p.is_file() and p.suffix.lower() in renderer.MUSIC_EXTS)
+
+
+class _MusicPicker:
+    """A track for each clip (the chosen one, or all of them in a shuffled rotation), from a random point."""
+    def __init__(self, chosen: str):
+        import random
+        self.rnd = random.Random()
+        one = next((p for p in _music_files() if p.name == chosen), None)
+        self.files = [one] if one else _music_files()
+        self.rnd.shuffle(self.files)
+        self.lengths: dict[Path, float] = {}
+        self.i = 0
+
+    def next(self, clip_len: float, volume: float) -> dict | None:
+        if not self.files:
+            return None
+        f = self.files[self.i % len(self.files)]
+        self.i += 1
+        if f not in self.lengths:
+            self.lengths[f] = renderer.media_duration(f)
+        room = max(0.0, self.lengths[f] - clip_len - 2)
+        return {"path": f, "offset": self.rnd.uniform(0, room) if room else 0.0, "volume": volume}
+
+
 class _GameplayPicker:
     """Gives each clip a gameplay video (the chosen one, or the library in a shuffled rotation) and a random start."""
     def __init__(self, chosen: str):
@@ -760,6 +823,10 @@ def parse_settings(data: dict) -> dict:
         "wm_pos": data.get("wm_pos") if data.get("wm_pos") in campaign.WM_POSITIONS else "lower",
         "wm_size": _int(data, "wm_size", 30, 10, 80), "wm_opacity": _int(data, "wm_opacity", 100, 60, 100),
         "lang": data.get("lang") if data.get("lang") in translate.LANGS else "",
+        "caption_pos": data.get("caption_pos") if data.get("caption_pos") in renderer.CAPTION_POSITIONS else "middle",
+        "emojis": bool(data.get("emojis", False)),
+        "music": str(data.get("music") or "") if (data.get("music") == "mix" or any(p.name == data.get("music") for p in _music_files())) else "",
+        "music_vol": data.get("music_vol") if data.get("music_vol") in MUSIC_VOLUMES else "low",
         "gameplay": str(data.get("gameplay") or "") if _gameplay_file(str(data.get("gameplay") or "")) else "",
         "host": host, "model": str(data.get("model") or "llama3").strip() or "llama3",
     }
@@ -2073,6 +2140,9 @@ PAGE = r"""<!DOCTYPE html>
         </select></div>
       <div><label>Captions</label>
         <select id="captions">
+          <option value="pop">Pop - big words that pop (viral)</option>
+          <option value="box">Box - spoken word in a coloured box</option>
+          <option value="story">Story - big slanted key words (podcast look)</option>
           <option value="highlight">Word-by-word, yellow highlight</option>
           <option value="simple">Simple white</option>
           <option value="none">No captions</option>
@@ -2089,6 +2159,21 @@ PAGE = r"""<!DOCTYPE html>
           <option value="tr">Turkish - translated</option>
         </select><div class="msg hide" id="langNote" style="font-size:12px;margin-top:4px">Translated by your AI engine (a free Gemini key is best). Without one, a free translator is used (about 10-15 clips a day).</div></div>
       <div><label>Ollama model</label><select id="model"></select></div>
+    </div>
+    <div class="row" style="margin:6px 0">
+      <label for="capPos" style="margin:0">Captions on the screen:</label>
+      <select id="capPos" style="width:auto"><option value="middle">In the middle</option><option value="low">Lower third</option></select>
+      <label class="check" style="margin:0"><input type="checkbox" id="emojis" checked> Emoji pops (&#128514; &#128293; &#128176; when those words are said)</label>
+    </div>
+    <div style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
+      <div class="grid" style="align-items:end">
+        <div><label for="music">Background music (no copyright)</label><select id="music"><option value="">No music</option><option value="mix">Mix all my tracks</option></select></div>
+        <div><label for="musicVol">Music volume</label><select id="musicVol"><option value="low">Low (under the voices)</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+        <div><label for="musicFile">Add a track</label><input type="file" id="musicFile" accept=".mp3,.m4a,.wav,.ogg,.aac,.flac"></div>
+      </div>
+      <div class="msg" id="musicMsg" style="margin-top:6px"></div>
+      <div class="msg" style="margin-top:6px">The music gets quieter by itself whenever someone talks. Use only <b>no-copyright music</b>: the safest is
+        <a href="https://studio.youtube.com/channel/UC/music" target="_blank" rel="noopener" style="color:var(--accent)">YouTube Studio &rarr; Audio Library</a> (filter "Attribution not required"), or tracks marked free for commercial use. Music from songs on Spotify/TikTok gets your clips claimed. <button class="ghost" id="musicFolder" style="padding:3px 10px;font-size:12px">Open the music folder</button></div>
     </div>
     <div id="gpBox" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
       <div class="grid" style="align-items:end">
@@ -2189,7 +2274,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2288,10 +2373,29 @@ function clipSettings() {
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
     gameplay: $("gpSel").value, lang: $("lang").value,
+    caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
 }
+
+// ---------- background music ----------
+async function loadMusic() {
+  let d; try { d = await api("/api/music"); } catch (e) { return; }
+  const want = $("music").value || store.get("cf_music") || "";
+  $("music").innerHTML = '<option value="">No music</option><option value="mix">Mix all my tracks</option>' + d.files.map((f) => `<option value="${esc(f.name)}">${esc(f.name)}</option>`).join("");
+  if (want === "mix" || d.files.some((f) => f.name === want)) $("music").value = want;
+  $("musicMsg").innerHTML = d.files.length ? `${d.files.length} track${d.files.length > 1 ? "s" : ""} in your music folder.` : "No tracks yet - add an MP3 from YouTube's Audio Library.";
+}
+$("musicFile").onchange = async () => {
+  const f = $("musicFile").files[0]; if (!f) return;
+  const fd = new FormData(); fd.append("file", f);
+  $("musicMsg").innerText = `Adding ${f.name}...`;
+  try { await api("/api/music", { method: "POST", body: fd }); if (!$("music").value) { $("music").value = "mix"; } await loadMusic(); if ($("music").value === "") $("music").value = "mix"; saveSettings(); }
+  catch (e) { $("musicMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  $("musicFile").value = "";
+};
+$("musicFolder").onclick = async () => { try { const r = await postJson("/api/music/open-folder"); $("musicMsg").innerText = "Opened: " + r.path; } catch (e) { $("musicMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; } };
 
 // ---------- gameplay videos (clip + gameplay layout) ----------
 async function loadGameplay() {
@@ -3424,6 +3528,7 @@ $("aiTest").onclick = async () => {
   loadWatermarks();
   showGameplayBox();
   showLangNote();
+  loadMusic();
   for (const id of SETTINGS) for (const ev of ["change", "input"]) $(id).addEventListener(ev, saveSettings);  // saved the moment you change it
   const savedKind = store.get("cf_listKind");
   if (savedKind) { const r = document.querySelector(`input[name=listKind][value=${savedKind}]`); if (r) r.checked = true; }
