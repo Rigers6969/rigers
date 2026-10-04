@@ -816,7 +816,7 @@ def start():
 def _ai_public() -> dict:
     k = ai.load_keys()
     return {"cloud_on": k["cloud_on"], "omni_on": k["omni_on"], "omni_url": k["omni_url"], "omni_model": k["omni_model"],
-            "omni_key": ai.key_hint(k.get("omniroute_key", "")), "providers": [
+            "omni_key": ai.key_hint(k.get("omniroute_key", "")), "omni_up": ai.omniroute_up(k["omni_url"]), "providers": [
         {"id": n, "label": ai.CLOUD[n][0], "free": ai.CLOUD[n][3], "set": bool(k[f"{n}_key"]), "hint": ai.key_hint(k[f"{n}_key"])}
         for n in ai.ORDER]}
 
@@ -1690,14 +1690,14 @@ PAGE = r"""<!DOCTYPE html>
       Picking the viral moments: OmniRoute (if on) &rarr; Gemini &rarr; Groq &rarr; OpenRouter &rarr; Claude &rarr; ChatGPT &rarr; Grok &rarr; Ollama on this PC &rarr; built-in scorer.
     </div>
     <div style="margin-bottom:14px;padding:12px;border:1px solid var(--line);border-radius:10px">
-      <label class="check" style="margin:0"><input type="checkbox" id="omniOn"> <b>Use OmniRoute</b> - your own free AI router on this PC, tried first
+      <label class="check" style="margin:0"><input type="checkbox" id="omniOn"> <b>Use OmniRoute when it's running</b> - your own free AI router on this PC, tried first
         (<a href="https://omniroute.online/" target="_blank" rel="noopener" style="color:var(--accent)">what is it?</a>)</label>
       <div class="grid" style="margin-top:8px">
         <div><label for="omniUrl">Address</label><input type="text" id="omniUrl" placeholder="http://localhost:20128/v1"></div>
         <div><label for="omniModel">Model</label><input type="text" id="omniModel" placeholder="auto/best-free"></div>
         <div><label for="omniKey">Key (only if you made one in OmniRoute)</label><input type="text" id="omniKey" autocomplete="off" spellcheck="false" placeholder="optional"><div class="msg" id="omniKeyState"></div></div>
       </div>
-      <div class="msg" style="margin-top:6px">Install once: get Node.js from nodejs.org, then in PowerShell run <code>npm install -g omniroute</code> and start it with <code>omniroute</code> (keep that window open). Its dashboard is <a href="http://localhost:20128" target="_blank" rel="noopener" style="color:var(--accent)">localhost:20128</a>. If it isn't running, Clip Factory simply uses the next AI.</div>
+      <div class="msg" style="margin-top:6px"><b>start.bat installs and starts OmniRoute by itself</b> (a small "OmniRoute" window - leave it open). Its dashboard, where you can add more free AIs, is <a href="http://localhost:20128" target="_blank" rel="noopener" style="color:var(--accent)">localhost:20128</a>. If it isn't running, Clip Factory simply uses the next AI. <span id="omniState"></span></div>
     </div>
     <div class="grid" id="aiKeys"></div>
     <div class="row" style="margin-top:14px">
@@ -3365,6 +3365,7 @@ function renderAi(st) {
   aiState = st;
   $("cloudOn").checked = st.cloud_on;
   $("omniOn").checked = st.omni_on;
+  $("omniState").innerHTML = st.omni_up ? '<b style="color:var(--ok)">&#9679; OmniRoute is running.</b>' : '<b style="color:var(--dim)">&#9675; OmniRoute is not running right now.</b>';
   if (document.activeElement !== $("omniUrl")) $("omniUrl").value = st.omni_url;
   if (document.activeElement !== $("omniModel")) $("omniModel").value = st.omni_model;
   $("omniKeyState").innerHTML = st.omni_key ? `Saved (${esc(st.omni_key)}) &middot; <a href="#" id="omniClear" style="color:var(--dim)">remove</a>` : "";
@@ -3382,7 +3383,7 @@ function renderAi(st) {
     $("state_" + p.id).innerHTML = p.set ? `Saved (${esc(p.hint)}) &middot; <a href="#" data-clear="${p.id}" style="color:var(--dim)">remove</a>` : "Not set";
   }
   $("aiKeys").querySelectorAll("[data-clear]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); saveAi({ ["clear_" + a.dataset.clear + "_key"]: true }); }));
-  const names = [...(st.omni_on ? ["OmniRoute"] : []), ...(st.cloud_on ? st.providers.filter((p) => p.set).map((p) => p.label) : [])];
+  const names = [...(st.omni_on && st.omni_up ? ["OmniRoute"] : []), ...(st.cloud_on ? st.providers.filter((p) => p.set).map((p) => p.label) : [])];
   $("aiToggle").innerText = names.length ? `AI engines: ${names.join(" + ")} + this PC` : "AI engines: this PC only - make it faster";
   $("aiToggle").classList.toggle("ghost", !!names.length);
 }

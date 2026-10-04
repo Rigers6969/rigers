@@ -46,7 +46,7 @@ ORDER = ["gemini", "groq", "openrouter", "anthropic", "openai", "xai"]  # free f
 TRANSCRIBERS = {"groq": "whisper-large-v3-turbo", "openai": "whisper-1"}  # both give word timings
 
 DEFAULTS = {"cloud_on": False, **{f"{n}_key": "" for n in CLOUD},
-            "omni_on": False, "omni_url": CLOUD["omniroute"][1], "omni_model": CLOUD["omniroute"][2]}
+            "omni_on": True, "omni_url": CLOUD["omniroute"][1], "omni_model": CLOUD["omniroute"][2]}  # used whenever it's running
 CHUNK_S = 600       # audio is sent in 10-minute pieces (well under the 25 MB upload limits)
 OVERLAP_S = 2.0     # each piece starts 2 s early so no word is cut in half at the seams
 MAX_WAIT_S = 90     # a rate limit longer than this means "used up for now" -> next AI
@@ -251,6 +251,25 @@ class OpenAIStyle(Provider):
         raise Temporary(f"{self.label} model problem")
 
 
+_omni_seen: dict[str, tuple[float, bool]] = {}
+
+
+def omniroute_up(url: str) -> bool:
+    """Is OmniRoute answering at that address? (Any answer counts, even "key needed".) Remembered for 30 s."""
+    import time as _t
+    url = (url or CLOUD["omniroute"][1]).rstrip("/")
+    hit = _omni_seen.get(url)
+    if hit and _t.time() - hit[0] < 30:
+        return hit[1]
+    try:
+        requests.get(f"{url}/models", timeout=1.5)
+        up = True
+    except requests.RequestException:
+        up = False
+    _omni_seen[url] = (_t.time(), up)
+    return up
+
+
 class OmniRouteLLM(OpenAIStyle):
     """OmniRoute on this PC (or another address you set). The key is optional - only if you made one in its dashboard."""
 
@@ -443,7 +462,7 @@ def build_brain(settings: dict, keys: dict, report=None) -> Optional[Brain]:
     if not settings.get("use_ai", True):
         return None
     providers: list[Provider] = []
-    if keys.get("omni_on"):  # your own router first: it already switches between many free AIs by itself
+    if keys.get("omni_on") and omniroute_up(keys.get("omni_url")):  # your own router first, when it's running
         providers.append(OmniRouteLLM(keys.get("omni_url"), keys.get("omniroute_key", ""), keys.get("omni_model")))
     if keys.get("cloud_on"):
         providers += [make_provider(n, keys[f"{n}_key"]) for n in ORDER if keys.get(f"{n}_key")]
@@ -455,7 +474,9 @@ def test_keys(keys: dict) -> dict:
     """{name: 'ok' | problem} with a tiny real request to each AI that has a key."""
     out = {}
     prompt = 'Answer ONLY with this JSON: {"ok": true}'
-    if keys.get("omni_on"):
+    if keys.get("omni_on") and not omniroute_up(keys.get("omni_url")):
+        out["omniroute"] = "not running - start.bat starts it (or run: omniroute)"
+    elif keys.get("omni_on"):
         try:
             raw = OmniRouteLLM(keys.get("omni_url"), keys.get("omniroute_key", ""), keys.get("omni_model")).ask(prompt)
             out["omniroute"] = "ok" if "ok" in raw.lower() else "answered, but strangely"

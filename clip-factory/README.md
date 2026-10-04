@@ -471,12 +471,16 @@ address in front of many AIs, including lots of free ones. When one is busy
 or used up, it switches by itself. Clip Factory can use it **first** for
 picking moments, titles, translations, campaigns and the coach:
 
-1. Install Node.js (nodejs.org), then in PowerShell run
-   `npm install -g omniroute`.
-2. Start it with `omniroute` and keep that window open. Its dashboard is
-   http://localhost:20128, where you can add free providers.
-3. In Clip Factory: **AI engines** -> tick **Use OmniRoute** -> **Test the
-   keys**. The address and the model (`auto/best-free`) are already filled in.
+**start.bat sets it up by itself:** it installs Node.js and OmniRoute the
+first time, then starts OmniRoute in a small window ("OmniRoute - free AI
+router"). Leave that window open. Clip Factory uses OmniRoute whenever it's
+running; **AI engines** shows "OmniRoute is running".
+
+- Add more free AIs in its dashboard: http://localhost:20128
+- If **Test the keys** says OmniRoute didn't accept the key, create an API key
+  in the dashboard and paste it under OmniRoute in AI engines.
+- Don't want it? Create an empty file called `no-omniroute.txt` in the
+  clip-factory folder, or untick it in AI engines.
 
 If OmniRoute isn't running, Clip Factory skips it at once and uses the next
 AI.
