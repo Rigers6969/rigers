@@ -1333,7 +1333,8 @@ def downloads_route():
             then_clip = parse_settings(data.get("settings") or {})
         except StartError as exc:
             return jsonify({"error": str(exc)}), 400
-    d = downloader.add(url, str(data.get("quality") or "1080"), str(data.get("title") or ""), then_clip)
+    d = downloader.add(url, str(data.get("quality") or "1080"), str(data.get("title") or ""), then_clip,
+                       cookies=str(data.get("cookies") or ""))
     return jsonify(_public_download(d)), 202
 
 
@@ -1687,6 +1688,9 @@ PAGE = r"""<!DOCTYPE html>
         <button id="linkDl" class="ghost">Download</button>
         <button id="linkDlClip">Download + make clips</button>
       </div>
+      <div class="row" style="margin-top:8px"><label for="dlCookies" style="margin:0">If a site blocks the download, use my browser login:</label>
+        <select id="dlCookies" style="width:auto"><option value="">Off</option><option value="firefox">Firefox (works best)</option><option value="edge">Edge</option><option value="chrome">Chrome</option><option value="brave">Brave</option><option value="opera">Opera</option></select>
+        <span class="msg" style="font-size:12px">Only used when a site refuses. Log in to YouTube/Kick in that browser first. Your login never leaves this PC.</span></div>
       <div class="msg" id="linkMsg"></div>
       <div id="downloads" style="margin-top:8px"></div>
     </div>
@@ -2155,7 +2159,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2614,7 +2618,7 @@ async function startDownload(url, title, thenClip, button) {
   saveSettings();
   try {
     await api("/api/downloads", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, title, quality: $("quality").value, then_clip: thenClip, settings: clipSettings() }) });
+      body: JSON.stringify({ url, title, quality: $("quality").value, then_clip: thenClip, settings: clipSettings(), cookies: $("dlCookies").value }) });
     if (button) { button.innerText = thenClip ? "Added - see downloads above" : "Added to downloads"; button.disabled = true; }
     $("linkMsg").innerText = "";
   } catch (e) {

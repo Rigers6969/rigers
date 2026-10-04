@@ -124,6 +124,13 @@ clipping rules, and gives a verdict:
 This is a helper, not legal advice. Only a show's written rules or its
 clipping program give you real permission.
 
+**"HTTP Error 403: Forbidden"** means the site refused the download. Clip
+Factory then tries again by itself: disguised as a normal browser (Kick and
+Twitch always need this), then at 720p. If it still fails, set **If a site
+blocks the download, use my browser login** to Firefox (works best) or Edge,
+log in to YouTube/Kick in that browser, and try again. The login is read on
+this PC only.
+
 ## Make clips (second tab)
 
 1. **Pick the video.** Choose it from the list (anything you put in the

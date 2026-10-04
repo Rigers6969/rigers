@@ -54,7 +54,7 @@ def is_url(text: str) -> bool:
     return bool(re.match(r"^https?://\S+$", text.strip()))
 
 
-def add(url: str, quality: str = "1080", title: str = "", then_clip: Optional[dict] = None) -> dict:
+def add(url: str, quality: str = "1080", title: str = "", then_clip: Optional[dict] = None, cookies: str = "") -> dict:
     url = url.strip()
     for d in downloads.values():  # the same link already waiting or downloading
         if d["url"] == url and d["status"] in ("queued", "downloading"):
@@ -66,6 +66,7 @@ def add(url: str, quality: str = "1080", title: str = "", then_clip: Optional[di
         "id": did, "url": url, "title": title or url, "quality": quality if quality in QUALITIES else "1080",
         "status": "queued", "percent": 0, "message": "Waiting...", "file": None, "error": None,
         "then_clip": then_clip, "clip_run": None, "created": time.time(), "cancel": False,
+        "cookies": cookies if cookies in COOKIE_BROWSERS else "",
     }
     _queue.put(did)
     with _worker_started:
@@ -100,6 +101,26 @@ def _work() -> None:
                 cb(d)
             except Exception:
                 pass
+
+
+COOKIE_BROWSERS = ("firefox", "edge", "chrome", "brave", "opera", "vivaldi")
+
+
+def _impersonate_target():
+    """'Look like Chrome' for sites behind Cloudflare (Kick) - needs the curl_cffi package."""
+    import importlib.util
+    if importlib.util.find_spec("curl_cffi") is None:
+        return None
+    try:
+        from yt_dlp.networking.impersonate import ImpersonateTarget
+        return ImpersonateTarget.from_str("chrome")
+    except Exception:
+        return None
+
+
+def _blocked(exc: Exception) -> bool:
+    """The site refused us (not a broken link): worth trying again another way."""
+    return bool(re.search(r"\b403\b|forbidden|confirm you.?re not a bot|sign in to confirm|429|too many requests", str(exc), re.I))
 
 
 def _remove_partial(paths: set[str]) -> None:
@@ -167,29 +188,64 @@ def _download(d: dict) -> None:
     runtimes = js_runtimes()
     if runtimes:
         opts["js_runtimes"] = runtimes
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(d["url"], download=True)
-            if info and info.get("_type") == "playlist":
-                info = next((e for e in info.get("entries") or [] if e), None)
-            if not info:
-                raise RuntimeError("nothing to download at that link")
-            path = next((r.get("filepath") for r in info.get("requested_downloads") or [] if r.get("filepath")), None)
-            path = Path(path or ydl.prepare_filename(info))
-            if not path.exists():
-                path = path.with_suffix(".mp4")
-    except Cancelled:
-        _remove_partial(temp_files)
-        d.update(status="cancelled", message="Cancelled.")
-        return
-    except Exception as exc:
-        if d["cancel"]:
+    target = _impersonate_target()
+    base = dict(opts)
+    if target and re.search(r"kick\.com|twitch\.tv", d["url"], re.I):
+        base["impersonate"] = target  # these sites only answer requests that look like a real browser
+    low = {"format": "bv*[height<=720]+ba/b[height<=720]/b", "format_sort": ["res:720", "vcodec:h264", "acodec:m4a"]}
+    # when the site refuses (403 / bot check): try again disguised as a browser, then at 720p, then with your login
+    attempts = [("", base)]
+    if target and "impersonate" not in base:
+        attempts.append(("disguised as a normal browser", dict(base, impersonate=target)))
+    attempts.append(("at 720p", dict(attempts[-1][1], **low)))
+    if d.get("cookies"):
+        attempts.append((f"with your {d['cookies'].capitalize()} login", dict(attempts[-1][1], cookiesfrombrowser=(d["cookies"],))))
+    info, path, last, tried = None, None, None, []
+    for label, o in attempts:
+        if label:
+            d.update(message=f"The site refused the download - trying again {label}...", percent=0)
+            parts["n"] = 0
+        try:
+            with yt_dlp.YoutubeDL(o) as ydl:
+                info = ydl.extract_info(d["url"], download=True)
+                if info and info.get("_type") == "playlist":
+                    info = next((e for e in info.get("entries") or [] if e), None)
+                if not info:
+                    raise RuntimeError("nothing to download at that link")
+                path = next((r.get("filepath") for r in info.get("requested_downloads") or [] if r.get("filepath")), None)
+                path = Path(path or ydl.prepare_filename(info))
+                if not path.exists():
+                    path = path.with_suffix(".mp4")
+            last = None
+            break
+        except Cancelled:
             _remove_partial(temp_files)
             d.update(status="cancelled", message="Cancelled.")
             return
-        msg = clean_error(exc)
+        except Exception as exc:
+            if d["cancel"]:
+                _remove_partial(temp_files)
+                d.update(status="cancelled", message="Cancelled.")
+                return
+            last = exc
+            tried.append(label or "normally")
+            if not _blocked(exc):
+                break  # a different problem (bad link, private video...) - trying again won't help
+            _remove_partial(temp_files)  # a refused download leaves broken pieces - start the next try clean
+            temp_files.clear()
+    if last is not None:
+        msg = clean_error(last)
         if "youtube" in d["url"] and not runtimes:
             msg += " - YouTube downloads need Deno: close the app and double-click start.bat again (it installs it)."
+        elif _blocked(last):
+            hints = [f"Clip Factory tried {', '.join(tried)}."]
+            if re.search(r"kick\.com|twitch\.tv", d["url"], re.I) and not target:
+                hints.append("Kick and Twitch need an extra part: close Clip Factory and start it again with start.bat (it installs it).")
+            if not d.get("cookies"):
+                hints.append("Turn on 'If a site blocks the download, use my browser login' (Firefox works best), log in to the site in that browser, and try again.")
+            else:
+                hints.append("Make sure you're logged in to the site in that browser, close the browser, and try again - or try again in an hour.")
+            msg += " - " + " ".join(hints)
         elif re.search(r"sign in|confirm you.?re not a bot|login", msg, re.I):
             msg += " - YouTube is asking for a login for this video; try another one or try again later."
         d.update(status="error", error=msg, message="Download failed.")
