@@ -20,7 +20,8 @@ from typing import Callable
 import policy
 import styles
 
-OUT_W, OUT_H = 1080, 1920
+OUT_W, OUT_H = 1080, 1920  # the layout is planned at this size (captions, logo, emojis)
+OUT_SIZES = {"1080": (1080, 1920), "1440": (1440, 2560), "2160": (2160, 3840)}  # what the clip is made in
 LAYOUTS = ("crop", "fit", "podcast", "gameplay")
 GAME_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 CAPTION_STYLES = ("highlight", "simple", "pop", "box", "story", "none")
@@ -183,56 +184,58 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_input: int = 1,
-                  pops: list | None = None, fonts: str = "") -> str:
+                  pops: list | None = None, fonts: str = "", W: int = OUT_W, H: int = OUT_H) -> str:
     """wm: {"size": share of the width, "opacity": 0-1, "y": centre as share of the height} - input wm_input is the logo.
     pops: [(input, start, end, x, y)] emoji pictures. The gameplay layout's second video is input 1."""
     subs = (f",subtitles={ass_name}" + (f":fontsdir={fonts}" if fonts else "")) if ass_name else ""
-    chain = _base_filter(layout)[: -len("[v]")] + "[b0]"
+    chain = _base_filter(layout, W, H)[: -len("[v]")] + "[b0]"
+    k = W / OUT_W  # 2 for 4K: logo and emojis grow with the picture (the captions scale by themselves)
     cur = "b0"
     if wm:
-        w = max(40, int(OUT_W * wm["size"])) // 2 * 2
+        w = max(40, int(W * wm["size"])) // 2 * 2
         chain += (f";[{wm_input}:v]scale={w}:-1,format=rgba,colorchannelmixer=aa={wm['opacity']:.2f}[wm];"
                   f"[{cur}][wm]overlay=x=(W-w)/2:y=H*{wm['y']:.3f}-h/2[b1]")
         cur = "b1"
     for n, (idx, a, b, x, y) in enumerate(pops or []):
         # pops in (grows from 60% in 0.15 s), then fades out
-        chain += (f";[{idx}:v]format=rgba,scale=230:230,fade=t=in:st={a:.2f}:d=0.15:alpha=1,"
+        e = int(230 * k) // 2 * 2
+        chain += (f";[{idx}:v]format=rgba,scale={e}:{e},fade=t=in:st={a:.2f}:d=0.15:alpha=1,"
                   f"fade=t=out:st={max(a, b - 0.2):.2f}:d=0.2:alpha=1[e{n}];"
-                  f"[{cur}][e{n}]overlay=x={x}:y={y}:enable='between(t,{a:.2f},{b:.2f})'[p{n}]")
+                  f"[{cur}][e{n}]overlay=x={int(x * k)}:y={int(y * k)}:enable='between(t,{a:.2f},{b:.2f})'[p{n}]")
         cur = f"p{n}"
     # captions last, on top of everything, so nothing hides what's said
     return chain + f";[{cur}]format=yuv420p{subs}[v]"
 
 
-def _base_filter(layout: str) -> str:
+def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H) -> str:
     subs = ""
     if layout == "gameplay":
-        half = OUT_H // 2
+        half = H // 2
         return (
             # the clip on top, the gameplay (input 1, already looped and muted) underneath; stop with the clip
-            f"[0:v]scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1[top];"
-            f"[1:v]scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1,fps=30[bottom];"
+            f"[0:v]scale={W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{half},setsar=1[top];"
+            f"[1:v]scale={W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{half},setsar=1,fps=30[bottom];"
             f"[top][bottom]vstack=inputs=2:shortest=1,format=yuv420p[v]"
         )
     if layout == "podcast":
-        half = OUT_H // 2
+        half = H // 2
         return (
             f"[0:v]split=2[l][r];"
-            f"[l]crop=iw/2:ih:0:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1[top];"
-            f"[r]crop=iw/2:ih:iw/2:0,scale={OUT_W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={OUT_W}:{half},setsar=1[bottom];"
+            f"[l]crop=iw/2:ih:0:0,scale={W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{half},setsar=1[top];"
+            f"[r]crop=iw/2:ih:iw/2:0,scale={W}:{half}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{half},setsar=1[bottom];"
             f"[top][bottom]vstack=inputs=2,format=yuv420p{subs}[v]"
         )
     if layout == "fit":
         return (
             # the blur is done on a small copy - much faster on a CPU, looks the same
             f"[0:v]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=10:2,"
-            f"scale={OUT_W}:{OUT_H},setsar=1[bg];"
-            f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1[fg];"
+            f"scale={W}:{H},setsar=1[bg];"
+            f"[0:v]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p{subs}[v]"
         )
     return (
-        f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,"
-        f"crop={OUT_W}:{OUT_H},setsar=1,format=yuv420p{subs}[v]"
+        f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={W}:{H},setsar=1,format=yuv420p{subs}[v]"
     )
 
 
@@ -290,10 +293,11 @@ def render_clip(
     layout: str, caption_style: str, out_path: Path, poster_path: Path,
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
     watermark: dict | None = None, gameplay: dict | None = None, caption_words: list[dict] | None = None,
-    caption_pos: str = "middle", emojis: bool = False, music: dict | None = None,
+    caption_pos: str = "middle", emojis: bool = False, music: dict | None = None, size: str = "1080",
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
+    size: "1080", "1440" or "2160" (4K) - the height of the finished clip's width, e.g. 4K = 2160x3840.
     Returns how many words were bleeped."""
     duration = end - start
     out_dir = out_path.parent
@@ -350,15 +354,17 @@ def render_clip(
         n_in += 1
     audio = _audio_filter(mute if has_audio else [], music_input, music.get("volume", 0.18) if music else 0.18, duration)
     cmd += [
-        "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "")
+        "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "",
+                                         *OUT_SIZES.get(size, OUT_SIZES["1080"]))
         + audio, "-map", "[v]", "-t", f"{duration:.3f}",
     ]
     if has_audio:
         cmd += ["-map", "[a]" if audio else "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "44100"]
-    cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", "30",
+    big = size in ("1440", "2160")
+    cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", "30", "-pix_fmt", "yuv420p",
             "-movflags", "+faststart", "-f", "mp4", tmp_name]
     try:
-        _run(cmd, out_dir, cancelled, timeout=max(600, duration * 30))
+        _run(cmd, out_dir, cancelled, timeout=max(900 if big else 600, duration * (120 if big else 30)))
         os.replace(out_dir / tmp_name, out_path)  # only a finished file ever gets the real name
     finally:
         for leftover in (out_dir / tmp_name, out_dir / ass_name if ass_name else None):

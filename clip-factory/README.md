@@ -160,14 +160,19 @@ this PC only.
   yellow, strong words (money, never, insane...) are green.
 - **Box:** the word being said sits in a coloured box (the TikTok look).
 - **Story:** big, bold, slanted key words and small filler words that
-  build up word by word, with the last key word underlined (the podcast
-  clip look: *PROCRASTINATING / is choosing / to delay*).
+  build up word by word, with a thick underline growing under the last big
+  word and a soft dark shade behind the text (the podcast clip look:
+  *PROCRASTINATING / is choosing / to DELAY*).
 - **Word-by-word** and **Simple** are the classic captions.
 
 **Captions on the screen:** **In the middle** (the default, best for
 Shorts) or **Lower third**. **Emoji pops** puts an emoji above the
 captions when a matching word is said (laugh 😂, money 💰, insane 🔥...),
 at most 4 per clip.
+
+**Clip quality:** **4K** (2160x3840, the default) looks sharpest on
+YouTube but takes about 3 times longer to make; **1080p** is the fastest.
+For real 4K detail, download the video in 4K too.
 
 **Background music (no copyright):** add a track with **Add a track** (or
 put MP3s in the `music` folder), then choose it, or **Mix all my tracks**

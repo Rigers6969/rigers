@@ -351,7 +351,7 @@ def run_pipeline(run: dict) -> None:
                     gameplay=games.next(end - start) if games else None,
                     caption_pos=s.get("caption_pos", "middle"), emojis=s.get("emojis", False),
                     music=tunes.next(end - start, MUSIC_VOLUMES[s.get("music_vol", "low")]) if tunes else None,
-                    caption_words=caption_sets.get(n),
+                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"),
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -825,6 +825,7 @@ def parse_settings(data: dict) -> dict:
         "lang": data.get("lang") if data.get("lang") in translate.LANGS else "",
         "caption_pos": data.get("caption_pos") if data.get("caption_pos") in renderer.CAPTION_POSITIONS else "middle",
         "emojis": bool(data.get("emojis", False)),
+        "out_size": data.get("out_size") if data.get("out_size") in renderer.OUT_SIZES else "1080",
         "music": str(data.get("music") or "") if (data.get("music") == "mix" or any(p.name == data.get("music") for p in _music_files())) else "",
         "music_vol": data.get("music_vol") if data.get("music_vol") in MUSIC_VOLUMES else "low",
         "gameplay": str(data.get("gameplay") or "") if _gameplay_file(str(data.get("gameplay") or "")) else "",
@@ -2165,6 +2166,11 @@ PAGE = r"""<!DOCTYPE html>
       <select id="capPos" style="width:auto"><option value="middle">In the middle</option><option value="low">Lower third</option></select>
       <label class="check" style="margin:0"><input type="checkbox" id="emojis" checked> Emoji pops (&#128514; &#128293; &#128176; when those words are said)</label>
     </div>
+    <div class="row" style="margin:6px 0">
+      <label for="outSize" style="margin:0">Clip quality:</label>
+      <select id="outSize" style="width:auto"><option value="2160" selected>4K (2160x3840) - sharpest on YouTube, about 3x slower</option><option value="1440">1440p (1440x2560) - sharper, about 2x slower</option><option value="1080">1080p (1080x1920) - fastest</option></select>
+      <span class="msg" style="font-size:12px">Download in 4K too (Find viral videos) for real 4K detail.</span>
+    </div>
     <div style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
       <div class="grid" style="align-items:end">
         <div><label for="music">Background music (no copyright)</label><select id="music"><option value="">No music</option><option value="mix">Mix all my tracks</option></select></div>
@@ -2274,7 +2280,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2373,7 +2379,7 @@ function clipSettings() {
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
     gameplay: $("gpSel").value, lang: $("lang").value,
-    caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value,
+    caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value, out_size: $("outSize").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
