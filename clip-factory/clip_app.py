@@ -363,7 +363,7 @@ def run_pipeline(run: dict) -> None:
                     gameplay=games.next(end - start) if games else None,
                     caption_pos=s.get("caption_pos", "middle"), emojis=s.get("emojis", False),
                     music=tunes.next(end - start, MUSIC_VOLUMES[s.get("music_vol", "low")]) if tunes else None,
-                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"), post=story,
+                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"), post=story, cap_size=s.get("cap_size", "m"),
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -647,7 +647,8 @@ def caption_preview():
     out = work / "preview.png"
     with _preview_lock:
         try:
-            renderer.preview_image(style, layout, pos, out, work, source, story)
+            renderer.preview_image(style, layout, pos, out, work, source, story,
+                                   data.get("cap_size") if data.get("cap_size") in ("s", "m", "l", "xl") else "m")
         except renderer.RenderError as exc:
             return jsonify({"error": f"Couldn't make the preview: {exc}"}), 500
         return send_file(out, mimetype="image/png", max_age=0)
@@ -862,6 +863,7 @@ def parse_settings(data: dict) -> dict:
         "caption_pos": data.get("caption_pos") if data.get("caption_pos") in renderer.CAPTION_POSITIONS else "middle",
         "emojis": bool(data.get("emojis", False)),
         "out_size": data.get("out_size") if data.get("out_size") in renderer.OUT_SIZES else "1080",
+        "cap_size": data.get("cap_size") if data.get("cap_size") in ("s", "m", "l", "xl") else "m",
         "post_cta": re.sub(r"[\r\n]+", " ", str(data.get("post_cta") or "")).strip()[:140],
         "music": str(data.get("music") or "") if (data.get("music") == "mix" or any(p.name == data.get("music") for p in _music_files())) else "",
         "music_vol": data.get("music_vol") if data.get("music_vol") in MUSIC_VOLUMES else "low",
@@ -2204,6 +2206,8 @@ PAGE = r"""<!DOCTYPE html>
     <div class="row" style="margin:6px 0">
       <label for="capPos" style="margin:0">Captions on the screen:</label>
       <select id="capPos" style="width:auto"><option value="middle">In the middle</option><option value="low">Lower third</option></select>
+      <label for="capSize" style="margin:0">Size:</label>
+      <select id="capSize" style="width:auto"><option value="s">Small</option><option value="m" selected>Normal</option><option value="l">Big</option><option value="xl">Huge</option></select>
       <label class="check" style="margin:0"><input type="checkbox" id="emojis" checked> Emoji pops (&#128514; &#128293; &#128176; when those words are said)</label>
     </div>
     <div class="row" style="margin:6px 0">
@@ -2330,7 +2334,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize", "postCta"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize", "postCta", "capSize"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2431,7 +2435,7 @@ function clipSettings() {
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
     gameplay: $("gpSel").value, lang: $("lang").value,
-    caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value, out_size: $("outSize").value, post_cta: $("postCta").value,
+    caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value, out_size: $("outSize").value, post_cta: $("postCta").value, cap_size: $("capSize").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
@@ -2474,7 +2478,7 @@ async function capPreview() {
   try {
     const r = await fetch("/api/caption-preview", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ captions: $("captions").value, layout: $("layout").value, caption_pos: $("capPos").value,
-        input: $("inputSel").value, post_cta: $("postCta").value, channel_name: $("channelName").value }) });
+        input: $("inputSel").value, post_cta: $("postCta").value, cap_size: $("capSize").value, channel_name: $("channelName").value }) });
     if (!r.ok) { let m = "Couldn't make the preview."; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
     const url = URL.createObjectURL(await r.blob());
     $("capPreviewImg").src = url; $("capPreviewImg").style.display = "inline-block";
@@ -2485,7 +2489,7 @@ async function capPreview() {
 }
 $("capPreviewBtn").onclick = capPreview;
 $("capPreviewClose").onclick = () => $("capPreview").classList.add("hide");
-for (const id of ["captions", "layout", "capPos"]) $(id).addEventListener("change", () => { if (!$("capPreview").classList.contains("hide")) capPreview(); });
+for (const id of ["captions", "layout", "capPos", "capSize"]) $(id).addEventListener("change", () => { if (!$("capPreview").classList.contains("hide")) capPreview(); });
 
 function showGameplayBox() {
   const on = $("layout").value === "gameplay"; $("gpBox").classList.toggle("hide", !on); if (on) loadGameplay();

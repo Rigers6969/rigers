@@ -116,7 +116,7 @@ def caption_anchor(layout: str, position: str) -> tuple[int, int, int]:
 
 
 def build_ass(words: list[dict], title: str, duration: float, layout: str, caption_style: str, out_path: Path,
-              position: str = "middle", post: dict | None = None) -> None:
+              position: str = "middle", post: dict | None = None, size_scale: float = 1.0) -> None:
     """words are already shifted so 0 = the start of the clip.
     post (text post layout): {"paragraphs", "ending", "text_top"} - shown instead of the title and captions."""
     cap_align = 2  # bottom centre
@@ -142,7 +142,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font_simple},{styles.em("xbold", 70)},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,6,3,{cap_align},60,60,{cap_margin},1
+Style: Caption,{font_simple},{styles.em("xbold", 70 * size_scale)},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,6,3,{cap_align},60,60,{cap_margin},1
 Style: Title,{font_title},{styles.em("xbold", 54)},&H00000000,&H000000FF,&H00FFFFFF,&H00FFFFFF,0,0,0,0,100,100,0,0,3,18,0,8,90,90,{title_margin},1
 {styles.styles_block()}
 [Events]
@@ -150,7 +150,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """]
     if layout == "post":
         if post:
-            lines += styles.post_events(post["paragraphs"], post.get("ending", ""), duration, post["text_top"], round(OUT_H * 0.83))
+            lines += styles.post_events(post["paragraphs"], post.get("ending", ""), duration, post["text_top"], round(OUT_H * 0.83),
+                                        scale=size_scale)
         out_path.write_text("".join(lines), encoding="utf-8")
         return
     if title:
@@ -161,7 +162,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         x, y, an = caption_anchor(layout, position)
         # story: a centred block, in the clip's half for the gameplay layout
         area = (round(OUT_H * 0.08), round(OUT_H * 0.46)) if layout == "gameplay" else (round(OUT_H * 0.28), round(OUT_H * 0.72))
-        lines += styles.events(style, words, duration, x, y, an, area)
+        lines += styles.events(style, words, duration, x, y, an, area, size_scale)
     elif style == "simple":
         groups = group_words(words, 4, 26)
         for g, group in enumerate(groups):
@@ -293,7 +294,7 @@ def render_clip(
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
     watermark: dict | None = None, gameplay: dict | None = None, caption_words: list[dict] | None = None,
     caption_pos: str = "middle", emojis: bool = False, music: dict | None = None, size: str = "1080",
-    post: dict | None = None,
+    post: dict | None = None, cap_size: str = "m",
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
@@ -332,7 +333,8 @@ def render_clip(
         # ffmpeg runs inside the output folder and gets just the file name:
         # Windows paths (C:\...) break ffmpeg's subtitles filter otherwise
         ass_name = out_path.stem + ".ass"
-        build_ass(clip_words, title, duration, layout, caption_style, out_dir / ass_name, caption_pos, post)
+        build_ass(clip_words, title, duration, layout, caption_style, out_dir / ass_name, caption_pos, post,
+                  styles.SIZES.get(cap_size, 1.0))
     tmp_name = out_path.stem + ".part.mp4"
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -399,7 +401,7 @@ PREVIEW_POST = {"paragraphs": ["This guy **paid a million dollars** for somethin
 
 
 def preview_image(style: str, layout: str, position: str, out_png: Path, work_dir: Path,
-                  source: Path | None = None, post: dict | None = None) -> Path:
+                  source: Path | None = None, post: dict | None = None, cap_size: str = "m") -> Path:
     """A still of how the captions look: a short sample clip is made with the real settings and one frame is kept.
     On the chosen video when there is one, else on a plain background."""
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -423,7 +425,7 @@ def preview_image(style: str, layout: str, position: str, out_png: Path, work_di
     shown_at = words[6]["start"] + 0.12  # just after "million": a key word is on screen in every style
     clip = work_dir / "preview.mp4"
     render_clip(source, start, shown_at + 1.0, words, "Your hook title is here", layout, style, clip,
-                work_dir / "preview_poster.jpg", has_audio=False, caption_pos=position, emojis=False, post=post or PREVIEW_POST)
+                work_dir / "preview_poster.jpg", has_audio=False, caption_pos=position, emojis=False, post=post or PREVIEW_POST, cap_size=cap_size)
     _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{shown_at - start:.2f}", "-i", clip.name, "-frames:v", "1",
           "-vf", "scale=540:-2", str(out_png.resolve())], work_dir, lambda: False, timeout=60)
     return out_png

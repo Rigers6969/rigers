@@ -226,8 +226,8 @@ def _pos(x: int, y: int, an: int) -> str:
 
 # ---------- the styles ----------
 
-def hormozi_events(words, duration, x, y, an) -> list[str]:
-    fs = em("black", 92)
+def hormozi_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+    fs = em("black", 92 * scale)
     chunks = _chunks(words, "black", fs, 3, True)
     out = []
     for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
@@ -241,8 +241,8 @@ def hormozi_events(words, duration, x, y, an) -> list[str]:
     return out
 
 
-def beast_events(words, duration, x, y, an) -> list[str]:
-    fs = em("comic", 150)
+def beast_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+    fs = em("comic", 150 * scale)
     chunks = _chunks(words, "comic", fs, 2, True)
     accents = [YELLOW, GREEN, RED, YELLOW]
     out = []
@@ -258,8 +258,8 @@ def beast_events(words, duration, x, y, an) -> list[str]:
     return out
 
 
-def karaoke_events(words, duration, x, y, an) -> list[str]:
-    fs = em("black", 84)
+def karaoke_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+    fs = em("black", 84 * scale)
     chunks = _chunks(words, "black", fs, 3, True)
     out = []
     for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
@@ -275,8 +275,8 @@ def karaoke_events(words, duration, x, y, an) -> list[str]:
     return out
 
 
-def box_events(words, duration, x, y, an) -> list[str]:
-    fs = em("black", 84)
+def box_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+    fs = em("black", 84 * scale)
     chunks = _chunks(words, "black", fs, 3, True, MAX_W - 60)
     out = []
     for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
@@ -294,8 +294,8 @@ def box_events(words, duration, x, y, an) -> list[str]:
     return out
 
 
-def iman_events(words, duration, x, y, an) -> list[str]:
-    fs = em("xbold", 66)
+def iman_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+    fs = em("xbold", 66 * scale)
     chunks = _chunks(words, "xbold", fs, 5, False)
     xb, md = FONTS["xbold"][0], FONTS["medium"][0]
     out = []
@@ -325,7 +325,7 @@ def _phrases(words: list[dict], max_words: int = 7) -> list[list[dict]]:
     return out
 
 
-def story_events(words: list[dict], duration: float, top: int, bottom: int, center_x: int = 540) -> list[str]:
+def story_events(words: list[dict], duration: float, top: int, bottom: int, center_x: int = 540, scale: float = 1.0) -> list[str]:
     """Kinetic typography, centred: each phrase builds up word by word, e.g.
          PROCRASTINATING      <- key word: huge, heavy, slanted
             is choosing       <- normal words together, small words smaller and lighter
@@ -389,9 +389,9 @@ def story_events(words: list[dict], duration: float, top: int, bottom: int, cent
             sz = {}
             for i in ln:
                 if kinds[i] == "key":
-                    sz[i] = min(em("black_i", 150), int(100 * MAX_W / max(1.0, text_width(shown(i), "black_i", 100) * 1.04)))
+                    sz[i] = min(em("black_i", 150 * scale), int(100 * MAX_W / max(1.0, text_width(shown(i), "black_i", 100) * 1.04)))
                 else:
-                    sz[i] = em("xbold", 74) if kinds[i] == "word" else em("medium", 56)
+                    sz[i] = em("xbold", 74 * scale) if kinds[i] == "word" else em("medium", 56 * scale)
             while line_width(ln, sz) > MAX_W and min(sz.values()) > 40:
                 sz = {i: int(v * 0.92) for i, v in sz.items()}
             return sz, line_width(ln, sz)
@@ -443,12 +443,12 @@ def _post_words(text: str) -> list[tuple[str, bool]]:
 
 
 def post_events(paragraphs: list[str], ending: str, duration: float, top: int, bottom: int,
-                left: int = 84, right: int = 110) -> list[str]:
+                left: int = 84, right: int = 110, scale: float = 1.0) -> list[str]:
     """The story text under the video: paragraphs with bold blue key phrases, a blue bar beside the first one,
     and the call to action in italics. The font shrinks until it all fits between top and bottom."""
     width = 1080 - left - right
     blocks = [(p, False) for p in paragraphs if p.strip()] + ([(ending, True)] if ending.strip() else [])
-    px = 50
+    px = round(50 * scale)
     while True:
         fs = em("medium", px)
         line_h = round(fs * 0.98)
@@ -492,9 +492,13 @@ def post_events(paragraphs: list[str], ending: str, duration: float, top: int, b
     return out
 
 
-def events(style: str, words: list[dict], duration: float, x: int, y: int, an: int, story_area: tuple[int, int]) -> list[str]:
+SIZES = {"s": 0.8, "m": 1.0, "l": 1.2, "xl": 1.4}  # caption size setting: small, normal, big, huge
+
+
+def events(style: str, words: list[dict], duration: float, x: int, y: int, an: int, story_area: tuple[int, int],
+           scale: float = 1.0) -> list[str]:
     style = ALIASES.get(style, style)
     if style == "story":
-        return story_events(words, duration, *story_area, center_x=x)
+        return story_events(words, duration, *story_area, center_x=x, scale=scale)
     return {"hormozi": hormozi_events, "beast": beast_events, "highlight": karaoke_events, "box": box_events,
-            "iman": iman_events}[style](words, duration, x, y, an)
+            "iman": iman_events}[style](words, duration, x, y, an, scale)
