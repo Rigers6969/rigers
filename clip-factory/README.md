@@ -155,15 +155,20 @@ this PC only.
      can get your clips claimed.
 5. Click **Make clips**.
 
-**Viral captions** (setting **Captions**):
-- **Pop:** 1-2 huge words at a time. The word being said pops in big and
-  yellow, strong words (money, never, insane...) are green.
-- **Box:** the word being said sits in a coloured box (the TikTok look).
-- **Story:** big, bold, slanted key words and small filler words that
-  build up word by word, with a thick underline growing under the last big
-  word and a soft dark shade behind the text (the podcast clip look:
-  *PROCRASTINATING / is choosing / to DELAY*).
-- **Word-by-word** and **Simple** are the classic captions.
+**Captions** (made like the captions on viral Shorts, TikToks and Reels):
+- **Hormozi** (the default): bold ALL CAPS Montserrat with a thick black
+  outline, 2-3 words at a time, one key word in yellow (green for money and
+  numbers). The most used style on viral clips.
+- **MrBeast:** comic font, 1-2 huge words that pop in tilted, the key word in
+  colour.
+- **Karaoke:** 2-3 words, the word being said turns green.
+- **Box:** the word being said sits in a purple box (the TikTok look).
+- **Clean:** calm lowercase white words that turn bold as they're said (the
+  Iman Gadzhi look), for calm or premium content.
+- **Story:** huge slanted key words, small filler words, lines that build up
+  word by word and a yellow underline under the punchline (*PROCRASTINATING /
+  is choosing / to DELAY*).
+- **Simple white** and **No captions**.
 
 **Captions on the screen:** **In the middle** (the default, best for
 Shorts) or **Lower third**. **Emoji pops** puts an emoji above the

@@ -24,7 +24,7 @@ OUT_W, OUT_H = 1080, 1920  # the layout is planned at this size (captions, logo,
 OUT_SIZES = {"1080": (1080, 1920), "1440": (1440, 2560), "2160": (2160, 3840)}  # what the clip is made in
 LAYOUTS = ("crop", "fit", "podcast", "gameplay")
 GAME_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
-CAPTION_STYLES = ("highlight", "simple", "pop", "box", "story", "none")
+CAPTION_STYLES = ("hormozi", "beast", "highlight", "box", "iman", "story", "simple", "none", "pop")  # pop = old name of hormozi
 CAPTION_POSITIONS = ("middle", "low")
 MUSIC_EXTS = {".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac"}
 
@@ -130,8 +130,7 @@ def build_ass(words: list[dict], title: str, duration: float, layout: str, capti
     else:
         cap_margin = round(OUT_H * 0.27)  # lower third - clear of the platform's own buttons/description
         title_margin = round(OUT_H * 0.10)
-    cap_size = round(OUT_W * (0.085 if caption_style == "highlight" else 0.07))
-    title_size = round(OUT_W * 0.06)
+    font_title, font_simple = styles.FONTS["xbold"][0], styles.FONTS["xbold"][0]
     lines = [f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {OUT_W}
@@ -141,45 +140,30 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Arial,{cap_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,7,3,{cap_align},60,60,{cap_margin},1
-Style: Title,Arial,{title_size},&H00000000,&H000000FF,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,16,0,8,90,90,{title_margin},1
-{styles.styles_block(round(OUT_W * 0.085))}
+Style: Caption,{font_simple},{styles.em("xbold", 70)},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,6,3,{cap_align},60,60,{cap_margin},1
+Style: Title,{font_title},{styles.em("xbold", 54)},&H00000000,&H000000FF,&H00FFFFFF,&H00FFFFFF,0,0,0,0,100,100,0,0,3,18,0,8,90,90,{title_margin},1
+{styles.styles_block()}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """]
     if title:
         lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(duration)},Title,,0,0,0,,{_ass_text(title)}\n")
 
-    if caption_style in styles.STYLES:
+    style = styles.ALIASES.get(caption_style, caption_style)
+    if style in styles.STYLES:
         x, y, an = caption_anchor(layout, position)
-        if caption_style == "pop":
-            lines += styles.pop_events(group_words(words, 2, 14), duration, x, y, an)
-        elif caption_style == "box":
-            lines += styles.box_events(group_words(words, 3, 18), duration, x, y, an)
-        else:  # story: centred block, in the clip's half for split layouts
-            top, bottom = (OUT_H * 0.08, OUT_H * 0.46) if layout == "gameplay" else (OUT_H * 0.28, OUT_H * 0.72)
-            lines += styles.story_events(words, duration, int(top), int(bottom))
-    elif caption_style != "none":
-        groups = group_words(words)
+        # story: a centred block, in the clip's half for the gameplay layout
+        area = (round(OUT_H * 0.08), round(OUT_H * 0.46)) if layout == "gameplay" else (round(OUT_H * 0.28), round(OUT_H * 0.72))
+        lines += styles.events(style, words, duration, x, y, an, area)
+    elif style == "simple":
+        groups = group_words(words, 4, 26)
         for g, group in enumerate(groups):
             g_start = group[0]["start"]
             next_start = groups[g + 1][0]["start"] if g + 1 < len(groups) else duration
             # stay up through short pauses so captions don't flicker
-            g_end = min(next_start, group[-1]["end"] + 0.6, duration)
-            g_end = max(g_end, g_start + 0.2)
-            texts = [_ass_text(w["text"]).upper() for w in group]
-            if caption_style == "simple":
-                lines.append(f"Dialogue: 0,{_ass_time(g_start)},{_ass_time(g_end)},Caption,,0,0,0,,{' '.join(texts)}\n")
-                continue
-            for k, w in enumerate(group):
-                w_start = g_start if k == 0 else w["start"]
-                w_end = group[k + 1]["start"] if k + 1 < len(group) else g_end
-                if w_end - w_start <= 0.01:
-                    continue
-                shown = " ".join(
-                    f"{{\\c{YELLOW}}}{t}{{\\c&H00FFFFFF&}}" if j == k else t for j, t in enumerate(texts)
-                )
-                lines.append(f"Dialogue: 0,{_ass_time(w_start)},{_ass_time(w_end)},Caption,,0,0,0,,{shown}\n")
+            g_end = max(min(next_start, group[-1]["end"] + 0.6, duration), g_start + 0.2)
+            text = " ".join(_ass_text(w["text"]) for w in group)
+            lines.append(f"Dialogue: 0,{_ass_time(g_start)},{_ass_time(g_end)},Caption,,0,0,0,,{text}\n")
     out_path.write_text("".join(lines), encoding="utf-8")
 
 
@@ -341,7 +325,7 @@ def render_clip(
     if emojis and caption_style != "none":
         x, y, an = caption_anchor(layout, caption_pos)
         top = y - (420 if an == 5 else 560)  # above the captions
-        if caption_style == "story":
+        if styles.ALIASES.get(caption_style, caption_style) == "story":
             top = int(OUT_H * (0.02 if layout == "gameplay" else 0.17))
         for a, b, code in styles.emoji_moments(clip_words, duration):
             cmd += ["-loop", "1", "-t", f"{duration:.3f}", "-i", str((styles.EMOJI_DIR / f"{code}.png").resolve())]

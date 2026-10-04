@@ -807,7 +807,7 @@ def parse_settings(data: dict) -> dict:
         "count": _int(data, "count", 10, 1, MAX_CLIPS),
         "min_len": min_len, "max_len": max_len,
         "layout": data.get("layout") if data.get("layout") in renderer.LAYOUTS else "crop",
-        "captions": data.get("captions") if data.get("captions") in renderer.CAPTION_STYLES else "highlight",
+        "captions": {"pop": "hormozi"}.get(data.get("captions"), data.get("captions")) if data.get("captions") in renderer.CAPTION_STYLES else "hormozi",
         "show_title": bool(data.get("show_title", True)),
         "whisper": data.get("whisper") if data.get("whisper") in ("base", "small", "medium") else "base",
         "use_ai": bool(data.get("use_ai", True)),
@@ -2141,10 +2141,12 @@ PAGE = r"""<!DOCTYPE html>
         </select></div>
       <div><label>Captions</label>
         <select id="captions">
-          <option value="pop">Pop - big words that pop (viral)</option>
-          <option value="box">Box - spoken word in a coloured box</option>
-          <option value="story">Story - big slanted key words (podcast look)</option>
-          <option value="highlight">Word-by-word, yellow highlight</option>
+          <option value="hormozi" selected>Hormozi - bold caps, key word yellow (most viral)</option>
+          <option value="beast">MrBeast - comic font, huge words that pop</option>
+          <option value="highlight">Karaoke - the word being said turns green</option>
+          <option value="box">Box - the word being said in a purple box</option>
+          <option value="iman">Clean - calm lowercase, words turn bold (Iman Gadzhi)</option>
+          <option value="story">Story - huge slanted key words, underlined (podcast)</option>
           <option value="simple">Simple white</option>
           <option value="none">No captions</option>
         </select></div>
@@ -2297,7 +2299,9 @@ function loadSettings() {
     const v = store.get("cf_" + id);
     if (v == null) continue;
     if ($(id).type === "checkbox") $(id).checked = v === "1"; else $(id).value = v;
+    if ($(id).tagName === "SELECT" && $(id).selectedIndex < 0) $(id).selectedIndex = 0;  // a choice that no longer exists
   }
+  if (store.get("cf_capv") !== "2") { $("captions").value = "hormozi"; store.set("cf_captions", "hormozi"); store.set("cf_capv", "2"); }  // the new captions, once
 }
 function saveSettings() {
   for (const id of SETTINGS) store.set("cf_" + id, $(id).type === "checkbox" ? ($(id).checked ? "1" : "0") : $(id).value);

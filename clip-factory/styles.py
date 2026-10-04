@@ -1,9 +1,15 @@
-"""Viral caption styles and emoji pops (on top of the classic word-by-word captions).
+"""Caption styles, made like the ones on viral Shorts / TikToks / Reels (and emoji pops).
 
-  pop    1-2 huge words at a time; the spoken word pops in and turns yellow, strong words are green
-  box    the spoken word sits in a coloured box (TikTok style)
-  story  kinetic typography: key words huge, bold and slanted, small words small, lines that build up
-         word by word, the last key word underlined (the podcast-clip look)
+  hormozi  Montserrat Black, ALL CAPS, thick black outline, 2-3 words at a time, ONE key word per chunk in
+           yellow (green for money and numbers); each chunk snaps in
+  beast    the MrBeast look: comic font, 1-2 huge words, heavy outline and hard shadow, every chunk pops in
+           tilted a little, the key word in colour
+  highlight  karaoke: 2-3 words, the word being said lights up green
+  box      the word being said sits in a coloured box (TikTok look)
+  iman     clean and calm (Iman Gadzhi look): lowercase white Montserrat, words turn bold as they're said
+  story    kinetic typography (podcast look): key words huge and slanted, small words small, lines build up
+           word by word, a thick underline grows under the last big word
+Fonts in fonts/: Montserrat, Anton, Bangers (all SIL Open Font License).
 Emoji pops: an emoji jumps in above the captions when a matching word is said (laugh -> 😂, money -> 💰...).
 Emoji pictures: Twemoji by Twitter, Inc. and contributors, CC-BY 4.0 (see emoji/LICENSE.txt).
 """
@@ -15,16 +21,20 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parent
 EMOJI_DIR = APP_DIR / "emoji"
 FONTS_DIR = APP_DIR / "fonts"
-STYLES = ("pop", "box", "story")
+STYLES = ("hormozi", "beast", "highlight", "box", "iman", "story")
+ALIASES = {"pop": "hormozi"}  # older saved settings
 
-WHITE, YELLOW, GREEN, BLACK = "&H00FFFFFF&", "&H0000E5FF&", "&H005AFF3C&", "&H00000000&"
-VIOLET = "&H00F65C8B&"  # the box colour (stands out on most videos, unlike yellow)
+# ASS colours are &HAABBGGRR
+WHITE, YELLOW, GREEN, BLACK = "&H00FFFFFF&", "&H0000E5FF&", "&H0040FF4D&", "&H00000000&"
+RED, VIOLET = "&H004B4BFF&", "&H00F65C8B&"
 SMALL = {"is", "a", "an", "the", "to", "of", "and", "or", "in", "on", "at", "it", "its", "be", "so", "but", "for", "with",
-         "that", "this", "was", "are", "am", "as", "if", "by", "from", "up", "into", "than", "then", "do", "did", "just"}
+         "that", "this", "was", "are", "am", "as", "if", "by", "from", "up", "into", "than", "then", "do", "did", "just",
+         "i", "you", "he", "she", "we", "they", "me", "my", "your", "his", "her", "our", "their", "them", "us", "not"}
 STRONG = {"never", "always", "everything", "nothing", "everyone", "nobody", "best", "worst", "biggest", "first", "last",
           "crazy", "insane", "million", "billion", "money", "dead", "died", "love", "hate", "secret", "truth", "lie",
           "fired", "rich", "broke", "free", "banned", "war", "fight", "won", "lost", "win", "lose", "only", "real",
           "fake", "huge", "impossible", "dangerous", "scared", "angry", "shocked", "why", "how", "stop", "quit"}
+MONEY = re.compile(r"(?i)[\d$%€£]|money|cash|million|billion|rich|paid|dollars?")
 EMOJIS = [  # (words that trigger it, Twemoji code)
     (r"laugh|lol|lmao|funny|joke|hilarious|haha", "1f602"), (r"dead|died|dying|kill(ed)?|rip|bro", "1f480"),
     (r"money|cash|dollars?|paid|rich|\$\d", "1f4b0"), (r"million|billion", "1f4b5"), (r"fire|insane|crazy|wild|lit", "1f525"),
@@ -35,15 +45,39 @@ EMOJIS = [  # (words that trigger it, Twemoji code)
     (r"police|alert|emergency|warning", "1f6a8"), (r"awkward|cringe|oops", "1f62c"), (r"clown|stupid|dumb", "1f921"),
     (r"king|queen|boss|goat", "1f451"), (r"embarrass|blush", "1f633"),
 ]
+MAX_W = 940  # the widest a caption line may be (the screen is 1080)
 
 
 def clean(text: str) -> str:
     return text.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ").strip()
 
 
+def caps(text: str) -> str:
+    """ALL CAPS without full stops and commas (viral captions don't show them; ? and ! stay)."""
+    t = clean(text).upper()
+    return t.rstrip(".,;:") or t
+
+
+def _bare(word: str) -> str:
+    return re.sub(r"[^\w$%']", "", word.lower())
+
+
 def strong(word: str) -> bool:
-    w = re.sub(r"[^\w$%']", "", word.lower())
+    w = _bare(word)
     return bool(re.search(r"[\d$%]", word)) or w in STRONG or len(w) >= 9
+
+
+def key_index(group: list[dict]) -> int:
+    """The one word of a chunk worth colouring: a strong word, else the longest real word (or none)."""
+    best, score = -1, 0
+    for i, w in enumerate(group):
+        b = _bare(w["text"])
+        if not b or b in SMALL:
+            continue
+        s = (100 if strong(w["text"]) else 0) + len(b)
+        if s > score and (strong(w["text"]) or len(b) >= 4):
+            best, score = i, s
+    return best
 
 
 def emoji_moments(words: list[dict], duration: float, gap: float = 4.0, limit: int = 4) -> list[tuple[float, float, str]]:
@@ -71,13 +105,57 @@ def fonts_dir_for(out_dir: Path) -> str:
         return ""
 
 
-def styles_block(cap_size: int) -> str:
-    return (
-        f"Style: Pop,Anton,{round(cap_size * 1.45)},{WHITE},&H000000FF&,{BLACK},&H96000000&,0,0,0,0,100,100,2,0,1,9,5,2,60,60,0,1\n"
-        f"Style: BoxBg,Anton,{round(cap_size * 1.25)},&HFF000000&,&H000000FF&,{VIOLET},{VIOLET},0,0,0,0,100,100,2,0,3,16,0,2,60,60,0,1\n"
-        f"Style: BoxText,Anton,{round(cap_size * 1.25)},{WHITE},&H000000FF&,{BLACK},&H80000000&,0,0,0,0,100,100,2,0,1,7,3,2,60,60,0,1\n"
-        "Style: Story,Arial,110,&H00FFFFFF&,&H000000FF&,&H20000000&,&H60000000&,0,0,0,0,100,100,0,0,1,6,5,7,0,0,0,1\n"
-    )
+# ---------- measuring text (so lines fit the screen and underlines match their word) ----------
+
+FONTS = {  # ASS font name, its file
+    "black": ("Montserrat Black", "Montserrat-Black.ttf"),
+    "black_i": ("Montserrat Black", "Montserrat-BlackItalic.ttf"),
+    "xbold": ("Montserrat ExtraBold", "Montserrat-ExtraBold.ttf"),
+    "medium": ("Montserrat Medium", "Montserrat-Medium.ttf"),
+    "comic": ("Bangers", "Bangers-Regular.ttf"),
+    "anton": ("Anton", "Anton-Regular.ttf"),
+}
+_font_cache: dict = {}
+
+
+def _font(key: str):
+    """(PIL font at size 100, em per unit of ASS font size, baseline as a share of the line) or None."""
+    if key not in _font_cache:
+        import struct
+        from PIL import ImageFont
+        _font_cache[key] = None
+        p = FONTS_DIR / FONTS[key][1]
+        try:
+            f = ImageFont.truetype(str(p), 100)
+            d = p.read_bytes()
+            tables = {d[12 + 16 * i: 16 + 16 * i]: struct.unpack(">I", d[20 + 16 * i: 24 + 16 * i])[0]
+                      for i in range(struct.unpack(">H", d[4:6])[0])}
+            upem = struct.unpack(">H", d[tables[b"head"] + 18: tables[b"head"] + 20])[0]
+            win_a, win_d = struct.unpack(">HH", d[tables[b"OS/2"] + 74: tables[b"OS/2"] + 78])
+            # libass makes the ASS font size = the font's Windows line height (winAscent + winDescent)
+            _font_cache[key] = (f, upem / (win_a + win_d), win_a / (win_a + win_d))
+        except (OSError, KeyError, ValueError, struct.error):
+            pass
+    return _font_cache[key]
+
+
+def em(key: str, px: float) -> int:
+    """The ASS font size that makes letters `px` pixels per em (how designers size fonts)."""
+    f = _font(key)
+    return round(px / (f[1] if f else 0.8))
+
+
+def ascent(key: str, fs: float) -> float:
+    f = _font(key)
+    return fs * (f[2] if f else 0.8)
+
+
+def text_width(text: str, key: str, fs: float) -> float:
+    """Width in screen pixels of text at ASS font size fs."""
+    f = _font(key)
+    if f is None:
+        return len(text) * fs * 0.5
+    return f[0].getlength(text) / 100 * fs * f[1]
 
 
 def _t(seconds: float) -> str:
@@ -85,47 +163,155 @@ def _t(seconds: float) -> str:
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
 
 
-def pop_events(groups: list[list[dict]], duration: float, x: int, y: int, an: int) -> list[str]:
-    out = []
-    for g, group in enumerate(groups):
-        g_start = group[0]["start"]
-        g_end = max(g_start + 0.2, min(groups[g + 1][0]["start"] if g + 1 < len(groups) else duration, group[-1]["end"] + 0.5, duration))
-        texts = [clean(w["text"]).upper() for w in group]
-        for k, w in enumerate(group):
-            w_start = g_start if k == 0 else w["start"]
-            w_end = group[k + 1]["start"] if k + 1 < len(group) else g_end
-            if w_end - w_start <= 0.01:
-                continue
-            parts = []
-            for j, t in enumerate(texts):
-                if j == k:  # the word being said: pops in big and yellow
-                    parts.append(f"{{\\c{YELLOW}\\fscx130\\fscy130\\t(0,110,\\fscx100\\fscy100)}}{t}{{\\r}}")
-                else:
-                    parts.append(f"{{\\c{GREEN}}}{t}{{\\r}}" if strong(group[j]["text"]) else t)
-            out.append(f"Dialogue: 2,{_t(w_start)},{_t(w_end)},Pop,,0,0,0,,{{\\an{an}\\pos({x},{y})}}{' '.join(parts)}\n")
+def _chunks(words: list[dict], key: str, fs: int, max_words: int, caps: bool, max_w: float = MAX_W) -> list[list[dict]]:
+    """Words in chunks that fit on one line at this size, never across the end of a sentence or a pause."""
+    out, cur = [], []
+    for w in words:
+        test = " ".join(clean(x["text"]) for x in cur + [w])
+        if cur and (len(cur) >= max_words or text_width(test.upper() if caps else test, key, fs) > max_w
+                    or w["start"] - cur[-1]["end"] > 0.6):
+            carry = []
+            if len(cur) > 1 and _bare(cur[-1]["text"]) in SMALL and w["start"] - cur[-1]["end"] <= 0.6:
+                carry = [cur.pop()]  # "ANYONE PAY / A MILLION", not "ANYONE PAY A / MILLION"
+            out.append(cur)
+            cur = carry
+        cur.append(w)
+        if re.search(r"[.!?]['\")]*$", w["text"].strip()):
+            out.append(cur)
+            cur = []
+    if cur:
+        out.append(cur)
     return out
 
 
-def box_events(groups: list[list[dict]], duration: float, x: int, y: int, an: int) -> list[str]:
+def _ends(chunks: list[list[dict]], duration: float) -> list[tuple[float, float]]:
+    """(start, end) per chunk: it stays up through short pauses, never over the next one."""
     out = []
-    for g, group in enumerate(groups):
-        g_start = group[0]["start"]
-        g_end = max(g_start + 0.2, min(groups[g + 1][0]["start"] if g + 1 < len(groups) else duration, group[-1]["end"] + 0.5, duration))
-        texts = [clean(w["text"]).upper() for w in group]
-        pos = f"{{\\an{an}\\pos({x},{y})}}"
-        for k, w in enumerate(group):
-            w_start = g_start if k == 0 else w["start"]
-            w_end = group[k + 1]["start"] if k + 1 < len(group) else g_end
-            if w_end - w_start <= 0.01:
+    for g, ch in enumerate(chunks):
+        a = ch[0]["start"]
+        b = min(chunks[g + 1][0]["start"] if g + 1 < len(chunks) else duration, ch[-1]["end"] + 0.5, duration)
+        out.append((a, max(b, a + 0.25)))
+    return out
+
+
+def _fit(text: str, key: str, fs: int, max_w: float = MAX_W) -> int:
+    w = text_width(text, key, fs)
+    return fs if w <= max_w else max(30, int(fs * max_w / w))
+
+
+def _ev(layer: int, a: float, b: float, style: str, text: str) -> str:
+    return f"Dialogue: {layer},{_t(a)},{_t(b)},{style},,0,0,0,,{text}\n"
+
+
+def styles_block() -> str:
+    """The ASS styles (font sizes here are overridden per line)."""
+    b, x, m, c = FONTS["black"][0], FONTS["xbold"][0], FONTS["medium"][0], FONTS["comic"][0]
+    return (
+        f"Style: Hormozi,{b},100,{WHITE},&H000000FF&,{BLACK},&H99000000&,0,0,0,0,100,100,0,0,1,9,4,5,40,40,0,1\n"
+        f"Style: Beast,{c},150,{WHITE},&H000000FF&,{BLACK},{BLACK},0,0,0,0,100,100,2,0,1,12,8,5,40,40,0,1\n"
+        f"Style: Karaoke,{b},100,{WHITE},&H000000FF&,{BLACK},&H99000000&,0,0,0,0,100,100,0,0,1,8,4,5,40,40,0,1\n"
+        f"Style: BoxBg,{b},100,&HFF000000&,&H000000FF&,{VIOLET},{VIOLET},0,0,0,0,100,100,0,0,3,18,0,5,40,40,0,1\n"
+        f"Style: BoxText,{b},100,{WHITE},&H000000FF&,{BLACK},&H99000000&,0,0,0,0,100,100,0,0,1,6,3,5,40,40,0,1\n"
+        f"Style: Iman,{x},80,{WHITE},&H000000FF&,&H50000000&,&H90000000&,0,0,0,0,100,100,0,0,1,3,3,5,40,40,0,1\n"
+        f"Style: Story,{m},80,{WHITE},&H000000FF&,{BLACK},&H90000000&,0,0,0,0,100,100,0,0,1,6,4,8,0,0,0,1\n"
+    )
+
+
+def _pos(x: int, y: int, an: int) -> str:
+    return f"\\an{an}\\pos({x},{y})"
+
+
+# ---------- the styles ----------
+
+def hormozi_events(words, duration, x, y, an) -> list[str]:
+    fs = em("black", 92)
+    chunks = _chunks(words, "black", fs, 3, True)
+    out = []
+    for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
+        k = key_index(ch)
+        parts = []
+        for j, w in enumerate(ch):
+            colour = (GREEN if MONEY.search(w["text"]) else YELLOW) if j == k else WHITE
+            parts.append(f"{{\\c{colour}}}{caps(w['text'])}")
+        snap = "\\fscx82\\fscy82\\t(0,80,\\fscx107\\fscy107)\\t(80,150,\\fscx100\\fscy100)"
+        out.append(_ev(2, a, b, "Hormozi", f"{{{_pos(x, y, an)}\\fs{fs}{snap}}}{' '.join(parts)}"))
+    return out
+
+
+def beast_events(words, duration, x, y, an) -> list[str]:
+    fs = em("comic", 150)
+    chunks = _chunks(words, "comic", fs, 2, True)
+    accents = [YELLOW, GREEN, RED, YELLOW]
+    out = []
+    for g, (ch, (a, b)) in enumerate(zip(chunks, _ends(chunks, duration))):
+        text = " ".join(caps(w["text"]) for w in ch)
+        size = _fit(text, "comic", fs)
+        k = key_index(ch)
+        parts = [f"{{\\c{accents[g % len(accents)]}}}{caps(w['text'])}{{\\c{WHITE}}}" if j == k
+                 else caps(w["text"]) for j, w in enumerate(ch)]
+        tilt = (-4, 3, -2, 4)[g % 4]
+        pop = "\\fscx150\\fscy150\\t(0,110,\\fscx92\\fscy92)\\t(110,170,\\fscx100\\fscy100)"
+        out.append(_ev(2, a, b, "Beast", f"{{{_pos(x, y, an)}\\fs{size}\\frz{tilt}{pop}}}{' '.join(parts)}"))
+    return out
+
+
+def karaoke_events(words, duration, x, y, an) -> list[str]:
+    fs = em("black", 84)
+    chunks = _chunks(words, "black", fs, 3, True)
+    out = []
+    for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
+        texts = [caps(w["text"]) for w in ch]
+        for k, w in enumerate(ch):
+            w_a = a if k == 0 else w["start"]
+            w_b = ch[k + 1]["start"] if k + 1 < len(ch) else b
+            if w_b - w_a <= 0.01:
                 continue
-            # the box layer draws a box only behind the spoken word (other words are invisible there)
+            shown = " ".join(f"{{\\c{GREEN}}}{t}{{\\c{WHITE}}}" if j == k else t for j, t in enumerate(texts))
+            snap = "\\fscx90\\fscy90\\t(0,90,\\fscx100\\fscy100)" if k == 0 else ""
+            out.append(_ev(2, w_a, w_b, "Karaoke", f"{{{_pos(x, y, an)}\\fs{fs}{snap}}}{shown}"))
+    return out
+
+
+def box_events(words, duration, x, y, an) -> list[str]:
+    fs = em("black", 84)
+    chunks = _chunks(words, "black", fs, 3, True, MAX_W - 60)
+    out = []
+    for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
+        texts = [caps(w["text"]) for w in ch]
+        pos = f"{{{_pos(x, y, an)}\\fs{fs}}}"
+        for k, w in enumerate(ch):
+            w_a = a if k == 0 else w["start"]
+            w_b = ch[k + 1]["start"] if k + 1 < len(ch) else b
+            if w_b - w_a <= 0.01:
+                continue
+            # the box layer draws a box only behind the spoken word (the other words are invisible there)
             box = " ".join(f"{{\\3a&H00&}}{t}" if j == k else f"{{\\3a&HFF&}}{t}" for j, t in enumerate(texts))
-            out.append(f"Dialogue: 1,{_t(w_start)},{_t(w_end)},BoxBg,,0,0,0,,{pos}{box}\n")
-            out.append(f"Dialogue: 2,{_t(w_start)},{_t(w_end)},BoxText,,0,0,0,,{pos}{' '.join(texts)}\n")
+            out.append(_ev(1, w_a, w_b, "BoxBg", pos + box))
+            out.append(_ev(2, w_a, w_b, "BoxText", pos + " ".join(texts)))
     return out
 
 
-def _phrases(words: list[dict], max_words: int = 6) -> list[list[dict]]:
+def iman_events(words, duration, x, y, an) -> list[str]:
+    fs = em("xbold", 66)
+    chunks = _chunks(words, "xbold", fs, 5, False)
+    xb, md = FONTS["xbold"][0], FONTS["medium"][0]
+    out = []
+    for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
+        texts = [clean(w["text"]).lower() for w in ch]
+        for k, w in enumerate(ch):
+            w_a = a if k == 0 else w["start"]
+            w_b = ch[k + 1]["start"] if k + 1 < len(ch) else b
+            if w_b - w_a <= 0.01:
+                continue
+            # said words bold and white, the rest light and a little see-through
+            shown = " ".join(f"{{\\fn{xb}\\alpha&H00&}}{t}" if j <= k else f"{{\\fn{md}\\alpha&H55&}}{t}"
+                             for j, t in enumerate(texts))
+            fade = "\\fad(120,0)" if k == 0 else ""
+            out.append(_ev(2, w_a, w_b, "Iman", f"{{{_pos(x, y, an)}\\fs{fs}\\blur1{fade}}}{shown}"))
+    return out
+
+
+def _phrases(words: list[dict], max_words: int = 7) -> list[list[dict]]:
     out, cur = [], []
     for i, w in enumerate(words):
         cur.append(w)
@@ -136,61 +322,11 @@ def _phrases(words: list[dict], max_words: int = 6) -> list[list[dict]]:
     return out
 
 
-_font_cache: dict = {}
-FONT_FILES = {  # for measuring: Anton is ours; Arial from Windows, or a look-alike with the same widths
-    "Anton": [FONTS_DIR / "Anton-Regular.ttf"],
-    "Arial": [Path("C:/Windows/Fonts/arial.ttf"), Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
-              Path("/Library/Fonts/Arial.ttf")],
-    "ArialBold": [Path("C:/Windows/Fonts/arialbd.ttf"), Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
-                  Path("/Library/Fonts/Arial Bold.ttf")],
-}
-
-
-def _font(name: str):
-    """(PIL font at size 100, em per unit of ASS font size, baseline as a share of the line) or None."""
-    if name not in _font_cache:
-        import struct
-        from PIL import ImageFont
-        _font_cache[name] = None
-        for p in FONT_FILES[name]:
-            try:
-                f = ImageFont.truetype(str(p), 100)
-                d = p.read_bytes()
-                tables = {d[12 + 16 * i: 16 + 16 * i]: struct.unpack(">I", d[20 + 16 * i: 24 + 16 * i])[0]
-                          for i in range(struct.unpack(">H", d[4:6])[0])}
-                upem = struct.unpack(">H", d[tables[b"head"] + 18: tables[b"head"] + 20])[0]
-                win_a, win_d = struct.unpack(">HH", d[tables[b"OS/2"] + 74: tables[b"OS/2"] + 78])
-                # libass makes ASS font size = the font's Windows line height (winAscent + winDescent)
-                _font_cache[name] = (f, upem / (win_a + win_d), win_a / (win_a + win_d))
-                break
-            except (OSError, KeyError, struct.error, ValueError):
-                continue
-    return _font_cache[name]
-
-
-def ascent(name: str, fs: float) -> float:
-    """How far below the top of an ASS line its baseline sits."""
-    f = _font(name)
-    return fs * (f[2] if f else 0.8)
-
-
-def text_width(text: str, name: str, size: float) -> float:
-    """Width in screen pixels of text at ASS font size `size`."""
-    f = _font(name)
-    if f is None:
-        return len(text) * size * {"Anton": 0.27}.get(name, 0.46)
-    return f[0].getlength(text) / 100 * size * f[1]
-
-
-STORY_W = 940        # the widest a line may be (the screen is 1080)
-KEY_MAX, WORD, SMALL_SIZE = 230, 96, 70
-
-
 def story_events(words: list[dict], duration: float, top: int, bottom: int, center_x: int = 540) -> list[str]:
     """Kinetic typography, centred: each phrase builds up word by word, e.g.
-         PROCRASTINATING      <- key word: huge, bold, slanted
-            is choosing       <- normal words together, small words small
-           to DELAY           <- the last key word underlined (the line grows in under it)
+         PROCRASTINATING      <- key word: huge, heavy, slanted
+            is choosing       <- normal words together, small words smaller and lighter
+           to DELAY           <- the punchline big too, a thick yellow underline grows in under it
     """
     out = []
     phrases = _phrases(words)
@@ -210,7 +346,7 @@ def story_events(words: list[dict], duration: float, top: int, bottom: int, cent
         last_key = keys[-1] if keys else -1
 
         # lines: a key word gets its own line (small words just before it ride along: "to DELAY"),
-        # other words go two by two ("is choosing"), and a small word never ends a line
+        # other words go two by two ("is choosing"), and a small word starts a line, never ends one
         lines, cur = [], []
         for i, k in enumerate(kinds):
             if k == "key":
@@ -223,10 +359,10 @@ def story_events(words: list[dict], duration: float, top: int, bottom: int, cent
                 cur = []
             else:
                 if k == "small" and any(kinds[j] == "word" for j in cur):
-                    lines.append(cur)  # a small word starts the next line: "is choosing / to delay"
+                    lines.append(cur)
                     cur = []
                 cur.append(i)
-                if k == "word" and sum(kinds[j] == "word" for j in cur) >= 2:
+                if k == "word" and (sum(kinds[j] == "word" for j in cur) >= 3 or len(cur) >= 4):
                     lines.append(cur)
                     cur = []
         if cur:
@@ -235,62 +371,59 @@ def story_events(words: list[dict], duration: float, top: int, bottom: int, cent
             else:
                 lines.append(cur)
 
-        def sizes(ln):
-            """font size per word of a line, shrunk until the line fits the screen"""
-            out_sizes = {}
-            for i in ln:
-                if kinds[i] == "key":
-                    w100 = text_width(texts[i].upper(), "Anton", 100) * 1.08  # + room for the slant
-                    out_sizes[i] = max(70, min(KEY_MAX, int(100 * STORY_W / max(1.0, w100))))
-                else:
-                    out_sizes[i] = SMALL_SIZE if kinds[i] == "small" else WORD
-            while True:
-                width = line_width(ln, out_sizes)
-                if width * 1.06 <= STORY_W or min(out_sizes.values()) <= 40:
-                    return out_sizes, width
-                out_sizes = {i: int(v * 0.92) for i, v in out_sizes.items()}
+        font = {"key": "black_i", "word": "xbold", "small": "medium"}
 
-        def word_w(i, size):
-            if kinds[i] == "key":
-                return text_width(texts[i].upper(), "Anton", size)
-            return text_width(texts[i], "ArialBold" if kinds[i] == "word" else "Arial", size)
+        def shown(i):
+            return texts[i].upper() if kinds[i] == "key" else texts[i].lower()
+
+        def word_w(i, fs):
+            return text_width(shown(i), font[kinds[i]], fs)
 
         def line_width(ln, sz):
-            return sum(word_w(i, sz[i]) for i in ln) + sum(text_width(" ", "Arial", sz[i]) for i in ln[1:])
+            return sum(word_w(i, sz[i]) for i in ln) + sum(text_width(" ", "medium", sz[i]) for i in ln[1:])
+
+        def sizes(ln):
+            sz = {}
+            for i in ln:
+                if kinds[i] == "key":
+                    sz[i] = min(em("black_i", 150), int(100 * MAX_W / max(1.0, text_width(shown(i), "black_i", 100) * 1.04)))
+                else:
+                    sz[i] = em("xbold", 74) if kinds[i] == "word" else em("medium", 56)
+            while line_width(ln, sz) > MAX_W and min(sz.values()) > 40:
+                sz = {i: int(v * 0.92) for i, v in sz.items()}
+            return sz, line_width(ln, sz)
 
         laid = [sizes(ln) for ln in lines]
-        heights = [max(sz.values()) * (1.0 if any(kinds[i] == "key" for i in ln) else 1.08) + (24 if last_key in ln else 0)
+        heights = [max(sz.values()) * (0.92 if any(kinds[i] == "key" for i in ln) else 1.0) + (26 if last_key in ln else 0)
                    for ln, (sz, _) in zip(lines, laid)]
-        total = sum(heights)
-        y = max(top, int((top + bottom) / 2 - total / 2))
-        # a soft dark shade behind the words so they read on bright video
-        pad = 60
-        out.append(f"Dialogue: 0,{_t(start)},{_t(end)},Story,,0,0,0,,{{\\an7\\pos(0,{int(y - pad)})\\p1\\bord0\\shad0"
-                   f"\\c&H000000&\\alpha&HFF&\\t(0,150,\\alpha&HA8&)\\blur40}}m 0 0 l 1080 0 l 1080 {int(total + pad * 2)} l 0 {int(total + pad * 2)}{{\\p0}}\n")
+        y = max(top, int((top + bottom) / 2 - sum(heights) / 2))
         for li, ln in enumerate(lines):
             sz, width = laid[li]
             line_start = phrase[ln[0]]["start"]
             parts = []
             for j, i in enumerate(ln):
-                if kinds[i] == "key":
-                    look = f"\\fnAnton\\fs{sz[i]}\\i1\\b0"
-                    text = texts[i].upper()
-                else:
-                    look = f"\\fnArial\\fs{sz[i]}\\i0\\b{1 if kinds[i] == 'word' else 0}"
-                    text = texts[i]
+                look = f"\\fn{FONTS[font[kinds[i]]][0]}\\fs{sz[i]}\\i{1 if kinds[i] == 'key' else 0}"
                 delay = int((phrase[i]["start"] - line_start) * 1000)
                 appear = f"\\alpha&HFF&\\t({delay},{delay + 90},\\alpha&H00&)" if j else ""
-                parts.append(f"{{{look}{appear}}}{text}")
-            pop = "\\fscx118\\fscy118\\t(0,140,\\fscx100\\fscy100)" if kinds[ln[0]] == "key" else ""
-            out.append(f"Dialogue: 2,{_t(line_start)},{_t(end)},Story,,0,0,0,,{{\\an8\\pos({center_x},{int(y)})\\fad(90,120){pop}}}{' '.join(parts)}\n")
+                parts.append(f"{{{look}{appear}}}{shown(i)}")
+            pop = "\\fscx115\\fscy115\\t(0,140,\\fscx100\\fscy100)" if kinds[ln[0]] == "key" else ""
+            out.append(_ev(2, line_start, end, "Story", f"{{\\an8\\pos({center_x},{int(y)})\\fad(90,120){pop}}}{' '.join(parts)}"))
             if last_key in ln:  # the underline grows in from the left under the last big word
                 k_size = sz[last_key]
-                x0 = center_x - width / 2 + sum(word_w(i, sz[i]) + text_width(" ", "Arial", sz[i]) for i in ln[: ln.index(last_key)])
-                bar_w = text_width(re.sub(r"[!?]+$", "", texts[last_key].upper()) or texts[last_key].upper(), "Anton", k_size)
-                bar_h = max(8, int(k_size * 0.075))
-                by = int(y + ascent("Anton", k_size) + k_size * 0.04)
+                x0 = center_x - width / 2 + sum(word_w(i, sz[i]) + text_width(" ", "medium", sz[i]) for i in ln[: ln.index(last_key)])
+                bar_w = text_width(re.sub(r"[!?]+$", "", shown(last_key)) or shown(last_key), "black_i", k_size)
+                bar_h = max(8, int(k_size * 0.07))
+                by = int(y + ascent("black_i", k_size) + k_size * 0.05)
                 t0 = int((phrase[last_key]["start"] - line_start) * 1000) + 120
-                out.append(f"Dialogue: 2,{_t(line_start)},{_t(end)},Story,,0,0,0,,{{\\an7\\pos({int(x0)},{by})\\p1\\c&HFFFFFF&\\bord4\\shad5"
-                           f"\\fad(0,120)\\fscx0\\t({t0},{t0 + 230},\\fscx100)}}m 0 0 l {int(bar_w)} 0 l {int(bar_w)} {bar_h} l 0 {bar_h}{{\\p0}}\n")
+                out.append(_ev(2, line_start, end, "Story", f"{{\\an7\\pos({int(x0)},{by})\\p1\\c{YELLOW}\\bord3\\shad3"
+                               f"\\fad(0,120)\\fscx0\\t({t0},{t0 + 230},\\fscx100)}}m 0 0 l {int(bar_w)} 0 l {int(bar_w)} {bar_h} l 0 {bar_h}{{\\p0}}"))
             y += heights[li]
     return out
+
+
+def events(style: str, words: list[dict], duration: float, x: int, y: int, an: int, story_area: tuple[int, int]) -> list[str]:
+    style = ALIASES.get(style, style)
+    if style == "story":
+        return story_events(words, duration, *story_area, center_x=x)
+    return {"hormozi": hormozi_events, "beast": beast_events, "highlight": karaoke_events, "box": box_events,
+            "iman": iman_events}[style](words, duration, x, y, an)
