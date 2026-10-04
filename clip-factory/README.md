@@ -268,6 +268,26 @@ Numbers and links come straight from the page. The AI only adds the
 plain-language checklist, and a name it suggests is kept only if it is
 really on the page.
 
+## Calendar: posting goals
+
+Set a goal like **10 videos per channel every day** (or every week, or 10
+in total as a one-time goal). The tab shows:
+- **Today** (or this week): each channel's progress, e.g. "7 of 10 - 3 to
+  go". A channel that reaches the goal is **closed ✓**. When every
+  channel is done, the day is closed.
+- **Calendar:** every day with each channel's count. Green means the goal
+  was met, red means it was missed, and grey shows what's still scheduled.
+  Your **streak** counts days in a row with every goal met.
+- **One-time goals** close by themselves and move to **Finished goals**.
+
+**How it counts:**
+- Channels with an @handle in My channels are counted from YouTube by
+  themselves, checked every 3 hours or when you click **Refresh counts**.
+- Other channels count the posts you mark **Done - I scheduled them** in
+  Publish.
+- **+1 / -1** for anything else (e.g. TikTok), or to fix a day. Click a day
+  to change it.
+
 ## My videos (sixth tab): everything in one place
 
 Every video, without searching through folders:

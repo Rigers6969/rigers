@@ -37,6 +37,7 @@ import renderer
 import thumbnail
 import transcriber
 import translate
+import tracker
 import trends
 import upload_text
 
@@ -1233,6 +1234,27 @@ def stats_config():
     return stats_report()
 
 
+@app.route("/api/calendar")
+def calendar():
+    return jsonify(tracker.report())
+
+
+@app.route("/api/calendar/goal", methods=["POST"])
+def calendar_goal():
+    tracker.update(request.get_json(silent=True) or {})
+    return jsonify(tracker.report())
+
+
+@app.route("/api/calendar/adjust", methods=["POST"])
+def calendar_adjust():
+    data = request.get_json(silent=True) or {}
+    try:
+        tracker.adjust(str(data.get("date") or ""), str(data.get("cid") or ""), int(data.get("delta") or 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Bad date or number."}), 400
+    return jsonify(tracker.report())
+
+
 @app.route("/api/stats/refresh", methods=["POST"])
 def stats_refresh():
     if not any(c["ref"] for c in channel_stats.load_config()["channels"]):
@@ -1570,6 +1592,22 @@ PAGE = r"""<!DOCTYPE html>
   #libPlayer.hide { display: none !important; }
   .card .thumbs { display: grid; grid-template-columns: 9fr 16fr; gap: 6px; align-items: start; }
   .card .thumbs img { width: 100%; display: block; border-radius: 6px; }
+  .calrow { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .calrow.done { opacity: .6; }
+  .calbar { height: 14px; border-radius: 7px; background: #23262f; overflow: hidden; }
+  .calbar > div { height: 100%; border-radius: 7px; }
+  .calgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .calgrid .h { font-size: 11px; color: var(--dim); text-align: center; padding: 2px 0; }
+  .calcell { border: 1px solid var(--line); border-radius: 8px; padding: 4px; min-height: 64px; background: #14161c; cursor: pointer; font-size: 11px; overflow: hidden; }
+  .calcell .d { font-weight: 800; font-size: 12px; display: flex; justify-content: space-between; }
+  .calcell.today { border-color: var(--accent); }
+  .calcell.closed { border-color: var(--ok); background: #102419; }
+  .calcell.missed { border-color: #6b2a2a; }
+  .calcell.future { opacity: .7; }
+  .calcell .c { display: flex; align-items: center; gap: 3px; white-space: nowrap; line-height: 1.5; }
+  .calcell .c i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+  .calcell .c b { font-weight: 700; }
+  @media (max-width: 600px) { .calcell { padding: 3px; min-height: 0; } .calcell .ini, .calcell .tg { display: none; } .calgrid { gap: 3px; } }
   .banner { border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 10px; }
   .banner.manual { background: #3a2f0a; color: #ffcf4d; }
   .banner.auto { background: #12301f; color: var(--ok); }
@@ -1618,6 +1656,7 @@ PAGE = r"""<!DOCTYPE html>
     <button id="tabBtnPub" data-tab="pub">Publish</button>
     <button id="tabBtnLib" data-tab="lib">My videos</button>
     <button id="tabBtnCamp" data-tab="camp">Campaigns ($)</button>
+    <button id="tabBtnCal" data-tab="cal">Calendar</button>
     <button id="aiToggle" class="ghost" style="margin-left:auto">AI engines: ...</button>
   </div>
 
@@ -1712,6 +1751,21 @@ PAGE = r"""<!DOCTYPE html>
       <div class="warn hide" id="failedMsg"></div>
       <div class="vids" id="vids"></div>
     </div>
+  </div>
+
+  <div id="tabCal" class="hide">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><b>Goal:</b><input type="number" id="calTarget" min="1" max="500" style="width:80px"><span>videos per channel</span>
+          <select id="calPeriod" style="width:auto"><option value="day">every day</option><option value="week">every week</option><option value="total">in total (one-time goal)</option></select></div>
+        <div class="row"><span class="tag" id="calStreak"></span><button class="ghost" id="calRefresh">Refresh counts</button></div>
+      </div>
+      <div class="msg" style="margin-top:6px">Counted automatically from YouTube for channels with an @handle in <b>My channels</b> (checked every 3 hours, or click Refresh). Other channels count the posts you mark <b>Done - I scheduled them</b> in Publish. Use +1 / -1 for anything else (e.g. TikTok).</div>
+      <div id="calMsg" class="msg"></div>
+    </div>
+    <div class="panel"><div class="row" style="justify-content:space-between"><h2 style="margin:0" id="calLabel"></h2><span id="calAllDone"></span></div><div id="calNow" style="margin-top:8px"></div></div>
+    <div class="panel"><h2>Calendar</h2><div id="calGrid"></div><div id="calDay" style="margin-top:12px"></div></div>
+    <div class="panel hide" id="calFinishedBox"><h2>Finished goals</h2><div id="calFinished"></div></div>
   </div>
 
   <div id="tabCamp" class="hide">
@@ -2408,7 +2462,7 @@ async function loadRuns() {
 
 // ---------- Find viral videos ----------
 function showTab(name) {
-  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"], ["tabPub", "tabBtnPub", "pub"], ["tabLib", "tabBtnLib", "lib"], ["tabCamp", "tabBtnCamp", "camp"]]) {
+  for (const [tab, btn, id] of [["tabFind", "tabBtnFind", "find"], ["tabClips", "tabBtnClips", "clips"], ["tabRules", "tabBtnRules", "rules"], ["tabStats", "tabBtnStats", "stats"], ["tabPub", "tabBtnPub", "pub"], ["tabLib", "tabBtnLib", "lib"], ["tabCamp", "tabBtnCamp", "camp"], ["tabCal", "tabBtnCal", "cal"]]) {
     $(tab).classList.toggle("hide", name !== id);
     $(btn).classList.toggle("on", name === id);
   }
@@ -2817,6 +2871,65 @@ $("campRead").onclick = async () => {
   finally { $("campRead").disabled = false; }
 };
 $("tabBtnCamp").addEventListener("click", () => loadCampaigns());
+
+// ---------- Calendar / goals ----------
+let calData = null, calSel = null;
+const initials = (name) => name.split(/\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase();
+async function loadCal() { try { calData = await api("/api/calendar"); renderCal(); } catch (e) {} }
+function renderCal() {
+  const d = calData; if (!d) return;
+  if (document.activeElement !== $("calTarget")) $("calTarget").value = d.goal.target;
+  $("calPeriod").value = d.goal.period;
+  $("calStreak").innerText = d.goal.period === "day" ? `Streak: ${d.streak} day${d.streak === 1 ? "" : "s"}` : "";
+  $("calStreak").classList.toggle("hide", d.goal.period !== "day");
+  $("calLabel").innerText = d.label;
+  $("calAllDone").innerHTML = d.all_done ? '<span class="tag big" style="font-size:14px">All done - closed &#10003;</span>' : "";
+  $("calNow").innerHTML = d.current.map((c) => {
+    const pct = Math.min(100, Math.round(100 * c.posted / c.target));
+    return `<div class="calrow ${c.done ? "done" : ""}"><div><b>${esc(c.name)}</b><div class="msg" style="font-size:11px">${c.auto ? "counted from YouTube" : "counted from Publish + your +1"}</div></div>
+      <div><div class="calbar"><div style="width:${pct}%;background:${c.done ? "var(--ok)" : chColor(c.id)}"></div></div>
+        <div class="msg" style="font-size:12px;margin-top:3px">${c.posted} of ${c.target}${c.done ? " - goal reached, closed &#10003;" : ` - ${c.target - c.posted} to go`}${c.planned ? ` · ${c.planned} more scheduled` : ""}</div></div>
+      <div class="row" style="gap:4px">${d.goal.period === "day" ? `<button class="ghost" data-cadj="-1" data-cid="${esc(c.id)}" style="padding:4px 10px">-1</button><button class="ghost" data-cadj="1" data-cid="${esc(c.id)}" style="padding:4px 10px">+1</button>` : ""}</div></div>`;
+  }).join("") || '<div class="msg">Add your channels in My channels first.</div>';
+  $("calNow").querySelectorAll("[data-cadj]").forEach((b) => (b.onclick = () => calAdjust(d.days.find((x) => x.today).date, b.dataset.cid, +b.dataset.cadj)));
+  const target = (cid) => d.goal.per_channel[cid] || d.goal.target;
+  const names = Object.fromEntries(d.channels.map((c) => [c.id, c.name]));
+  $("calGrid").innerHTML = '<div class="calgrid">' + ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((w) => `<div class="h">${w}</div>`).join("") +
+    d.days.map((day) => {
+      const cls = ["calcell", day.today ? "today" : "", day.closed ? "closed" : "", day.missed ? "missed" : "", day.future || day.before ? "future" : ""].join(" ");
+      const lines = d.channels.map((c) => {
+        const x = day.channels[c.id]; const met = x.posted >= target(c.id);
+        const col = met ? "var(--ok)" : day.future || day.before ? "var(--dim)" : day.today ? "var(--text)" : "#ff8a8a";
+        return `<div class="c" title="${esc(c.name)}: ${x.posted} posted"><i style="background:${chColor(c.id)}"></i><span style="color:${col}"><span class="ini">${esc(initials(c.name))} </span><b>${x.posted}</b><span class="tg">${d.goal.period === "day" ? "/" + target(c.id) : ""}</span></span>${x.planned ? `<span class="msg tg">+${x.planned}</span>` : ""}</div>`;
+      }).join("");
+      return `<div class="${cls}" data-cday="${day.date}"><div class="d"><span>${+day.date.slice(8)}</span>${day.closed ? '<span style="color:var(--ok)">&#10003;</span>' : ""}</div>${lines}</div>`;
+    }).join("") + "</div>";
+  $("calGrid").querySelectorAll("[data-cday]").forEach((el) => (el.onclick = () => { calSel = el.dataset.cday; renderCalDay(); }));
+  renderCalDay();
+  $("calFinishedBox").classList.toggle("hide", !d.finished.length);
+  $("calFinished").innerHTML = d.finished.map((f) => `<div class="librow"><div class="info"><b>${f.target} videos per channel</b> &#10003; finished ${esc(f.finished)}<br><span class="msg">started ${esc(f.start)} · ${Object.entries(f.posted).map(([n, v]) => `${esc(n)}: ${v}`).join(" · ")}</span></div></div>`).join("");
+}
+function renderCalDay() {
+  const d = calData; if (!d || !calSel) { $("calDay").innerHTML = '<div class="msg">Click a day to see it or fix its counts.</div>'; return; }
+  const day = d.days.find((x) => x.date === calSel); if (!day) return;
+  const nice = new Date(calSel + "T12:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  $("calDay").innerHTML = `<b>${esc(nice)}</b>${day.closed ? ' <span class="tag big">closed &#10003;</span>' : ""}` + d.channels.map((c) => {
+    const x = day.channels[c.id];
+    return `<div class="conn"><span class="tag" style="background:${chColor(c.id)};color:#fff">${esc(c.name)}</span><span>${x.posted} posted${x.planned ? `, ${x.planned} scheduled` : ""}</span>
+      <button class="ghost" data-dadj="-1" data-cid="${esc(c.id)}" style="padding:3px 9px">-1</button><button class="ghost" data-dadj="1" data-cid="${esc(c.id)}" style="padding:3px 9px">+1</button></div>`;
+  }).join("");
+  $("calDay").querySelectorAll("[data-dadj]").forEach((b) => (b.onclick = () => calAdjust(calSel, b.dataset.cid, +b.dataset.dadj)));
+}
+async function calAdjust(date, cid, delta) { try { calData = await postJson("/api/calendar/adjust", { date, cid, delta }); renderCal(); } catch (e) { $("calMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; } }
+async function calGoal(body) { try { calData = await postJson("/api/calendar/goal", body); renderCal(); } catch (e) { $("calMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; } }
+$("calTarget").onchange = () => calGoal({ target: +$("calTarget").value });
+$("calPeriod").onchange = () => calGoal({ period: $("calPeriod").value });
+$("calRefresh").onclick = async () => {
+  $("calMsg").innerText = "Checking your channels on YouTube...";
+  try { await api("/api/stats/refresh", { method: "POST" }); } catch (e) {}
+  setTimeout(async () => { await loadCal(); $("calMsg").innerText = `Updated ${calData ? calData.updated : ""}.`; }, 6000);
+};
+$("tabBtnCal").addEventListener("click", () => loadCal());
 
 // ---------- My videos ----------
 let libData = null;
@@ -3279,6 +3392,7 @@ $("aiTest").onclick = async () => {
   if (store.get("cf_tab") === "pub") loadPubSources();
   if (store.get("cf_tab") === "lib") loadLib();
   if (store.get("cf_tab") === "camp") loadCampaigns();
+  if (store.get("cf_tab") === "cal") loadCal();
 })();
 </script>
 </body>

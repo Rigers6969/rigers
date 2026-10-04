@@ -27,3 +27,6 @@ watermarks/
 campaigns.json
 campaigns.tmp
 gameplay/
+goals.json
+goals.tmp
+posts_seen.json
