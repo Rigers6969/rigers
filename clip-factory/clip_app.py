@@ -629,6 +629,30 @@ def campaign_remove(cid):
     return jsonify({"campaigns": whop.ranked()})
 
 
+_preview_lock = threading.Lock()
+
+
+@app.route("/api/caption-preview", methods=["POST"])
+def caption_preview():
+    """A picture of how the chosen captions and layout look (on the chosen video when there is one)."""
+    data = request.get_json(silent=True) or {}
+    style = data.get("captions") if data.get("captions") in renderer.CAPTION_STYLES else "hormozi"
+    layout = data.get("layout") if data.get("layout") in renderer.LAYOUTS else "crop"
+    pos = data.get("caption_pos") if data.get("caption_pos") in renderer.CAPTION_POSITIONS else "middle"
+    name = str(data.get("input") or "")
+    source = INPUT_DIR / name if name and "/" not in name and "\\" not in name and (INPUT_DIR / name).is_file() else None
+    channel = re.sub(r"[\r\n]+", " ", str(data.get("channel_name") or "")).strip()[:60]
+    story = dict(renderer.PREVIEW_POST, ending=post.cta(str(data.get("post_cta") or ""), channel or "your channel"))
+    work = APP_DIR / "cache" / "preview"
+    out = work / "preview.png"
+    with _preview_lock:
+        try:
+            renderer.preview_image(style, layout, pos, out, work, source, story)
+        except renderer.RenderError as exc:
+            return jsonify({"error": f"Couldn't make the preview: {exc}"}), 500
+        return send_file(out, mimetype="image/png", max_age=0)
+
+
 @app.route("/api/music", methods=["GET", "POST"])
 def music_library():
     if request.method == "POST":
@@ -2153,7 +2177,7 @@ PAGE = r"""<!DOCTYPE html>
           <option value="gameplay">Clip on top + gameplay below (Minecraft, GTA...)</option>
           <option value="post">Text post - video on top, story text below (news look)</option>
         </select></div>
-      <div><label>Captions</label>
+      <div><label>Captions <button class="ghost" id="capPreviewBtn" type="button" style="padding:2px 10px;font-size:12px;margin-left:6px">&#128065; Preview</button></label>
         <select id="captions">
           <option value="hormozi" selected>Hormozi - bold caps, key word yellow (most viral)</option>
           <option value="beast">MrBeast - comic font, huge words that pop</option>
@@ -2196,6 +2220,11 @@ PAGE = r"""<!DOCTYPE html>
       <div class="msg" id="musicMsg" style="margin-top:6px"></div>
       <div class="msg" style="margin-top:6px">The music gets quieter by itself whenever someone talks. Use only <b>no-copyright music</b>: the safest is
         <a href="https://studio.youtube.com/channel/UC/music" target="_blank" rel="noopener" style="color:var(--accent)">YouTube Studio &rarr; Audio Library</a> (filter "Attribution not required"), or tracks marked free for commercial use. Music from songs on Spotify/TikTok gets your clips claimed. <button class="ghost" id="musicFolder" style="padding:3px 10px;font-size:12px">Open the music folder</button></div>
+    </div>
+    <div id="capPreview" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px;text-align:center">
+      <div class="msg" id="capPreviewMsg" style="margin-bottom:8px">Making the preview...</div>
+      <img id="capPreviewImg" alt="How the captions will look" style="max-width:270px;width:100%;border-radius:8px;display:none">
+      <div><button class="ghost" id="capPreviewClose" type="button" style="margin-top:8px;padding:3px 12px;font-size:12px">Close preview</button></div>
     </div>
     <div id="postBox" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
       <label for="postCta">Last line under the text (optional)</label>
@@ -2435,6 +2464,29 @@ async function loadGameplay() {
   $("gpMsg").innerHTML = d.files.length ? `${d.files.length} gameplay video${d.files.length > 1 ? "s" : ""} ready.`
     : '<span class="error">No gameplay videos yet - add one (a few minutes of gameplay is enough).</span>';
 }
+// ---------- caption preview: a picture of the chosen style ----------
+let previewBusy = false;
+async function capPreview() {
+  if (previewBusy) return;
+  previewBusy = true;
+  $("capPreview").classList.remove("hide");
+  $("capPreviewMsg").innerText = "Making the preview (a few seconds)...";
+  try {
+    const r = await fetch("/api/caption-preview", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ captions: $("captions").value, layout: $("layout").value, caption_pos: $("capPos").value,
+        input: $("inputSel").value, post_cta: $("postCta").value, channel_name: $("channelName").value }) });
+    if (!r.ok) { let m = "Couldn't make the preview."; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
+    const url = URL.createObjectURL(await r.blob());
+    $("capPreviewImg").src = url; $("capPreviewImg").style.display = "inline-block";
+    const opt = $("captions").selectedOptions[0];
+    $("capPreviewMsg").innerText = $("layout").value === "post" ? "Text post layout" : (opt ? opt.textContent : "");
+  } catch (e) { $("capPreviewMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  previewBusy = false;
+}
+$("capPreviewBtn").onclick = capPreview;
+$("capPreviewClose").onclick = () => $("capPreview").classList.add("hide");
+for (const id of ["captions", "layout", "capPos"]) $(id).addEventListener("change", () => { if (!$("capPreview").classList.contains("hide")) capPreview(); });
+
 function showGameplayBox() {
   const on = $("layout").value === "gameplay"; $("gpBox").classList.toggle("hide", !on); if (on) loadGameplay();
   $("postBox").classList.toggle("hide", $("layout").value !== "post");

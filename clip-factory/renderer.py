@@ -390,3 +390,40 @@ def render_clip(
     except RenderError:
         pass
     return len(mute)
+
+
+PREVIEW_TEXT = "Nobody believed he would pay a million dollars for this crazy thing"
+PREVIEW_POST = {"paragraphs": ["This guy **paid a million dollars** for something nobody believed he would buy.",
+                               "When people found out **what he actually got**, the internet went crazy."],
+                "ending": "Follow **your channel** for more clips like this."}
+
+
+def preview_image(style: str, layout: str, position: str, out_png: Path, work_dir: Path,
+                  source: Path | None = None, post: dict | None = None) -> Path:
+    """A still of how the captions look: a short sample clip is made with the real settings and one frame is kept.
+    On the chosen video when there is one, else on a plain background."""
+    work_dir.mkdir(parents=True, exist_ok=True)
+    start = 0.0
+    if source:
+        try:
+            start = max(0.0, probe(source)["duration"] * 0.3)
+        except RenderError:
+            source = None
+    if not source:
+        source = work_dir / "background.mp4"
+        if not source.exists():
+            _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                  "gradients=s=1920x1080:c0=0x3b4a5c:c1=0xc9a27e:c2=0x5a3d32:nb_colors=3:d=6:speed=0.01",
+                  "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-shortest", "-c:v", "libx264", "-preset",
+                  "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", source.name], work_dir, lambda: False, timeout=60)
+    words, t = [], start + 0.1
+    for w in PREVIEW_TEXT.split():
+        words.append({"start": round(t, 2), "end": round(t + 0.26, 2), "text": w})
+        t += 0.3
+    shown_at = words[6]["start"] + 0.12  # just after "million": a key word is on screen in every style
+    clip = work_dir / "preview.mp4"
+    render_clip(source, start, shown_at + 1.0, words, "Your hook title is here", layout, style, clip,
+                work_dir / "preview_poster.jpg", has_audio=False, caption_pos=position, emojis=False, post=post or PREVIEW_POST)
+    _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{shown_at - start:.2f}", "-i", clip.name, "-frames:v", "1",
+          "-vf", "scale=540:-2", str(out_png.resolve())], work_dir, lambda: False, timeout=60)
+    return out_png
