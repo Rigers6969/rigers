@@ -32,6 +32,7 @@ import downloader
 import moments
 import permissions
 import policy
+import post
 import publisher
 import renderer
 import thumbnail
@@ -301,7 +302,8 @@ def run_pipeline(run: dict) -> None:
         if games and not games.files:
             raise renderer.RenderError("The 'clip + gameplay' layout needs at least one gameplay video - add one under Layout.")
         # in the gameplay layout the logo stays on the clip (top half), never on the gameplay
-        wm_y = ({"upper": 0.2, "middle": 0.3, "lower": 0.4} if s["layout"] == "gameplay" else campaign.WM_POSITIONS)[s["wm_pos"]]
+        wm_y = ({"upper": 0.2, "middle": 0.3, "lower": 0.4} if s["layout"] == "gameplay" else
+                {"upper": 0.12, "middle": 0.19, "lower": 0.26} if s["layout"] == "post" else campaign.WM_POSITIONS)[s["wm_pos"]]
 
         # upload text (description + tags) for every clip: the built-in writer is instant; when an AI is
         # available it writes better ones alongside the rendering, and they replace the built-in ones
@@ -341,6 +343,16 @@ def run_pipeline(run: dict) -> None:
                 continue
             name = f"clip_{n:03d}"
             began = time.time()
+            story = None
+            if s["layout"] == "post":  # the story text under the video
+                update(message=f"Writing the text for clip {n} of {len(picks)}...")
+                paras = post.write(brain, c["text"], c["title"], s["kind"], s.get("lang", ""),
+                                   campaign.ai_hint(s.get("c_focus") or [], s.get("c_ban") or []))
+                story = {"paragraphs": paras or post.fallback("" if s.get("lang") else c["text"], c["title"]),
+                         "ending": post.cta(s.get("post_cta", ""), s["channel_name"])}
+                if s["bleep"]:  # no swear words in the text either
+                    story["paragraphs"] = [" ".join(policy.censor(w) if policy.swear_strength(w) else w for w in p.split())
+                                           for p in story["paragraphs"]]
             try:
                 bleeped = renderer.render_clip(
                     source, start, end, words, c["title"] if s["show_title"] else "",
@@ -351,7 +363,7 @@ def run_pipeline(run: dict) -> None:
                     gameplay=games.next(end - start) if games else None,
                     caption_pos=s.get("caption_pos", "middle"), emojis=s.get("emojis", False),
                     music=tunes.next(end - start, MUSIC_VOLUMES[s.get("music_vol", "low")]) if tunes else None,
-                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"),
+                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"), post=story,
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -826,6 +838,7 @@ def parse_settings(data: dict) -> dict:
         "caption_pos": data.get("caption_pos") if data.get("caption_pos") in renderer.CAPTION_POSITIONS else "middle",
         "emojis": bool(data.get("emojis", False)),
         "out_size": data.get("out_size") if data.get("out_size") in renderer.OUT_SIZES else "1080",
+        "post_cta": re.sub(r"[\r\n]+", " ", str(data.get("post_cta") or "")).strip()[:140],
         "music": str(data.get("music") or "") if (data.get("music") == "mix" or any(p.name == data.get("music") for p in _music_files())) else "",
         "music_vol": data.get("music_vol") if data.get("music_vol") in MUSIC_VOLUMES else "low",
         "gameplay": str(data.get("gameplay") or "") if _gameplay_file(str(data.get("gameplay") or "")) else "",
@@ -2138,6 +2151,7 @@ PAGE = r"""<!DOCTYPE html>
           <option value="fit">Whole picture + blurred background</option>
           <option value="podcast">Podcast - two people, split screen</option>
           <option value="gameplay">Clip on top + gameplay below (Minecraft, GTA...)</option>
+          <option value="post">Text post - video on top, story text below (news look)</option>
         </select></div>
       <div><label>Captions</label>
         <select id="captions">
@@ -2182,6 +2196,11 @@ PAGE = r"""<!DOCTYPE html>
       <div class="msg" id="musicMsg" style="margin-top:6px"></div>
       <div class="msg" style="margin-top:6px">The music gets quieter by itself whenever someone talks. Use only <b>no-copyright music</b>: the safest is
         <a href="https://studio.youtube.com/channel/UC/music" target="_blank" rel="noopener" style="color:var(--accent)">YouTube Studio &rarr; Audio Library</a> (filter "Attribution not required"), or tracks marked free for commercial use. Music from songs on Spotify/TikTok gets your clips claimed. <button class="ghost" id="musicFolder" style="padding:3px 10px;font-size:12px">Open the music folder</button></div>
+    </div>
+    <div id="postBox" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
+      <label for="postCta">Last line under the text (optional)</label>
+      <input id="postCta" maxlength="140" placeholder='e.g. Follow **Paper Trail** for more  (words in **stars** are bold)'>
+      <div class="msg" style="margin-top:6px">The video goes on top, and under it a short story about the clip with the key words in <b style="color:#4d9fff">bold blue</b>. The AI writes the story (without an AI, the title and the best sentence of the clip are used). No captions in this layout. Leave the last line empty for "Follow <i>your channel</i> for more clips like this."</div>
     </div>
     <div id="gpBox" class="hide" style="margin:8px 0;padding:12px;border:1px solid var(--line);border-radius:10px">
       <div class="grid" style="align-items:end">
@@ -2282,7 +2301,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize", "postCta"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2383,7 +2402,7 @@ function clipSettings() {
     whisper: $("whisper").value, use_ai: $("useAi").checked, host: $("host").value, model: $("model").value,
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
     gameplay: $("gpSel").value, lang: $("lang").value,
-    caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value, out_size: $("outSize").value,
+    caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value, out_size: $("outSize").value, post_cta: $("postCta").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
@@ -2416,7 +2435,10 @@ async function loadGameplay() {
   $("gpMsg").innerHTML = d.files.length ? `${d.files.length} gameplay video${d.files.length > 1 ? "s" : ""} ready.`
     : '<span class="error">No gameplay videos yet - add one (a few minutes of gameplay is enough).</span>';
 }
-function showGameplayBox() { const on = $("layout").value === "gameplay"; $("gpBox").classList.toggle("hide", !on); if (on) loadGameplay(); }
+function showGameplayBox() {
+  const on = $("layout").value === "gameplay"; $("gpBox").classList.toggle("hide", !on); if (on) loadGameplay();
+  $("postBox").classList.toggle("hide", $("layout").value !== "post");
+}
 $("layout").addEventListener("change", showGameplayBox);
 const showLangNote = () => $("langNote").classList.toggle("hide", !$("lang").value);
 $("lang").addEventListener("change", showLangNote);

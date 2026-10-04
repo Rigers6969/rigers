@@ -146,6 +146,12 @@ this PC only.
    - **Whole picture + blurred background** for gameplay or screen
      recordings.
    - **Podcast - split screen** for two people side by side.
+   - **Text post** puts the video across the top on a black page, with a
+     short story about the clip underneath: key words in bold blue, a blue
+     bar beside the first lines and your call to action in italics at the
+     end (the news / explainer page look). The AI writes the story; you can
+     set the last line, e.g. `Follow **Paper Trail** for more` (words in
+     `**stars**` are bold). No captions in this layout.
    - **Clip on top + gameplay below** puts your clip in the top half and
      a gameplay video (Minecraft parkour, GTA driving...) in the bottom
      half, with no sound, to keep people watching. Add gameplay videos

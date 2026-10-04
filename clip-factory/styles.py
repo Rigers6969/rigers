@@ -112,6 +112,8 @@ FONTS = {  # ASS font name, its file
     "black_i": ("Montserrat Black", "Montserrat-BlackItalic.ttf"),
     "xbold": ("Montserrat ExtraBold", "Montserrat-ExtraBold.ttf"),
     "medium": ("Montserrat Medium", "Montserrat-Medium.ttf"),
+    "medium_i": ("Montserrat Medium", "Montserrat-MediumItalic.ttf"),
+    "xbold_i": ("Montserrat ExtraBold", "Montserrat-ExtraBoldItalic.ttf"),
     "comic": ("Bangers", "Bangers-Regular.ttf"),
     "anton": ("Anton", "Anton-Regular.ttf"),
 }
@@ -213,6 +215,7 @@ def styles_block() -> str:
         f"Style: BoxBg,{b},100,&HFF000000&,&H000000FF&,{VIOLET},{VIOLET},0,0,0,0,100,100,0,0,3,18,0,5,40,40,0,1\n"
         f"Style: BoxText,{b},100,{WHITE},&H000000FF&,{BLACK},&H99000000&,0,0,0,0,100,100,0,0,1,6,3,5,40,40,0,1\n"
         f"Style: Iman,{x},80,{WHITE},&H000000FF&,&H50000000&,&H90000000&,0,0,0,0,100,100,0,0,1,3,3,5,40,40,0,1\n"
+        f"Style: Post,{m},60,{WHITE},&H000000FF&,{BLACK},{BLACK},0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1\n"
         f"Style: Story,{m},80,{WHITE},&H000000FF&,{BLACK},&H90000000&,0,0,0,0,100,100,0,0,1,6,4,8,0,0,0,1\n"
     )
 
@@ -418,6 +421,74 @@ def story_events(words: list[dict], duration: float, top: int, bottom: int, cent
                 out.append(_ev(2, line_start, end, "Story", f"{{\\an7\\pos({int(x0)},{by})\\p1\\c{YELLOW}\\bord3\\shad3"
                                f"\\fad(0,120)\\fscx0\\t({t0},{t0 + 230},\\fscx100)}}m 0 0 l {int(bar_w)} 0 l {int(bar_w)} {bar_h} l 0 {bar_h}{{\\p0}}"))
             y += heights[li]
+    return out
+
+
+POST_BLUE = "&H00FF9F4D&"  # #4D9FFF, the blue of the key phrases
+
+
+def _post_words(text: str) -> list[tuple[str, bool]]:
+    """("word", bold?) - **phrases** are bold."""
+    out, bold = [], False
+    for part in re.split(r"(\*\*)", clean(text)):
+        if part == "**":
+            bold = not bold
+            continue
+        for w in part.split():
+            if out and not re.search(r"\w", w) and not w.startswith(("\u201c", '"', "(")):
+                out[-1] = (out[-1][0] + w, out[-1][1])  # "neurons," not "neurons ,"
+            else:
+                out.append((w, bold))
+    return out
+
+
+def post_events(paragraphs: list[str], ending: str, duration: float, top: int, bottom: int,
+                left: int = 84, right: int = 110) -> list[str]:
+    """The story text under the video: paragraphs with bold blue key phrases, a blue bar beside the first one,
+    and the call to action in italics. The font shrinks until it all fits between top and bottom."""
+    width = 1080 - left - right
+    blocks = [(p, False) for p in paragraphs if p.strip()] + ([(ending, True)] if ending.strip() else [])
+    px = 50
+    while True:
+        fs = em("medium", px)
+        line_h = round(fs * 0.98)
+        laid, y = [], 0
+        for text, italic in blocks:
+            lines, cur, cur_w = [], [], 0.0
+            for w, bold in _post_words(text):
+                key = ("xbold" if bold else "medium") + ("_i" if italic else "")
+                ww = text_width(w, key, fs)
+                space = text_width(" ", key, fs) if cur else 0
+                if cur and cur_w + space + ww > width:
+                    lines.append(cur)
+                    cur, cur_w, space = [], 0.0, 0
+                cur.append((w, bold))
+                cur_w += space + ww
+            if cur:
+                lines.append(cur)
+            laid.append((lines, italic, y))
+            y += len(lines) * line_h + round(line_h * 0.62)
+        total = y - round(line_h * 0.62)
+        if top + total <= bottom or px <= 30:
+            break
+        px -= 2
+    out = []
+    for b, (lines, italic, y0) in enumerate(laid):
+        for li, line in enumerate(lines):
+            parts, prev = [], None
+            for w, bold in line:
+                if bold != prev:
+                    look = (f"\\fn{FONTS['xbold'][0]}\\c{POST_BLUE if not italic else WHITE}" if bold
+                            else f"\\fn{FONTS['medium'][0]}\\c{WHITE}")
+                    parts.append(f"{{{look}\\i{1 if italic else 0}}}")
+                    prev = bold
+                parts.append(w + " ")
+            text = "".join(parts).rstrip()
+            out.append(_ev(2, 0, duration, "Post", f"{{\\an7\\pos({left},{top + y0 + li * line_h})\\fs{fs}\\fad(250,0)}}{text}"))
+        if b == 0:  # the blue bar beside the first paragraph
+            bar_h = len(lines) * line_h - round(line_h * 0.2)
+            out.append(_ev(2, 0, duration, "Post", f"{{\\an7\\pos({left - 40},{top + y0 + round(line_h * 0.12)})\\p1\\c{POST_BLUE}\\fad(250,0)}}"
+                           f"m 0 0 l 9 0 l 9 {bar_h} l 0 {bar_h}{{\\p0}}"))
     return out
 
 

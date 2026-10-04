@@ -22,7 +22,8 @@ import styles
 
 OUT_W, OUT_H = 1080, 1920  # the layout is planned at this size (captions, logo, emojis)
 OUT_SIZES = {"1080": (1080, 1920), "1440": (1440, 2560), "2160": (2160, 3840)}  # what the clip is made in
-LAYOUTS = ("crop", "fit", "podcast", "gameplay")
+LAYOUTS = ("crop", "fit", "podcast", "gameplay", "post")
+POST_TOP = 130  # text post layout: where the video starts (clear of the apps' top bar)
 GAME_EXTS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 CAPTION_STYLES = ("hormozi", "beast", "highlight", "box", "iman", "story", "simple", "none", "pop")  # pop = old name of hormozi
 CAPTION_POSITIONS = ("middle", "low")
@@ -115,8 +116,9 @@ def caption_anchor(layout: str, position: str) -> tuple[int, int, int]:
 
 
 def build_ass(words: list[dict], title: str, duration: float, layout: str, caption_style: str, out_path: Path,
-              position: str = "middle") -> None:
-    """words are already shifted so 0 = the start of the clip."""
+              position: str = "middle", post: dict | None = None) -> None:
+    """words are already shifted so 0 = the start of the clip.
+    post (text post layout): {"paragraphs", "ending", "text_top"} - shown instead of the title and captions."""
     cap_align = 2  # bottom centre
     if position == "middle" and layout not in ("podcast", "gameplay"):
         cap_align, cap_margin = 5, 0  # the middle of the screen
@@ -146,6 +148,11 @@ Style: Title,{font_title},{styles.em("xbold", 54)},&H00000000,&H000000FF,&H00FFF
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """]
+    if layout == "post":
+        if post:
+            lines += styles.post_events(post["paragraphs"], post.get("ending", ""), duration, post["text_top"], round(OUT_H * 0.83))
+        out_path.write_text("".join(lines), encoding="utf-8")
+        return
     if title:
         lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(duration)},Title,,0,0,0,,{_ass_text(title)}\n")
 
@@ -168,11 +175,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_input: int = 1,
-                  pops: list | None = None, fonts: str = "", W: int = OUT_W, H: int = OUT_H) -> str:
+                  pops: list | None = None, fonts: str = "", W: int = OUT_W, H: int = OUT_H, video_h: int = 0) -> str:
     """wm: {"size": share of the width, "opacity": 0-1, "y": centre as share of the height} - input wm_input is the logo.
     pops: [(input, start, end, x, y)] emoji pictures. The gameplay layout's second video is input 1."""
     subs = (f",subtitles={ass_name}" + (f":fontsdir={fonts}" if fonts else "")) if ass_name else ""
-    chain = _base_filter(layout, W, H)[: -len("[v]")] + "[b0]"
+    chain = _base_filter(layout, W, H, video_h)[: -len("[v]")] + "[b0]"
     k = W / OUT_W  # 2 for 4K: logo and emojis grow with the picture (the captions scale by themselves)
     cur = "b0"
     if wm:
@@ -191,8 +198,16 @@ def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_
     return chain + f";[{cur}]format=yuv420p{subs}[v]"
 
 
-def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H) -> str:
+def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H, video_h: int = 0) -> str:
     subs = ""
+    if layout == "post":
+        # black page, the video across the top (video_h tall at 1080 wide), the text goes underneath
+        k = W / OUT_W
+        vh, top = max(2, round(video_h * k) // 2 * 2), round(POST_TOP * k) // 2 * 2
+        return (
+            f"[0:v]scale={W}:{vh}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{vh},setsar=1[vid];"
+            f"color=c=black:s={W}x{H}:r=30[page];[page][vid]overlay=0:{top}:shortest=1,format=yuv420p[v]"
+        )
     if layout == "gameplay":
         half = H // 2
         return (
@@ -278,10 +293,12 @@ def render_clip(
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
     watermark: dict | None = None, gameplay: dict | None = None, caption_words: list[dict] | None = None,
     caption_pos: str = "middle", emojis: bool = False, music: dict | None = None, size: str = "1080",
+    post: dict | None = None,
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
-    size: "1080", "1440" or "2160" (4K) - the height of the finished clip's width, e.g. 4K = 2160x3840.
+    size: "1080", "1440" or "2160" (4K) - the width of the finished clip, e.g. 4K = 2160x3840.
+    post: the text post layout's text, {"paragraphs": [...], "ending": "..."} (key phrases in **stars**).
     Returns how many words were bleeped."""
     duration = end - start
     out_dir = out_path.parent
@@ -300,12 +317,22 @@ def render_clip(
             {"start": max(0.0, w["start"] - start), "end": min(duration, w["end"] - start), "text": w["text"]}
             for w in caption_words if w["start"] >= start - 0.05 and w["start"] < end
         ]
+    video_h = 0
+    if layout == "post":  # the video keeps its shape across the top; the story text goes under it
+        try:
+            src = probe(source)
+            video_h = round(OUT_W * src["height"] / max(1, src["width"]))
+        except RenderError:
+            video_h = 608
+        video_h = max(400, min(video_h, round(OUT_H * 0.42)))
+        post = dict(post or {"paragraphs": [title] if title else []}, text_top=POST_TOP + video_h + 64)
+        emojis = False
     ass_name = None
-    if title or caption_style != "none":
+    if title or caption_style != "none" or layout == "post":
         # ffmpeg runs inside the output folder and gets just the file name:
         # Windows paths (C:\...) break ffmpeg's subtitles filter otherwise
         ass_name = out_path.stem + ".ass"
-        build_ass(clip_words, title, duration, layout, caption_style, out_dir / ass_name, caption_pos)
+        build_ass(clip_words, title, duration, layout, caption_style, out_dir / ass_name, caption_pos, post)
     tmp_name = out_path.stem + ".part.mp4"
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -339,7 +366,7 @@ def render_clip(
     audio = _audio_filter(mute if has_audio else [], music_input, music.get("volume", 0.18) if music else 0.18, duration)
     cmd += [
         "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "",
-                                         *OUT_SIZES.get(size, OUT_SIZES["1080"]))
+                                         *OUT_SIZES.get(size, OUT_SIZES["1080"]), video_h)
         + audio, "-map", "[v]", "-t", f"{duration:.3f}",
     ]
     if has_audio:
