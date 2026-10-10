@@ -274,3 +274,62 @@ def read(path: Path) -> dict:
         summary.insert(0, seen["style"].strip()[:200])
     pics = ["data:image/jpeg;base64," + base64.b64encode(_jpeg(f, 216)).decode() for f in frames[1:5]]
     return {"settings": settings, "summary": summary, "engine": engine, "frames": pics}
+
+
+# ---------- presets: saved styles you can pick again ----------
+
+PRESETS_FILE = APP_DIR / "style_presets.json"
+learning = {"busy": False, "niche": "", "done": 0, "total": 0, "message": "", "errors": []}
+
+
+def load_presets() -> dict:
+    try:
+        data = json.loads(PRESETS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_preset(name: str, settings: dict, source: str = "", summary: list | None = None) -> dict:
+    name = re.sub(r"\s+", " ", name).strip()[:60]
+    if not name:
+        raise StyleError("Give the preset a name.")
+    allowed = {"layout", "captions", "capPos", "capSize", "emojis", "showTitle", "zooms", "minLen", "maxLen", "kind"}
+    clean_settings = {k: v for k, v in (settings or {}).items() if k in allowed}
+    if not clean_settings:
+        raise StyleError("There are no settings to save - copy a style first.")
+    presets = load_presets()
+    presets[name] = {"settings": clean_settings, "source": source[:300], "summary": (summary or [])[:8]}
+    tmp = PRESETS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(presets, indent=1), encoding="utf-8")
+    tmp.replace(PRESETS_FILE)
+    return presets
+
+
+def delete_preset(name: str) -> dict:
+    presets = load_presets()
+    if presets.pop(name, None) is not None:
+        PRESETS_FILE.write_text(json.dumps(presets, indent=1), encoding="utf-8")
+    return presets
+
+
+def learn(niche: str, cookies: str = "") -> None:
+    """Reads the most-viewed Short of each top channel of a niche and saves each style as a preset."""
+    import style_library
+    group = style_library.NICHES[niche]
+    chans = group["channels"]
+    learning.update(busy=True, niche=niche, done=0, total=len(chans), errors=[], message="Starting...")
+    try:
+        for i, ch in enumerate(chans, start=1):
+            name = ch["name"].strip()
+            learning["message"] = f"Reading {name} ({i} of {len(chans)}): downloading their top Short..."
+            try:
+                got = read(fetch(ch["url"], cookies))
+                save_preset(f"{group['label']} - {name}", got["settings"], ch["url"], got["summary"])
+            except Exception as exc:  # one channel failing doesn't stop the others
+                learning["errors"].append(f"{name}: {str(exc)[:160]}")
+            learning["done"] = i
+        ok = learning["total"] - len(learning["errors"])
+        learning["message"] = f"Done: {ok} of {learning['total']} styles saved as presets."
+    finally:
+        learning["busy"] = False

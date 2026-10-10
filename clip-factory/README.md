@@ -175,6 +175,15 @@ video, set how many clips, and click **Make clips**.
 - Instagram often needs your login: choose your browser under **Download with
   my login** (Find viral videos), or upload the video.
 
+**Style presets:** after copying a style, name it and click **Save as preset**;
+pick it again any time under **My style presets**. **Learn the styles of the
+biggest channels** has the 5 biggest Shorts channels for each of your niches
+(History, Business & scam stories for Paper Trail, Science for The Forgotten
+Lab, Podcast clips for Hot Mic Moments, Streamer clips for Chat Lost It),
+found by real YouTube views. **Learn these 5 styles** reads each channel's
+most-viewed Short on your PC and saves its style as a preset (only the editing
+style - never their footage or audio).
+
 **Zoom punch-ins on big moments:** the picture jumps 15% closer for a moment on
 strong words (numbers, money, "insane", "never"...), the "super edited" look.
 

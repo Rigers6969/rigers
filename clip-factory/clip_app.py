@@ -34,6 +34,7 @@ import permissions
 import policy
 import post
 import style_copy
+import style_library
 import publisher
 import renderer
 import thumbnail
@@ -652,6 +653,43 @@ def style_read():
             return jsonify(style_copy.read(path))
         except style_copy.StyleError as exc:
             return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/style/presets", methods=["GET", "POST"])
+def style_presets():
+    """GET: your saved styles + the top channels per niche. POST {name, settings, source, summary} saves one,
+    POST {delete: name} removes one."""
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        try:
+            if data.get("delete"):
+                style_copy.delete_preset(str(data["delete"]))
+            else:
+                style_copy.save_preset(str(data.get("name") or ""), data.get("settings") or {}, str(data.get("source") or ""),
+                                       [str(x) for x in data.get("summary") or []])
+        except style_copy.StyleError as exc:
+            return jsonify({"error": str(exc)}), 400
+    return jsonify({"presets": style_copy.load_presets(), "niches": style_library.NICHES, "learning": style_copy.learning})
+
+
+@app.route("/api/style/learn", methods=["POST"])
+def style_learn():
+    """Learn the styles of the top channels of a niche (in the background) and save them as presets."""
+    data = request.get_json(silent=True) or {}
+    niche = str(data.get("niche") or "")
+    if niche not in style_library.NICHES:
+        return jsonify({"error": "Pick a niche."}), 400
+    if style_copy.learning["busy"]:
+        return jsonify({"error": "Already learning styles - wait for it to finish."}), 409
+
+    def job():
+        with _style_lock:
+            style_copy.learn(niche, str(data.get("cookies") or ""))
+
+    style_copy.learning.update(busy=True, niche=niche, done=0, total=len(style_library.NICHES[niche]["channels"]),
+                               errors=[], message="Waiting to start...")
+    threading.Thread(target=job, daemon=True).start()
+    return jsonify({"learning": style_copy.learning}), 202
 
 
 _preview_lock = threading.Lock()
@@ -2200,6 +2238,21 @@ PAGE = r"""<!DOCTYPE html>
         <input id="focusWho" placeholder="e.g. IShowSpeed" style="flex:0 1 260px">
       </div>
       <div id="styleOut" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:10px">
+        <label for="presetSel" style="margin:0"><b>My style presets:</b></label>
+        <select id="presetSel" style="flex:0 1 340px"><option value="">(none saved yet)</option></select>
+        <button class="ghost" id="presetUse" type="button">Use this preset</button>
+        <button class="ghost" id="presetDel" type="button" style="padding:4px 10px;font-size:12px">Delete</button>
+      </div>
+      <details id="learnBox" style="margin-top:10px">
+        <summary><b>Learn the styles of the biggest channels</b> (5 per niche, by real YouTube views)</summary>
+        <div class="row" style="margin-top:8px">
+          <select id="learnNiche" style="flex:0 1 360px"></select>
+          <button id="learnBtn" type="button">Learn these 5 styles</button>
+        </div>
+        <div id="learnList" class="msg" style="margin-top:6px"></div>
+        <div id="learnMsg" class="msg" style="margin-top:6px"></div>
+      </details>
     </div>
     <div class="row" style="margin-bottom:12px">
       <label style="margin:0">Type of video:</label>
@@ -2525,21 +2578,83 @@ async function copyStyle(file) {
       body: JSON.stringify({ url: $("styleUrl").value, cookies: $("dlCookies").value }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Couldn't read that video.");
-    for (const [id, v] of Object.entries(d.settings)) {
-      if (!$(id)) continue;
-      if ($(id).type === "checkbox") $(id).checked = !!v; else $(id).value = v;
-    }
-    saveSettings(); showGameplayBox();
+    applySettings(d.settings);
+    lastStyle = { settings: d.settings, summary: d.summary, source: file ? file.name : $("styleUrl").value };
     out.innerHTML = `<div class="row" style="gap:6px;margin-bottom:6px">${d.frames.map((f) => `<img src="${f}" alt="" style="width:72px;border-radius:6px">`).join("")}</div>
       <div><b style="color:var(--ok)">&#10003; Settings changed to match this video:</b></div>
       <ul style="margin:4px 0 4px 18px;padding:0">${d.summary.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
       <div class="msg">Read by: ${esc(d.engine)}. Now pick your video above (e.g. an IShowSpeed stream), set How many clips, and click Make clips. <button class="ghost" type="button" id="stylePrev" style="padding:2px 10px;font-size:12px">&#128065; See how it looks</button></div>`;
+    out.innerHTML += `<div class="row" style="margin-top:6px"><input id="presetName" placeholder="Name this style, e.g. History - my favourite" style="flex:0 1 320px"><button class="ghost" type="button" id="presetSave">Save as preset</button><span class="msg" id="presetSaved"></span></div>`;
+    $("presetSave").onclick = savePreset;
     $("stylePrev").onclick = capPreview;
   } catch (e) { out.innerHTML = `<span class="error">${esc(e.message)}</span>`; }
   $("styleBtn").disabled = false;
 }
 $("styleBtn").onclick = () => copyStyle(null);
 $("styleFile").onchange = () => { const f = $("styleFile").files[0]; if (f) copyStyle(f); $("styleFile").value = ""; };
+
+// ---------- style presets ----------
+let lastStyle = null, styleData = { presets: {}, niches: {} };
+function applySettings(settings) {
+  for (const [id, v] of Object.entries(settings)) {
+    if (!$(id)) continue;
+    if ($(id).type === "checkbox") $(id).checked = !!v; else $(id).value = v;
+  }
+  saveSettings(); showGameplayBox();
+}
+function fmtM(n) { return n >= 1e9 ? (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n); }
+function renderLearnList() {
+  const g = styleData.niches[$("learnNiche").value];
+  if (!g) return;
+  $("learnList").innerHTML = `For <b>${esc(g.for)}</b>. Each channel's most-viewed Short of the last year is read on your PC and saved as a preset (only the editing style - never their video):<ul style="margin:4px 0 0 18px;padding:0">` +
+    g.channels.map((c) => `<li><b>${esc(c.name.trim())}</b> (${esc(c.handle)}) - ${fmtM(c.subs)} subscribers, ${fmtM(c.short_views_1y)} Shorts views - <a href="${esc(c.url)}" target="_blank" rel="noopener" style="color:var(--accent)">their top Short (${fmtM(c.views)} views)</a></li>`).join("") + "</ul>";
+}
+function renderPresets() {
+  const names = Object.keys(styleData.presets).sort();
+  const keep = $("presetSel").value;
+  $("presetSel").innerHTML = names.length ? names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("") : '<option value="">(none saved yet)</option>';
+  if (names.includes(keep)) $("presetSel").value = keep;
+}
+let learnTimer = null;
+function showLearning(l) {
+  if (!l) return;
+  const err = l.errors && l.errors.length ? `<div class="error" style="margin-top:4px">${l.errors.map(esc).join("<br>")}</div>` : "";
+  $("learnMsg").innerHTML = l.message ? esc(l.message) + (l.busy ? ` (${l.done} of ${l.total})` : "") + err : "";
+  $("learnBtn").disabled = !!l.busy;
+  clearTimeout(learnTimer);
+  if (l.busy) learnTimer = setTimeout(loadPresets, 3000);
+}
+async function loadPresets() {
+  try { styleData = await api("/api/style/presets"); } catch (e) { return; }
+  renderPresets();
+  if (!$("learnNiche").options.length) {
+    $("learnNiche").innerHTML = Object.entries(styleData.niches).map(([k, g]) => `<option value="${k}">${esc(g.label)} - for ${esc(g.for)}</option>`).join("");
+  }
+  renderLearnList(); showLearning(styleData.learning);
+}
+$("learnNiche").onchange = renderLearnList;
+$("learnBtn").onclick = async () => {
+  try { const r = await postJson("/api/style/learn", { niche: $("learnNiche").value, cookies: $("dlCookies").value }); showLearning(r.learning); setTimeout(loadPresets, 2000); }
+  catch (e) { $("learnMsg").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+};
+$("presetUse").onclick = () => {
+  const p = styleData.presets[$("presetSel").value];
+  if (!p) return;
+  applySettings(p.settings);
+  $("styleOut").innerHTML = `<div><b style="color:var(--ok)">&#10003; Using the preset "${esc($("presetSel").value)}":</b></div><ul style="margin:4px 0 4px 18px;padding:0">${(p.summary || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+};
+$("presetDel").onclick = async () => {
+  const n = $("presetSel").value; if (!n) return;
+  try { styleData = await postJson("/api/style/presets", { delete: n }); renderPresets(); } catch (e) {}
+};
+async function savePreset() {
+  if (!lastStyle) return;
+  const name = $("presetName").value.trim();
+  try {
+    styleData = await postJson("/api/style/presets", { name, settings: lastStyle.settings, source: lastStyle.source, summary: lastStyle.summary });
+    renderPresets(); $("presetSel").value = name; $("presetSaved").innerText = "Saved.";
+  } catch (e) { $("presetSaved").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+}
 
 // ---------- caption preview: a picture of the chosen style ----------
 let previewBusy = false;
@@ -3690,6 +3805,7 @@ $("aiTest").onclick = async () => {
   showGameplayBox();
   showLangNote();
   loadMusic();
+  loadPresets();
   for (const id of SETTINGS) for (const ev of ["change", "input"]) $(id).addEventListener(ev, saveSettings);  // saved the moment you change it
   const savedKind = store.get("cf_listKind");
   if (savedKind) { const r = document.querySelector(`input[name=listKind][value=${savedKind}]`); if (r) r.checked = true; }

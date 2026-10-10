@@ -15,7 +15,7 @@ $Home2 = $env:USERPROFILE
 $ClipHome = Join-Path $Home2 "ClipFactory"
 $DataFiles = @("ai_keys.json", "my_channels.json", "publisher.json", "publish_queue.json", "client_secret.json",
                "streamers.json", "podcasts.json", "trends_last.json", "rules_watch.json", "permissions.json",
-               "channel_snapshots.json", "goals.json", "posts_seen.json", "prefs.json", "alerts.json", "campaigns.json")
+               "channel_snapshots.json", "goals.json", "posts_seen.json", "prefs.json", "alerts.json", "campaigns.json", "style_presets.json")
 $DataDirs = @("output", "input", "cache", "music", "gameplay", "watermarks")
 
 function Say($text, $color = "Gray") { Write-Host $text -ForegroundColor $color }
