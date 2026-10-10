@@ -161,6 +161,23 @@ this PC only.
      can get your clips claimed.
 5. Click **Make clips**.
 
+**Make clips like a video you like:** at the top of the settings, paste the
+link of an edited clip you like (YouTube Shorts, Instagram Reel, TikTok), or
+upload it, and click **Copy this style**. The app downloads it, measures its
+length and how fast it cuts, looks at pictures from it, and sets the layout,
+caption style, size and position, hook title, emojis and zoom punch-ins to
+match. Type who the clips should be about (e.g. `IShowSpeed`), pick your long
+video, set how many clips, and click **Make clips**.
+- With a free **Gemini** key (AI engines), the AI looks at the pictures and
+  reads the style much better (it can tell MrBeast captions, split screens and
+  emojis). Without one, the built-in reading finds the caption colours, the
+  hook title, the text post and blurred-background layouts.
+- Instagram often needs your login: choose your browser under **Download with
+  my login** (Find viral videos), or upload the video.
+
+**Zoom punch-ins on big moments:** the picture jumps 15% closer for a moment on
+strong words (numbers, money, "insane", "never"...), the "super edited" look.
+
 **Captions** (made like the captions on viral Shorts, TikToks and Reels):
 - **Hormozi** (the default): bold ALL CAPS Montserrat with a thick black
   outline, 2-3 words at a time, one key word in yellow (green for money and

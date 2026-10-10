@@ -33,6 +33,7 @@ import moments
 import permissions
 import policy
 import post
+import style_copy
 import publisher
 import renderer
 import thumbnail
@@ -222,7 +223,7 @@ def run_pipeline(run: dict) -> None:
             update(message=msg, percent=35 + 15 * done_batches["n"] / batches)
 
         stats = moments.score_candidates(candidates, brain, progress=scoring_progress, cancelled=cancelled, kind=s["kind"],
-                                         learned=learn.hint_for(s["channel_name"]) + campaign.ai_hint(s.get("c_focus") or [], s.get("c_ban") or [])
+                                         learned=learn.hint_for(s["channel_name"]) + campaign.ai_hint((s.get("c_focus") or []) + (s.get("focus") or []), s.get("c_ban") or [])
                                          + (f"\nWrite every title in {translate.LANGS[s['lang']]}, for {translate.LANGS[s['lang']]} viewers."
                                             if s.get("lang") else ""))
         if cancelled():
@@ -347,7 +348,7 @@ def run_pipeline(run: dict) -> None:
             if s["layout"] == "post":  # the story text under the video
                 update(message=f"Writing the text for clip {n} of {len(picks)}...")
                 paras = post.write(brain, c["text"], c["title"], s["kind"], s.get("lang", ""),
-                                   campaign.ai_hint(s.get("c_focus") or [], s.get("c_ban") or []))
+                                   campaign.ai_hint((s.get("c_focus") or []) + (s.get("focus") or []), s.get("c_ban") or []))
                 story = {"paragraphs": paras or post.fallback("" if s.get("lang") else c["text"], c["title"]),
                          "ending": post.cta(s.get("post_cta", ""), s["channel_name"])}
                 if s["bleep"]:  # no swear words in the text either
@@ -363,7 +364,7 @@ def run_pipeline(run: dict) -> None:
                     gameplay=games.next(end - start) if games else None,
                     caption_pos=s.get("caption_pos", "middle"), emojis=s.get("emojis", False),
                     music=tunes.next(end - start, MUSIC_VOLUMES[s.get("music_vol", "low")]) if tunes else None,
-                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"), post=story, cap_size=s.get("cap_size", "m"),
+                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"), post=story, cap_size=s.get("cap_size", "m"), zooms=s.get("zooms", False),
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
@@ -629,6 +630,30 @@ def campaign_remove(cid):
     return jsonify({"campaigns": whop.ranked()})
 
 
+_style_lock = threading.Lock()
+
+
+@app.route("/api/style/read", methods=["POST"])
+def style_read():
+    """Copy a style: the example video (a link, or an uploaded file) -> the settings that make clips like it."""
+    with _style_lock:
+        try:
+            f = request.files.get("file")
+            if f and f.filename:
+                style_copy.WORK.mkdir(parents=True, exist_ok=True)
+                path = style_copy.WORK / ("upload" + (Path(f.filename).suffix.lower() or ".mp4"))
+                f.save(path)
+            else:
+                data = request.get_json(silent=True) or {}
+                url = str(data.get("url") or "").strip()
+                if not downloader.is_url(url):
+                    return jsonify({"error": "Paste the link of the video you want to copy (YouTube, Instagram, TikTok...)."}), 400
+                path = style_copy.fetch(url, str(data.get("cookies") or ""))
+            return jsonify(style_copy.read(path))
+        except style_copy.StyleError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+
 _preview_lock = threading.Lock()
 
 
@@ -864,6 +889,8 @@ def parse_settings(data: dict) -> dict:
         "emojis": bool(data.get("emojis", False)),
         "out_size": data.get("out_size") if data.get("out_size") in renderer.OUT_SIZES else "1080",
         "cap_size": data.get("cap_size") if data.get("cap_size") in ("s", "m", "l", "xl") else "m",
+        "zooms": bool(data.get("zooms", False)),
+        "focus": campaign.words(str(data.get("focus") or "")),
         "post_cta": re.sub(r"[\r\n]+", " ", str(data.get("post_cta") or "")).strip()[:140],
         "music": str(data.get("music") or "") if (data.get("music") == "mix" or any(p.name == data.get("music") for p in _music_files())) else "",
         "music_vol": data.get("music_vol") if data.get("music_vol") in MUSIC_VOLUMES else "low",
@@ -2158,6 +2185,22 @@ PAGE = r"""<!DOCTYPE html>
 
   <div class="panel">
     <h2>2. Settings</h2>
+    <div id="styleBox" style="margin:0 0 14px;padding:12px;border:1px solid var(--accent);border-radius:10px">
+      <b>&#10024; Make clips like a video you like</b>
+      <div class="msg" style="margin:4px 0 8px">Paste the link of an edited clip you like (YouTube Shorts, Instagram Reel, TikTok). The app reads its style - captions, layout, length, zooms - and sets everything below to match. Then pick your video above and click Make clips.</div>
+      <div class="row">
+        <input id="styleUrl" placeholder="https://www.instagram.com/reel/...  or  https://youtube.com/shorts/..." style="flex:1 1 320px">
+        <button id="styleBtn" type="button">Copy this style</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label for="styleFile" style="margin:0">or upload the example video:</label><input type="file" id="styleFile" accept="video/*">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label for="focusWho" style="margin:0">Who should the clips be about? (optional)</label>
+        <input id="focusWho" placeholder="e.g. IShowSpeed" style="flex:0 1 260px">
+      </div>
+      <div id="styleOut" style="margin-top:8px"></div>
+    </div>
     <div class="row" style="margin-bottom:12px">
       <label style="margin:0">Type of video:</label>
       <select id="kind" style="width:auto">
@@ -2206,6 +2249,7 @@ PAGE = r"""<!DOCTYPE html>
     <div class="row" style="margin:6px 0">
       <label for="capPos" style="margin:0">Captions on the screen:</label>
       <select id="capPos" style="width:auto"><option value="middle">In the middle</option><option value="low">Lower third</option></select>
+      <label class="check" style="margin:0"><input type="checkbox" id="zooms"> Zoom punch-ins on big moments</label>
       <label for="capSize" style="margin:0">Size:</label>
       <select id="capSize" style="width:auto"><option value="s">Small</option><option value="m" selected>Normal</option><option value="l">Big</option><option value="xl">Huge</option></select>
       <label class="check" style="margin:0"><input type="checkbox" id="emojis" checked> Emoji pops (&#128514; &#128293; &#128176; when those words are said)</label>
@@ -2334,7 +2378,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize", "postCta", "capSize"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize", "postCta", "capSize", "zooms", "focusWho", "styleUrl"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2436,6 +2480,7 @@ function clipSettings() {
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
     gameplay: $("gpSel").value, lang: $("lang").value,
     caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value, out_size: $("outSize").value, post_cta: $("postCta").value, cap_size: $("capSize").value,
+    zooms: $("zooms").checked, focus: $("focusWho").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };
@@ -2468,6 +2513,34 @@ async function loadGameplay() {
   $("gpMsg").innerHTML = d.files.length ? `${d.files.length} gameplay video${d.files.length > 1 ? "s" : ""} ready.`
     : '<span class="error">No gameplay videos yet - add one (a few minutes of gameplay is enough).</span>';
 }
+// ---------- copy the style of an example video ----------
+async function copyStyle(file) {
+  const out = $("styleOut");
+  out.innerHTML = '<span class="msg">Reading the video: downloading it, looking at its captions, layout and cuts (about a minute)...</span>';
+  $("styleBtn").disabled = true;
+  try {
+    let r;
+    if (file) { const fd = new FormData(); fd.append("file", file); r = await fetch("/api/style/read", { method: "POST", body: fd }); }
+    else r = await fetch("/api/style/read", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: $("styleUrl").value, cookies: $("dlCookies").value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Couldn't read that video.");
+    for (const [id, v] of Object.entries(d.settings)) {
+      if (!$(id)) continue;
+      if ($(id).type === "checkbox") $(id).checked = !!v; else $(id).value = v;
+    }
+    saveSettings(); showGameplayBox();
+    out.innerHTML = `<div class="row" style="gap:6px;margin-bottom:6px">${d.frames.map((f) => `<img src="${f}" alt="" style="width:72px;border-radius:6px">`).join("")}</div>
+      <div><b style="color:var(--ok)">&#10003; Settings changed to match this video:</b></div>
+      <ul style="margin:4px 0 4px 18px;padding:0">${d.summary.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <div class="msg">Read by: ${esc(d.engine)}. Now pick your video above (e.g. an IShowSpeed stream), set How many clips, and click Make clips. <button class="ghost" type="button" id="stylePrev" style="padding:2px 10px;font-size:12px">&#128065; See how it looks</button></div>`;
+    $("stylePrev").onclick = capPreview;
+  } catch (e) { out.innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+  $("styleBtn").disabled = false;
+}
+$("styleBtn").onclick = () => copyStyle(null);
+$("styleFile").onchange = () => { const f = $("styleFile").files[0]; if (f) copyStyle(f); $("styleFile").value = ""; };
+
 // ---------- caption preview: a picture of the chosen style ----------
 let previewBusy = false;
 async function capPreview() {

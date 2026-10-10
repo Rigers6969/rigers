@@ -660,3 +660,61 @@ def cloud_transcribe(
     words = [w for k in sorted(results) for w in results[k]]
     words.sort(key=lambda w: w["start"])
     return words, stats
+
+
+# ---------- AIs that can look at pictures (to read the style of an example video) ----------
+
+VISION_MODELS = {"groq": "meta-llama/llama-4-scout-17b-16e-instruct", "openai": "gpt-4o-mini",
+                 "openrouter": "google/gemini-2.0-flash-exp:free"}
+
+
+def look(keys: dict, prompt: str, jpegs: list[bytes]) -> Optional[tuple[str, str]]:
+    """(answer, who) from the first AI that can see pictures, or None. Gemini first (free), then the others."""
+    import base64
+    pics = [base64.b64encode(j).decode() for j in jpegs]
+    if not keys.get("cloud_on"):
+        return None
+    if keys.get("gemini_key"):
+        try:
+            g = GeminiLLM(keys["gemini_key"])
+            for _ in range(2):
+                resp = _post("Gemini", f"{g.base}/models/{g.model}:generateContent", 180, headers={"x-goog-api-key": g.key},
+                             json={"contents": [{"role": "user", "parts": [{"text": prompt}] + [
+                                 {"inline_data": {"mime_type": "image/jpeg", "data": p}} for p in pics]}],
+                                   "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}})
+                if resp.status_code == 404 and not g._picked:
+                    g._picked = True
+                    g._pick_model()
+                    continue
+                _check(resp, "Gemini")
+                parts = resp.json()["candidates"][0]["content"]["parts"]
+                return "".join(p.get("text", "") for p in parts), "Gemini"
+        except Exception:
+            pass
+    for name in ("openai", "groq", "openrouter"):
+        if not keys.get(f"{name}_key"):
+            continue
+        label, base, _m, _f = CLOUD[name]
+        content = [{"type": "text", "text": prompt}] + [
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{p}"}} for p in pics[:5]]
+        try:
+            resp = _post(label, f"{base}/chat/completions", 180, headers={"Authorization": f"Bearer {keys[f'{name}_key']}"},
+                         json={"model": VISION_MODELS[name], "messages": [{"role": "user", "content": content}]})
+            _check(resp, label)
+            return resp.json()["choices"][0]["message"]["content"], label
+        except Exception:
+            continue
+    if keys.get("anthropic_key"):
+        label, base, _m, _f = CLOUD["anthropic"]
+        content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": p}} for p in pics[:5]]
+        try:
+            prov = make_provider("anthropic", keys["anthropic_key"])
+            resp = _post(label, f"{base}/messages", 180,
+                         headers={"x-api-key": keys["anthropic_key"], "anthropic-version": "2023-06-01"},
+                         json={"model": prov.model, "max_tokens": 600,
+                               "messages": [{"role": "user", "content": content + [{"type": "text", "text": prompt}]}]})
+            _check(resp, label)
+            return "".join(b.get("text", "") for b in resp.json().get("content", [])), label
+        except Exception:
+            pass
+    return None

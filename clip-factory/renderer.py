@@ -176,13 +176,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_input: int = 1,
-                  pops: list | None = None, fonts: str = "", W: int = OUT_W, H: int = OUT_H, video_h: int = 0) -> str:
+                  pops: list | None = None, fonts: str = "", W: int = OUT_W, H: int = OUT_H, video_h: int = 0,
+                  zooms: list | None = None) -> str:
     """wm: {"size": share of the width, "opacity": 0-1, "y": centre as share of the height} - input wm_input is the logo.
     pops: [(input, start, end, x, y)] emoji pictures. The gameplay layout's second video is input 1."""
     subs = (f",subtitles={ass_name}" + (f":fontsdir={fonts}" if fonts else "")) if ass_name else ""
     chain = _base_filter(layout, W, H, video_h)[: -len("[v]")] + "[b0]"
     k = W / OUT_W  # 2 for 4K: logo and emojis grow with the picture (the captions scale by themselves)
     cur = "b0"
+    if zooms:  # punch-ins: the picture jumps 15% closer on big moments (a zoomed copy is shown at those times)
+        zw = round(W * 1.15 / 2) * 2
+        when = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in zooms)
+        chain += (f";[b0]split=2[zn][zz];[zz]scale={zw}:-2:flags=bicubic,crop={W}:{H}[zi];"
+                  f"[zn][zi]overlay=0:0:enable='{when}'[bz]")
+        cur = "bz"
     if wm:
         w = max(40, int(W * wm["size"])) // 2 * 2
         chain += (f";[{wm_input}:v]scale={w}:-1,format=rgba,colorchannelmixer=aa={wm['opacity']:.2f}[wm];"
@@ -197,6 +204,16 @@ def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_
         cur = f"p{n}"
     # captions last, on top of everything, so nothing hides what's said
     return chain + f";[{cur}]format=yuv420p{subs}[v]"
+
+
+def zoom_moments(words: list[dict], duration: float, gap: float = 2.5, hold: float = 0.7) -> list[tuple[float, float]]:
+    """When to punch in: on strong words (numbers, money, never, insane...), at least `gap` seconds apart."""
+    out, last = [], -gap
+    for w in words:
+        if w["start"] - last >= gap and styles.strong(w["text"]) and w["start"] + 0.2 < duration:
+            out.append((round(w["start"], 2), round(min(duration, w["start"] + hold), 2)))
+            last = w["start"]
+    return out[:12]
 
 
 def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H, video_h: int = 0) -> str:
@@ -294,12 +311,13 @@ def render_clip(
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
     watermark: dict | None = None, gameplay: dict | None = None, caption_words: list[dict] | None = None,
     caption_pos: str = "middle", emojis: bool = False, music: dict | None = None, size: str = "1080",
-    post: dict | None = None, cap_size: str = "m",
+    post: dict | None = None, cap_size: str = "m", zooms: bool = False,
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
     size: "1080", "1440" or "2160" (4K) - the width of the finished clip, e.g. 4K = 2160x3840.
     post: the text post layout's text, {"paragraphs": [...], "ending": "..."} (key phrases in **stars**).
+    zooms: zoom punch-ins on the big moments (the "super edited" look).
     Returns how many words were bleeped."""
     duration = end - start
     out_dir = out_path.parent
@@ -368,7 +386,8 @@ def render_clip(
     audio = _audio_filter(mute if has_audio else [], music_input, music.get("volume", 0.18) if music else 0.18, duration)
     cmd += [
         "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "",
-                                         *OUT_SIZES.get(size, OUT_SIZES["1080"]), video_h)
+                                         *OUT_SIZES.get(size, OUT_SIZES["1080"]), video_h,
+                                         zoom_moments(clip_words, duration) if zooms and layout != "post" else None)
         + audio, "-map", "[v]", "-t", f"{duration:.3f}",
     ]
     if has_audio:
