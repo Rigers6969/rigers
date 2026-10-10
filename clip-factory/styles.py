@@ -226,9 +226,9 @@ def _pos(x: int, y: int, an: int) -> str:
 
 # ---------- the styles ----------
 
-def hormozi_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+def hormozi_events(words, duration, x, y, an, scale=1.0, max_w=MAX_W) -> list[str]:
     fs = em("black", 92 * scale)
-    chunks = _chunks(words, "black", fs, 3, True)
+    chunks = _chunks(words, "black", fs, 3, True, max_w)
     out = []
     for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
         k = key_index(ch)
@@ -241,14 +241,14 @@ def hormozi_events(words, duration, x, y, an, scale=1.0) -> list[str]:
     return out
 
 
-def beast_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+def beast_events(words, duration, x, y, an, scale=1.0, max_w=MAX_W) -> list[str]:
     fs = em("comic", 150 * scale)
-    chunks = _chunks(words, "comic", fs, 2, True)
+    chunks = _chunks(words, "comic", fs, 2, True, max_w)
     accents = [YELLOW, GREEN, RED, YELLOW]
     out = []
     for g, (ch, (a, b)) in enumerate(zip(chunks, _ends(chunks, duration))):
         text = " ".join(caps(w["text"]) for w in ch)
-        size = _fit(text, "comic", fs)
+        size = _fit(text, "comic", fs, max_w)
         k = key_index(ch)
         parts = [f"{{\\c{accents[g % len(accents)]}}}{caps(w['text'])}{{\\c{WHITE}}}" if j == k
                  else caps(w["text"]) for j, w in enumerate(ch)]
@@ -258,9 +258,9 @@ def beast_events(words, duration, x, y, an, scale=1.0) -> list[str]:
     return out
 
 
-def karaoke_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+def karaoke_events(words, duration, x, y, an, scale=1.0, max_w=MAX_W) -> list[str]:
     fs = em("black", 84 * scale)
-    chunks = _chunks(words, "black", fs, 3, True)
+    chunks = _chunks(words, "black", fs, 3, True, max_w)
     out = []
     for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
         texts = [caps(w["text"]) for w in ch]
@@ -275,9 +275,9 @@ def karaoke_events(words, duration, x, y, an, scale=1.0) -> list[str]:
     return out
 
 
-def box_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+def box_events(words, duration, x, y, an, scale=1.0, max_w=MAX_W) -> list[str]:
     fs = em("black", 84 * scale)
-    chunks = _chunks(words, "black", fs, 3, True, MAX_W - 60)
+    chunks = _chunks(words, "black", fs, 3, True, max_w - 60)
     out = []
     for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
         texts = [caps(w["text"]) for w in ch]
@@ -294,9 +294,9 @@ def box_events(words, duration, x, y, an, scale=1.0) -> list[str]:
     return out
 
 
-def iman_events(words, duration, x, y, an, scale=1.0) -> list[str]:
+def iman_events(words, duration, x, y, an, scale=1.0, max_w=MAX_W) -> list[str]:
     fs = em("xbold", 66 * scale)
-    chunks = _chunks(words, "xbold", fs, 5, False)
+    chunks = _chunks(words, "xbold", fs, 5, False, max_w)
     xb, md = FONTS["xbold"][0], FONTS["medium"][0]
     out = []
     for ch, (a, b) in zip(chunks, _ends(chunks, duration)):
@@ -325,7 +325,8 @@ def _phrases(words: list[dict], max_words: int = 7) -> list[list[dict]]:
     return out
 
 
-def story_events(words: list[dict], duration: float, top: int, bottom: int, center_x: int = 540, scale: float = 1.0) -> list[str]:
+def story_events(words: list[dict], duration: float, top: int, bottom: int, center_x: int = 540, scale: float = 1.0,
+                 max_w: float = MAX_W) -> list[str]:
     """Kinetic typography, centred: each phrase builds up word by word, e.g.
          PROCRASTINATING      <- key word: huge, heavy, slanted
             is choosing       <- normal words together, small words smaller and lighter
@@ -389,10 +390,10 @@ def story_events(words: list[dict], duration: float, top: int, bottom: int, cent
             sz = {}
             for i in ln:
                 if kinds[i] == "key":
-                    sz[i] = min(em("black_i", 150 * scale), int(100 * MAX_W / max(1.0, text_width(shown(i), "black_i", 100) * 1.04)))
+                    sz[i] = min(em("black_i", 150 * scale), int(100 * max_w / max(1.0, text_width(shown(i), "black_i", 100) * 1.04)))
                 else:
                     sz[i] = em("xbold", 74 * scale) if kinds[i] == "word" else em("medium", 56 * scale)
-            while line_width(ln, sz) > MAX_W and min(sz.values()) > 40:
+            while line_width(ln, sz) > max_w and min(sz.values()) > 40:
                 sz = {i: int(v * 0.92) for i, v in sz.items()}
             return sz, line_width(ln, sz)
 
@@ -496,9 +497,74 @@ SIZES = {"s": 0.8, "m": 1.0, "l": 1.2, "xl": 1.4}  # caption size setting: small
 
 
 def events(style: str, words: list[dict], duration: float, x: int, y: int, an: int, story_area: tuple[int, int],
-           scale: float = 1.0) -> list[str]:
+           scale: float = 1.0, max_w: float = MAX_W) -> list[str]:
     style = ALIASES.get(style, style)
     if style == "story":
-        return story_events(words, duration, *story_area, center_x=x, scale=scale)
+        return story_events(words, duration, *story_area, center_x=x, scale=scale, max_w=max_w)
     return {"hormozi": hormozi_events, "beast": beast_events, "highlight": karaoke_events, "box": box_events,
-            "iman": iman_events}[style](words, duration, x, y, an, scale)
+            "iman": iman_events}[style](words, duration, x, y, an, scale, max_w)
+
+
+# ---------- for the other apps (the video generator): one call makes a whole caption file ----------
+
+LABELS = {"hormozi": "Hormozi - bold caps, key word yellow", "beast": "MrBeast - comic font, huge words",
+          "highlight": "Karaoke - the spoken word turns green", "box": "Box - the spoken word in a purple box",
+          "iman": "Clean - calm lowercase (Iman Gadzhi)", "story": "Story - huge slanted key words (podcast)"}
+
+
+def make_ass(words: list[dict], width: int, height: int, style: str, size: str = "m", position: str = "auto") -> str:
+    """A complete .ass caption file for a video of any shape. Vertical videos get the Shorts layout (captions in the
+    middle); wide 16:9 videos get the captions in the lower part of the picture, a little smaller.
+    words: [{"start", "end", "text"}] in seconds from the start of the video."""
+    vertical = height > width
+    pw, ph = (1080, 1920) if vertical else (1920, 1080)  # libass scales this to the real frame
+    scale = SIZES.get(size, 1.0) * (1.0 if vertical else 0.8)
+    duration = max((w["end"] for w in words), default=0) + 1
+    middle = position == "middle" or (position == "auto" and vertical)
+    x, y, an = (pw // 2, ph // 2, 5) if middle else (pw // 2, round(ph * (0.73 if vertical else 0.9)), 2)
+    max_w = 940 if vertical else 1560
+    area = (round(ph * 0.28), round(ph * 0.72)) if vertical else (round(ph * 0.12), round(ph * 0.88))
+    head = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {pw}
+PlayResY: {ph}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+{styles_block()}
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    return head + "".join(events(style, words, duration, x, y, an, area, scale, max_w))
+
+
+def zoom_moments(words: list[dict], duration: float, gap: float = 2.5, hold: float = 0.7) -> list[tuple[float, float]]:
+    """When to punch in: on strong words (numbers, money, never, insane...), at least `gap` seconds apart."""
+    out, last = [], -gap
+    for w in words:
+        if w["start"] - last >= gap and strong(w["text"]) and w["start"] + 0.2 < duration:
+            out.append((round(w["start"], 2), round(min(duration, w["start"] + hold), 2)))
+            last = w["start"]
+    return out[:12] if duration < 120 else out
+
+
+def zoom_filter(width: int, height: int, moments: list[tuple[float, float]], src: str = "0:v", out: str = "vz") -> str:
+    """ffmpeg filter: the picture jumps 15% closer at those moments (a zoomed copy is shown then)."""
+    if not moments:
+        return f"[{src}]null[{out}]"
+    zw = round(width * 1.15 / 2) * 2
+    when = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in moments)
+    return (f"[{src}]split=2[zn][zz];[zz]scale={zw}:-2:flags=bicubic,crop={width}:{height}[zi];"
+            f"[zn][zi]overlay=0:0:enable='{when}'[{out}]")
+
+
+def load_presets() -> dict:
+    """Clip Factory's saved style presets ({name: {"settings": {...}}})."""
+    import json
+    try:
+        data = json.loads((APP_DIR / "style_presets.json").read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}

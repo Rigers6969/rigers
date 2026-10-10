@@ -17,7 +17,8 @@ from jobs import start_job
 from music_finder import search_tracks
 from producer import CONTENT_ROOT
 from thumbnail_generator import ThumbnailError, generate_thumbnail
-from video_editor import CAPTION_STYLES, DEFAULT_CAPTION_STYLE, MUSIC_LIBRARY_DIR, apply_edits, list_music_library
+from video_editor import (DEFAULT_CAPTION_STYLE, MUSIC_LIBRARY_DIR, apply_edits, caption_options, list_music_library,
+                          load_look, save_look)
 
 bp = Blueprint("editor_api", __name__)
 
@@ -41,10 +42,16 @@ def _safe_content_path(slug: str, *parts: str) -> Path | None:
 
 @bp.route("/api/editor/caption-styles")
 def caption_styles():
-    return jsonify({
-        "styles": [{"id": key, "label": val["label"]} for key, val in CAPTION_STYLES.items()],
-        "default": DEFAULT_CAPTION_STYLE,
-    })
+    return jsonify({"styles": caption_options(), "default": DEFAULT_CAPTION_STYLE})
+
+
+@bp.route("/api/editor/look", methods=["GET", "POST"])
+def video_look():
+    """How produced videos look: caption style (incl. Clip Factory's styles and presets), size, zooms, and
+    whether long videos get captions too. Used automatically every time a video is produced."""
+    if request.method == "POST":
+        return jsonify(save_look(request.get_json(silent=True) or {}))
+    return jsonify(load_look())
 
 
 @bp.route("/api/editor/music")
@@ -217,6 +224,8 @@ def apply(slug):
     data = request.get_json(silent=True) or {}
     add_captions = bool(data.get("add_captions"))
     caption_style = str(data.get("caption_style", DEFAULT_CAPTION_STYLE))
+    caption_size = data.get("caption_size") if data.get("caption_size") in ("s", "m", "l", "xl") else "m"
+    zooms = bool(data.get("zooms"))
     music_filename = str(data.get("music_filename", "")).strip() or None
 
     music_path = None
@@ -236,6 +245,8 @@ def apply(slug):
             video_dir,
             add_captions=add_captions,
             caption_style=caption_style,
+            caption_size=caption_size,
+            zooms=zooms,
             music_path=music_path,
             progress=lambda m: set_progress(job_id, m),
         )

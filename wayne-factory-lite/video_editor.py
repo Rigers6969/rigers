@@ -9,6 +9,8 @@ edit - toggling captions off and re-applying genuinely removes them.
 """
 from __future__ import annotations
 
+import importlib.util
+import json
 import shutil
 from pathlib import Path
 from typing import Callable, Optional
@@ -165,6 +167,78 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     out_path.write_text("".join(lines), encoding="utf-8")
 
 
+_CF = None
+
+
+def clip_factory_styles():
+    """Clip Factory's caption styles (viral captions, zoom punch-ins, saved style presets). Clip Factory sits
+    next to this app in the same folder; when it isn't there, only the classic styles above are offered."""
+    global _CF
+    if _CF is None:
+        _CF = False
+        for folder in (APP_DIR.parent / "clip-factory", APP_DIR / "clip-factory"):
+            path = folder / "styles.py"
+            if path.exists():
+                try:
+                    spec = importlib.util.spec_from_file_location("clip_factory_styles", path)
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    _CF = mod
+                except Exception:
+                    _CF = False
+                break
+    return _CF or None
+
+
+def caption_options() -> list[dict]:
+    """Every caption style to pick from: the classic ones, Clip Factory's viral ones and your saved presets."""
+    opts = [{"id": k, "label": v["label"]} for k, v in CAPTION_STYLES.items()]
+    cf = clip_factory_styles()
+    if cf:
+        opts += [{"id": k, "label": v} for k, v in cf.LABELS.items()]
+        opts += [{"id": "preset:" + n, "label": f"Preset: {n}"} for n in sorted(cf.load_presets())]
+    return opts
+
+
+def resolve_look(caption_style: str, caption_size: str = "m", zooms: bool = False) -> tuple[str, str, bool, str]:
+    """(style, size, zooms, position) - a "preset:<name>" choice is turned into the preset's own settings."""
+    position = "auto"
+    cf = clip_factory_styles()
+    if caption_style.startswith("preset:") and cf:
+        st = (cf.load_presets().get(caption_style[7:]) or {}).get("settings") or {}
+        caption_style = {"simple": "bold-white", "pop": "hormozi"}.get(st.get("captions"), st.get("captions") or DEFAULT_CAPTION_STYLE)
+        caption_size = st.get("capSize", caption_size)
+        zooms = bool(st.get("zooms", zooms))
+        position = st.get("capPos", "auto")
+    return caption_style, caption_size, zooms, position
+
+
+LOOK_FILE = APP_DIR / "video_look.json"
+LOOK_DEFAULTS = {"caption_style": "short-center", "caption_size": "m", "zooms": False, "long_captions": False}
+
+
+def load_look() -> dict:
+    """How finished videos look (used when a video is produced): caption style, size, zooms, captions on long videos."""
+    try:
+        data = json.loads(LOOK_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    return {k: data.get(k, v) for k, v in LOOK_DEFAULTS.items()}
+
+
+def save_look(changes: dict) -> dict:
+    look = load_look()
+    if isinstance(changes.get("caption_style"), str) and changes["caption_style"]:
+        look["caption_style"] = changes["caption_style"][:80]
+    if changes.get("caption_size") in ("s", "m", "l", "xl"):
+        look["caption_size"] = changes["caption_size"]
+    for k in ("zooms", "long_captions"):
+        if k in changes:
+            look[k] = bool(changes[k])
+    LOOK_FILE.write_text(json.dumps(look, indent=1), encoding="utf-8")
+    return look
+
+
 def _ffmpeg_subtitle_path_arg(ass_path: Path) -> str:
     """ffmpeg's subtitles filter takes its file path as a filter option
     value, where ':' and '\\' need their own escaping (a Windows drive
@@ -183,6 +257,8 @@ def apply_edits(
     music_path: Optional[Path] = None,
     music_volume_db: float = -18.0,
     progress: Optional[ProgressCB] = None,
+    caption_size: str = "m",
+    zooms: bool = False,
 ) -> Path:
     """Always starts fresh from video_dir/final.mp4 and writes
     video_dir/final_edited.mp4 - never edits final.mp4 itself, so it
@@ -198,7 +274,12 @@ def apply_edits(
 
     out_path = video_dir / "final_edited.mp4"
 
-    if not add_captions and not music_path:
+    caption_style, caption_size, zooms, position = resolve_look(caption_style, caption_size, zooms)
+    cf = clip_factory_styles()
+    if caption_style in ("none", ""):
+        add_captions = False
+    zooms = bool(zooms and cf)
+    if not add_captions and not music_path and not zooms:
         shutil.copyfile(base_path, out_path)
         report("Done.")
         return out_path
@@ -208,7 +289,7 @@ def apply_edits(
     current_input = base_path
 
     try:
-        if add_captions:
+        if add_captions or zooms:
             voiceover_path = video_dir / "voiceover.mp3"
             if not voiceover_path.exists():
                 raise AssemblyError("No voiceover.mp3 to transcribe for captions.")
@@ -216,19 +297,35 @@ def apply_edits(
             if not words:
                 report("No speech detected for captions - skipping captions.")
             else:
-                captions = _group_words_into_captions(words)
-                ass_path = work_dir / "captions.ass"
                 real_width, real_height = get_video_dimensions(base_path)
-                build_ass_subtitles(captions, ass_path, caption_style, width=real_width, height=real_height)
-
-                report("Burning in captions...")
+                duration = words[-1]["end"] + 1
+                viral = bool(cf) and caption_style in cf.LABELS
+                ass_path = None
+                if add_captions:
+                    ass_path = work_dir / "captions.ass"
+                    if viral:  # Clip Factory's caption styles
+                        ass_path.write_text(cf.make_ass(words, real_width, real_height, caption_style, caption_size,
+                                                        position if real_height > real_width else "auto"), encoding="utf-8")
+                    else:
+                        build_ass_subtitles(_group_words_into_captions(words), ass_path, caption_style,
+                                            width=real_width, height=real_height)
+                chain, cur = "", "0:v"
+                if zooms:  # punch-ins on the big moments (fewer on long videos)
+                    moments = cf.zoom_moments(words, duration, gap=2.5 if duration < 120 else 8.0)
+                    chain, cur = cf.zoom_filter(real_width, real_height, moments, "0:v", "vz"), "vz"
+                if ass_path:
+                    subs = f"subtitles='{_ffmpeg_subtitle_path_arg(ass_path)}'"
+                    if viral:
+                        subs += f":fontsdir='{_ffmpeg_subtitle_path_arg(cf.FONTS_DIR)}'"
+                    chain += (";" if chain else "") + f"[{cur}]{subs}[v]"
+                else:
+                    chain += ";[vz]null[v]"
+                report("Burning in captions..." if ass_path else "Adding zoom punch-ins...")
                 captioned_path = work_dir / "captioned.mp4"
-                subtitle_arg = _ffmpeg_subtitle_path_arg(ass_path)
                 _run_ffmpeg(
-                    ["ffmpeg", "-y", "-i", str(current_input),
-                     "-vf", f"subtitles='{subtitle_arg}'",
-                     "-c:a", "copy", str(captioned_path)],
-                    timeout=300, error_prefix="ffmpeg failed burning in captions",
+                    ["ffmpeg", "-y", "-i", str(current_input), "-filter_complex", chain,
+                     "-map", "[v]", "-map", "0:a?", "-c:a", "copy", str(captioned_path)],
+                    timeout=max(300, duration * 4), error_prefix="ffmpeg failed burning in captions",
                 )
                 current_input = captioned_path
 

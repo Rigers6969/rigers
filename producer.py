@@ -318,12 +318,15 @@ def produce_video(
             report("Finding background music...")
             music_path = _auto_pick_music(topic, video_dir, report)
             try:
-                from video_editor import apply_edits
+                from video_editor import apply_edits, load_look
 
+                look = load_look()  # set on the Produce page: caption style, size, zooms
                 apply_edits(
                     video_dir,
-                    add_captions=is_short,
-                    caption_style="short-center",
+                    add_captions=is_short or look["long_captions"],
+                    caption_style=look["caption_style"],
+                    caption_size=look["caption_size"],
+                    zooms=look["zooms"],
                     music_path=music_path,
                     progress=lambda m: report(f"Auto-edit: {m}"),
                 )

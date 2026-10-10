@@ -17,3 +17,4 @@ files/.cache/
 client_secret.json
 token.json
 token_analytics.json
+video_look.json

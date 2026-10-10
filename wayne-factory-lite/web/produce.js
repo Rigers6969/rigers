@@ -756,3 +756,38 @@ document.getElementById("ready-btn").addEventListener("click", async () => {
 });
 
 loadReady();
+
+
+// ---------------------------------------------------------------------
+// Look of produced videos: caption style (incl. Clip Factory's styles and
+// presets), size, zoom punch-ins - saved on the server, used on every run
+// ---------------------------------------------------------------------
+async function loadLook() {
+  try {
+    const [stylesResp, lookResp] = await Promise.all([fetch("/api/editor/caption-styles"), fetch("/api/editor/look")]);
+    const styles = (await stylesResp.json()).styles || [];
+    const look = await lookResp.json();
+    const sel = document.getElementById("look-style");
+    sel.innerHTML = styles.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join("");
+    sel.value = look.caption_style;
+    if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+    document.getElementById("look-size").value = look.caption_size;
+    document.getElementById("look-zooms").checked = !!look.zooms;
+    document.getElementById("look-long").checked = !!look.long_captions;
+  } catch (e) { /* the look row just keeps its defaults */ }
+}
+async function saveLook() {
+  await fetch("/api/editor/look", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      caption_style: document.getElementById("look-style").value,
+      caption_size: document.getElementById("look-size").value,
+      zooms: document.getElementById("look-zooms").checked,
+      long_captions: document.getElementById("look-long").checked,
+    }),
+  });
+}
+for (const id of ["look-style", "look-size", "look-zooms", "look-long"]) {
+  document.getElementById(id).addEventListener("change", saveLook);
+}
+loadLook();

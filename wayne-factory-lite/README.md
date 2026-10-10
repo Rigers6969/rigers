@@ -119,3 +119,12 @@ published only when you click - every upload costs 1,600 of your
 ~10,000 daily YouTube API units (about 6 uploads a day), so 4 Shorts per
 video would use most of it. To stop making them automatically, set
 `AUTO_SHORTS = False` in `producer.py`.
+
+## Caption styles from Clip Factory
+
+When Clip Factory is in the same folder (`../clip-factory`), the Produce and
+Edit pages also offer its caption styles (Hormozi, MrBeast, Karaoke, Box,
+Clean, Story), a caption size, zoom punch-ins on big moments, and the style
+presets saved in Clip Factory. The choice on the Produce page is saved in
+`video_look.json` and used for every video produced after it. Without Clip
+Factory next to it, only the classic styles are shown.

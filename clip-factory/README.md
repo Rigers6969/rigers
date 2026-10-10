@@ -184,6 +184,13 @@ found by real YouTube views. **Learn these 5 styles** reads each channel's
 most-viewed Short on your PC and saves its style as a preset (only the editing
 style - never their footage or audio).
 
+**In the video generator too:** Wayne Factory (port 5001) and Wayne Factory
+Lite (port 5000) use the same caption styles, zoom punch-ins and your saved
+presets. On their **Produce** page, pick the caption style (or a preset), size
+and zooms once - every video produced after that uses them. On the **Edit**
+page you can apply them to one video. Clip Factory has to stay in its folder
+next to them (it is, after the normal update).
+
 **Zoom punch-ins on big moments:** the picture jumps 15% closer for a moment on
 strong words (numbers, money, "insane", "never"...), the "super edited" look.
 

@@ -73,6 +73,17 @@
         <input id="anthropic-key" type="password" placeholder="Anthropic API key (Claude engine only)" class="hidden">
       </div>
 
+      <div class="form-row" style="margin-top:10px;" id="look-row">
+        <select id="look-style" title="Caption style for produced videos"></select>
+        <select id="look-size" title="Caption size">
+          <option value="s">Small captions</option><option value="m">Normal size</option>
+          <option value="l">Big captions</option><option value="xl">Huge captions</option>
+        </select>
+      </div>
+      <label class="radio-label" style="margin-top:8px;"><input type="checkbox" id="look-zooms"> Zoom punch-ins on big moments</label>
+      <label class="radio-label" style="margin-top:4px;"><input type="checkbox" id="look-long"> Captions on long videos too (Shorts always get them)</label>
+      <p class="hint" id="look-hint" style="margin-top:4px;">Caption styles and presets come from Clip Factory - presets you saved there show up here.</p>
+
       <button id="produce-btn" class="btn-primary" style="margin-top:16px;">Produce Video</button>
 
       <div id="pipeline-tracker" class="pipeline-tracker hidden">

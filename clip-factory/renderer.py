@@ -184,11 +184,8 @@ def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_
     chain = _base_filter(layout, W, H, video_h)[: -len("[v]")] + "[b0]"
     k = W / OUT_W  # 2 for 4K: logo and emojis grow with the picture (the captions scale by themselves)
     cur = "b0"
-    if zooms:  # punch-ins: the picture jumps 15% closer on big moments (a zoomed copy is shown at those times)
-        zw = round(W * 1.15 / 2) * 2
-        when = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in zooms)
-        chain += (f";[b0]split=2[zn][zz];[zz]scale={zw}:-2:flags=bicubic,crop={W}:{H}[zi];"
-                  f"[zn][zi]overlay=0:0:enable='{when}'[bz]")
+    if zooms:  # punch-ins: the picture jumps 15% closer on big moments
+        chain += ";" + styles.zoom_filter(W, H, zooms, "b0", "bz")
         cur = "bz"
     if wm:
         w = max(40, int(W * wm["size"])) // 2 * 2
@@ -204,16 +201,6 @@ def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_
         cur = f"p{n}"
     # captions last, on top of everything, so nothing hides what's said
     return chain + f";[{cur}]format=yuv420p{subs}[v]"
-
-
-def zoom_moments(words: list[dict], duration: float, gap: float = 2.5, hold: float = 0.7) -> list[tuple[float, float]]:
-    """When to punch in: on strong words (numbers, money, never, insane...), at least `gap` seconds apart."""
-    out, last = [], -gap
-    for w in words:
-        if w["start"] - last >= gap and styles.strong(w["text"]) and w["start"] + 0.2 < duration:
-            out.append((round(w["start"], 2), round(min(duration, w["start"] + hold), 2)))
-            last = w["start"]
-    return out[:12]
 
 
 def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H, video_h: int = 0) -> str:
@@ -387,7 +374,7 @@ def render_clip(
     cmd += [
         "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "",
                                          *OUT_SIZES.get(size, OUT_SIZES["1080"]), video_h,
-                                         zoom_moments(clip_words, duration) if zooms and layout != "post" else None)
+                                         styles.zoom_moments(clip_words, duration) if zooms and layout != "post" else None)
         + audio, "-map", "[v]", "-t", f"{duration:.3f}",
     ]
     if has_audio:

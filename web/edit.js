@@ -275,6 +275,7 @@ loadCaptionStyles();
 
 document.getElementById("captions-toggle").addEventListener("change", (e) => {
   document.getElementById("caption-style-select").classList.toggle("hidden", !e.target.checked);
+  document.getElementById("caption-size-select").classList.toggle("hidden", !e.target.checked);
 });
 
 // ---------------------------------------------------------------------
@@ -295,6 +296,8 @@ document.getElementById("apply-btn").addEventListener("click", async () => {
     body: JSON.stringify({
       add_captions: addCaptions,
       caption_style: captionStyle,
+      caption_size: document.getElementById("caption-size-select").value,
+      zooms: document.getElementById("zooms-toggle").checked,
       music_filename: selectedMusic,
     }),
   });
