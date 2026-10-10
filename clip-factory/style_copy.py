@@ -16,6 +16,7 @@ import io
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -78,9 +79,11 @@ def fetch(url: str, cookies: str = "") -> Path:
     target = downloader._impersonate_target()
     if target:
         attempts.append(dict(opts, impersonate=target))
+    if re.search(r"youtube\.com|youtu\.be", url, re.I):  # YouTube's bot check: its TV/phone players often still answer
+        attempts.append(dict(attempts[-1], extractor_args=downloader.YT_OTHER_CLIENTS))
     if cookies in downloader.COOKIE_BROWSERS:
         attempts.append(dict(attempts[-1], cookiesfrombrowser=(cookies,)))
-    last = None
+    last, note = None, ""
     for o in attempts:
         try:
             with yt_dlp.YoutubeDL(o) as ydl:
@@ -91,10 +94,19 @@ def fetch(url: str, cookies: str = "") -> Path:
             if got:
                 return got[0]
         except Exception as exc:
+            if downloader.cookie_problem(exc):
+                note = downloader.cookie_hint(cookies)
+                if last is not None:
+                    break  # keep the site's own reason as the error
             last = exc
             if not downloader._blocked(exc) and "login" not in str(exc).lower():
                 break
     msg = trends.clean_error(last) if last else "nothing to download at that link"
+    if note:
+        msg = (msg + " - " + note) if not downloader.cookie_problem(last) else note
+    elif downloader._blocked(last) if last else False:
+        msg += (" - YouTube thinks this PC is a robot after many downloads. Wait an hour and try again, or log in to YouTube "
+                "in Firefox and choose 'Firefox' under 'Download with my login'.")
     if re.search(r"instagram", url, re.I) and not cookies:
         msg += " - Instagram often needs your login: pick your browser under 'Download with my login' and try again, or upload the video instead."
     raise StyleError(f"Couldn't download the example video: {msg}")
@@ -321,15 +333,19 @@ def learn(niche: str, cookies: str = "") -> None:
     learning.update(busy=True, niche=niche, done=0, total=len(chans), errors=[], message="Starting...")
     try:
         for i, ch in enumerate(chans, start=1):
+            if i > 1:
+                time.sleep(8)  # a short pause between downloads, so YouTube doesn't take the PC for a robot
             name = ch["name"].strip()
             learning["message"] = f"Reading {name} ({i} of {len(chans)}): downloading their top Short..."
             try:
                 got = read(fetch(ch["url"], cookies))
                 save_preset(f"{group['label']} - {name}", got["settings"], ch["url"], got["summary"])
             except Exception as exc:  # one channel failing doesn't stop the others
-                learning["errors"].append(f"{name}: {str(exc)[:160]}")
+                learning["errors"].append(f"{name}: {str(exc)[:600]}")
             learning["done"] = i
         ok = learning["total"] - len(learning["errors"])
-        learning["message"] = f"Done: {ok} of {learning['total']} styles saved as presets."
+        learning["message"] = f"Done: {ok} of {learning['total']} styles saved as presets." + (
+            " For the ones that failed: click Learn again later, or open the Short, download it, and use "
+            "'or upload the example video' above, then Save as preset." if learning["errors"] else "")
     finally:
         learning["busy"] = False

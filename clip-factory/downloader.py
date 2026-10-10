@@ -118,6 +118,24 @@ def _impersonate_target():
         return None
 
 
+CHROMIUM_BROWSERS = ("chrome", "edge", "brave", "opera", "vivaldi")
+YT_OTHER_CLIENTS = {"youtube": {"player_client": ["tv", "mweb", "web_safari"]}}  # other ways YouTube serves videos
+
+
+def cookie_problem(exc: Exception) -> bool:
+    """Your browser login couldn't be read (the browser is open, or it encrypts its cookies)."""
+    return bool(re.search(r"cookie database|cookies from|dpapi|decrypt|app.?bound|could not find .*cookies", str(exc), re.I))
+
+
+def cookie_hint(browser: str) -> str:
+    name = browser.capitalize()
+    if browser in CHROMIUM_BROWSERS:
+        return (f"Your {name} login couldn't be read: {name} locks it while it's open, and new versions encrypt it so no "
+                f"other app can read it. Use Firefox instead: open youtube.com in Firefox, log in once, then choose "
+                f"'Firefox' under 'Download with my login'.")
+    return f"Your {name} login couldn't be read - close {name} completely (all windows) and try again."
+
+
 def _blocked(exc: Exception) -> bool:
     """The site refused us (not a broken link): worth trying again another way."""
     return bool(re.search(r"\b403\b|forbidden|confirm you.?re not a bot|sign in to confirm|429|too many requests", str(exc), re.I))
@@ -198,9 +216,11 @@ def _download(d: dict) -> None:
     if target and "impersonate" not in base:
         attempts.append(("disguised as a normal browser", dict(base, impersonate=target)))
     attempts.append(("at 720p", dict(attempts[-1][1], **low)))
+    if re.search(r"youtube\.com|youtu\.be", d["url"], re.I):
+        attempts.append(("another way (YouTube's TV/phone player)", dict(attempts[-1][1], extractor_args=YT_OTHER_CLIENTS)))
     if d.get("cookies"):
         attempts.append((f"with your {d['cookies'].capitalize()} login", dict(attempts[-1][1], cookiesfrombrowser=(d["cookies"],))))
-    info, path, last, tried = None, None, None, []
+    info, path, last, tried, cookie_note = None, None, None, [], ""
     for label, o in attempts:
         if label:
             d.update(message=f"The site refused the download - trying again {label}...", percent=0)
@@ -227,6 +247,9 @@ def _download(d: dict) -> None:
                 _remove_partial(temp_files)
                 d.update(status="cancelled", message="Cancelled.")
                 return
+            if cookie_problem(exc) and last is not None:
+                cookie_note = cookie_hint(d["cookies"])  # keep the real reason (the site's refusal) as the error
+                break
             last = exc
             tried.append(label or "normally")
             if not _blocked(exc):
@@ -235,7 +258,11 @@ def _download(d: dict) -> None:
             temp_files.clear()
     if last is not None:
         msg = clean_error(last)
-        if "youtube" in d["url"] and not runtimes:
+        if cookie_note:
+            msg += " - " + cookie_note
+        elif cookie_problem(last) and d.get("cookies"):
+            msg = cookie_hint(d["cookies"])
+        elif "youtube" in d["url"] and not runtimes:
             msg += " - YouTube downloads need Deno: close the app and double-click start.bat again (it installs it)."
         elif _blocked(last):
             hints = [f"Clip Factory tried {', '.join(tried)}."]

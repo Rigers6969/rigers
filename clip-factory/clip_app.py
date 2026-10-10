@@ -1891,7 +1891,7 @@ PAGE = r"""<!DOCTYPE html>
         <button id="linkDlClip">Download + make clips</button>
       </div>
       <div class="row" style="margin-top:8px"><label for="dlCookies" style="margin:0">If a site blocks the download, use my browser login:</label>
-        <select id="dlCookies" style="width:auto"><option value="">Off</option><option value="firefox">Firefox (works best)</option><option value="edge">Edge</option><option value="chrome">Chrome</option><option value="brave">Brave</option><option value="opera">Opera</option></select>
+        <select id="dlCookies" style="width:auto"><option value="">Off</option><option value="firefox">Firefox (works best)</option><option value="edge">Edge (often can't be read)</option><option value="chrome">Chrome (often can't be read)</option><option value="brave">Brave (often can't be read)</option><option value="opera">Opera (often can't be read)</option></select>
         <span class="msg" style="font-size:12px">Only used when a site refuses. Log in to YouTube/Kick in that browser first. Your login never leaves this PC.</span></div>
       <div class="msg" id="linkMsg"></div>
       <div id="downloads" style="margin-top:8px"></div>
