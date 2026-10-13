@@ -33,7 +33,7 @@ KEYS_FILE = APP_DIR / "ai_keys.json"
 
 # name: (label, API base address, default model, free?) - bases overridable for testing
 CLOUD = {
-    "gemini":     ("Gemini",     os.environ.get("CF_GEMINI_BASE", "https://generativelanguage.googleapis.com/v1beta"), "gemini-2.5-flash", True),
+    "gemini":     ("Gemini",     os.environ.get("CF_GEMINI_BASE", "https://generativelanguage.googleapis.com/v1beta"), "gemini-flash-latest", True),
     "groq":       ("Groq",       os.environ.get("CF_GROQ_BASE", "https://api.groq.com/openai/v1"), "llama-3.3-70b-versatile", True),
     "openrouter": ("OpenRouter", os.environ.get("CF_OPENROUTER_BASE", "https://openrouter.ai/api/v1"), "meta-llama/llama-3.3-70b-instruct:free", True),
     "anthropic":  ("Claude",     os.environ.get("CF_ANTHROPIC_BASE", "https://api.anthropic.com/v1"), "claude-sonnet-5-5", False),
@@ -126,6 +126,9 @@ def _check(resp: requests.Response, who: str) -> None:
     if resp.ok:
         return
     body = resp.text[:400]
+    if resp.status_code == 403 and re.search(r"project has been denied access|denied access", body, re.I):
+        raise ProviderDown(f"{who} blocked the Google project of this key (\"denied access\") - make a key with another Google "
+                           "account at aistudio.google.com, or use a free Groq key instead")
     if resp.status_code in (401, 403):
         raise ProviderDown(f"{who} didn't accept the key - check it in AI engines")
     if resp.status_code == 402 or re.search(r"insufficient_quota|credit balance|billing|no credits", body, re.I):

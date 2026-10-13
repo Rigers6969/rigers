@@ -574,8 +574,11 @@ def upload_item(item: dict, test: bool = False, progress=None) -> dict:
             status["publishAt"] = _rfc3339_utc(item["when"])  # YouTube makes it public at that moment
         else:
             status["privacyStatus"] = "public"
-    title = item["title"] + (" #Shorts" if item["kind"] == "short" and "#shorts" not in item["title"].lower() and len(item["title"]) < 90 else "")
-    body = {"snippet": {"title": title[:100], "description": item["description"][:4900], "tags": item["tags"],
+    title = item["title"]  # no "#Shorts" in the title: YouTube knows a Short by its shape, and the title stays clean
+    description = item["description"]
+    if item["kind"] == "short" and "#shorts" not in description.lower():
+        description = (description + "\n\n#Shorts").strip()
+    body = {"snippet": {"title": title[:100], "description": description[:4900], "tags": item["tags"],
                         "categoryId": "24" if item["kind"] == "short" else "27"}, "status": status}
     try:
         req = yt.videos().insert(part="snippet,status", body=body,

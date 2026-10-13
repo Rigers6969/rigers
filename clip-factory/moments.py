@@ -124,16 +124,57 @@ DANGLING = {"and", "but", "or", "so", "the", "a", "an", "to", "of", "in", "on", 
             "about", "my", "your", "his", "her", "their", "our", "is", "was", "i", "you", "it", "because", "if"}
 
 
+FILLER = re.compile(r"^(?:(?:and|so|but|now|well|like|okay|ok|yeah|yes|no|um+|uh+|oh|i mean|you know|because|then|also|"
+                    r"actually|basically|literally|honestly|right|look|listen|see)\b[\s,]*)+", re.I)
+HOOK_WORDS = {"never", "always", "everyone", "nobody", "secret", "truth", "lie", "lied", "fake", "fraud", "scam", "stole",
+              "billion", "million", "money", "rich", "broke", "fired", "arrested", "prison", "jail", "dead", "died", "crazy",
+              "insane", "biggest", "worst", "best", "first", "last", "only", "why", "how", "real", "banned", "illegal"}
+SMALL_TITLE_WORDS = {"a", "an", "the", "and", "but", "or", "of", "in", "on", "at", "to", "for", "with", "by", "from", "as"}
+
+
+def _hook_score(sentence: str, position: int) -> float:
+    words = sentence.split()
+    bare = [re.sub(r"[^\w$%']", "", w).lower() for w in words]
+    score = 4.0 * bool(re.search(r"[\d$%€£]", sentence))
+    score += 2.0 * sum(b in HOOK_WORDS for b in bare)
+    score += 1.5 * sum(1 for i, w in enumerate(words) if i and w[:1].isupper() and bare[i] not in DANGLING)  # names
+    score += 1.0 if sentence.rstrip().endswith(("?", "!")) else 0.0
+    score -= 2.0 if len(words) < 5 else 0.0
+    score -= 0.4 * position  # early sentences open the clip - a little preferred
+    return score
+
+
+def _title_case(words: list[str]) -> str:
+    out = []
+    for i, w in enumerate(words):
+        if w.isupper() and len(w) > 1 or re.search(r"\d", w):
+            out.append(w)  # CEO, $8, 2008
+        elif i and w.lower() in SMALL_TITLE_WORDS:
+            out.append(w.lower())
+        else:
+            out.append(w[:1].upper() + w[1:])
+    return " ".join(out)
+
+
 def heuristic_title(text: str) -> str:
-    """The clip's opening words, cut at a natural break and never ending
-    on a dangling 'and', 'the', 'about'..."""
-    first = re.split(r"(?<=[.!?])\s", text.strip(), maxsplit=1)[0]
-    head = re.split(r"[,;:]", first, maxsplit=1)[0]
-    source = (head if len(head.split()) >= 3 else first).split()
-    words = source[:7]
-    while words != source and len(words) > 2 and words[-1].lower().strip(".,!?;:'\"") in DANGLING:
+    """Without an AI: the clip's strongest sentence (numbers, money, names, strong words), without filler like
+    "and / so / now" at the start, shortened at a natural break and written like a title."""
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text.strip()) if x.strip()][:8]
+    if not sentences:
+        return "Watch this"
+    best = max(range(len(sentences)), key=lambda i: _hook_score(sentences[i], i))
+    sentence = FILLER.sub("", sentences[best]).strip(" ,;:-")
+    head = re.split(r"[,;:]", sentence, maxsplit=1)[0]
+    source = sentence.split() if len(sentence.split()) <= 10 else (head if len(head.split()) >= 4 else sentence).split()
+    words = source[:10] if len(source) <= 10 else source[:8]
+    while len(words) < len(source) and len(words) < 11 and source[len(words)][:1].isupper():
+        words.append(source[len(words)])  # never cut a name in half ("Elon" -> "Elon Musk")
+    while len(words) > 3 and words[-1].lower().strip(".,!?;:'\"") in DANGLING:
         words.pop()
-    return " ".join(words).rstrip(",;:") or "Watch this"
+    title = _title_case(words).rstrip(",;:.")
+    if words != source and not title.endswith(("?", "!")):
+        title = title.rstrip(".")
+    return title if len(words) >= 3 else "Watch this"
 
 
 def _clean_title(title) -> str:
