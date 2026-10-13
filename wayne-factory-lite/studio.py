@@ -180,9 +180,28 @@ class OllamaScriptWriter(BaseScriptWriter):
         self.host = host.rstrip("/")
         self.request_timeout = request_timeout
 
+    def _installed_model(self) -> str:
+        """The chosen model if Ollama has it, else one it does have (llama first) - instead of failing."""
+        import re
+        import requests
+
+        try:
+            names = [m.get("name", "") for m in requests.get(f"{self.host}/api/tags", timeout=5).json().get("models", [])]
+        except Exception as exc:
+            raise RuntimeError(f"Ollama isn't running at {self.host} - start it with start.bat (or run: ollama serve)") from exc
+        if self.model in names or any(n.split(":")[0] == self.model for n in names):
+            return self.model
+        chat = [n for n in names if not re.search(r"embed|vision|whisper", n, re.I)]
+        if not chat:
+            raise RuntimeError("Ollama has no AI model yet - start the app with start.bat (it downloads one), or run: ollama pull llama3.2")
+        return next((n for pref in ("llama3.2", "llama3.1", "llama3", "qwen", "gemma", "mistral", "phi")
+                     for n in chat if n.startswith(pref)), chat[0])
+
     def _call_model(self, prompt: str, max_tokens: int) -> str:
         import requests
 
+        if not getattr(self, "_checked", False):
+            self.model, self._checked = self._installed_model(), True
         resp = requests.post(
             f"{self.host}/api/generate",
             json={

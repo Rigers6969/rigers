@@ -33,6 +33,7 @@ import moments
 import permissions
 import policy
 import post
+import commentary
 import style_copy
 import style_library
 import publisher
@@ -55,7 +56,7 @@ DEFAULT_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 if not DEFAULT_HOST.startswith("http"):
     DEFAULT_HOST = "http://" + DEFAULT_HOST
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".flv", ".wmv", ".ts"}
-RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[a-z0-9-]{0,40}$")
+RUN_ID_RE = re.compile(r"^(\d{8}-\d{6}-[a-z0-9-]{0,40}|[a-z0-9][a-z0-9-]{0,40})$")  # old runs: date-name; now: one folder per video
 CLIP_FILE_RE = re.compile(r"^clip_\d{3}(_cover|_thumb)?\.(mp4|jpg)$")
 MAX_CLIPS = 100
 
@@ -250,10 +251,14 @@ def run_pipeline(run: dict) -> None:
         if blocked:
             run["policy_note"] = (f"{blocked} moment{'s' if blocked != 1 else ''} broke YouTube's rules "
                                   f"(slurs, harassment or sexual content) and {'were' if blocked != 1 else 'was'} skipped.")
+        done_spans = [(c["start"], c["end"]) for c in run["clips"]]  # moments clipped before from this video
+        if done_spans:
+            allowed = [c for c in allowed if not any(c["start"] < b and c["end"] > a for a, b in done_spans)]
         picks = moments.pick_best(allowed, s["count"])
+        base = max((c["n"] for c in run["clips"]), default=0)  # new clips are numbered after the old ones
         for c in picks:  # campaign: every title names who it must, and never who it mustn't
             c["title"] = campaign.fix_title(c["title"], s.get("c_must") or [], s.get("c_ban") or [])
-        run["planned"] = len(picks)
+        run["planned"] = base + len(picks)  # clip numbers go up to this (old clips of this video included)
         if len(picks) < s["count"]:
             run["note"] = (f"This video only has room for {len(picks)} separate clips of {s['min_len']}-{s['max_len']}s "
                            f"(they never overlap), so you'll get {len(picks)} instead of {s['count']}.")
@@ -279,7 +284,7 @@ def run_pipeline(run: dict) -> None:
                     done[i] = t
             by_free = sum(1 for x in done if x) - by_ai
             k = 0
-            for n, lines in enumerate(per_clip, start=1):
+            for n, lines in enumerate(per_clip, start=base + 1):
                 caption_sets[n] = translate.timed_words(lines, done[k:k + len(lines)])
                 k += len(lines)
             missing = sum(1 for x in done if x is None)
@@ -312,7 +317,7 @@ def run_pipeline(run: dict) -> None:
         src = upload_text.source_for(source)
         texts: dict[int, dict] = {}
         texts_lock = threading.Lock()
-        items = [{"n": n, "title": c["title"], "text": c["text"]} for n, c in enumerate(picks, start=1)]
+        items = [{"n": n, "title": c["title"], "text": c["text"]} for n, c in enumerate(picks, start=base + 1)]
 
         def write_texts():
             for k in range(0, len(items), 10):
@@ -331,13 +336,22 @@ def run_pipeline(run: dict) -> None:
         if brain:
             threading.Thread(target=write_texts, daemon=True).start()
 
+        # commentary intro: the AI writes one hook line per clip, the free voice reads it before the clip
+        hook_lines: dict[int, str] = {}
+        if s.get("voiceover"):
+            update(message="Writing the narrator's lines...")
+            hook_lines = commentary.write_lines(brain, [{"n": n, "title": c["title"], "text": c["text"]}
+                                                        for n, c in enumerate(picks, start=base + 1)], s["kind"],
+                                                translate.LANGS.get(s.get("lang", ""), ""))
+        voice = commentary.LANG_VOICES.get(s.get("lang", ""), s.get("voice", commentary.DEFAULT_VOICE))
+
         # 3. render, best first (50-100%) - each clip is downloadable as soon as it's finished
         duration = info["duration"] or (words[-1]["end"] + 1)
         failures_in_a_row = 0
-        for n, c in enumerate(picks, start=1):
+        for n, c in enumerate(picks, start=base + 1):
             if cancelled():
                 raise transcriber.Cancelled()
-            update(message=f"Cutting clip {n} of {len(picks)}...", percent=50 + 50 * (n - 1) / len(picks))
+            update(message=f"Cutting clip {n - base} of {len(picks)}...", percent=50 + 50 * (n - base - 1) / len(picks))
             start = max(0.0, c["start"] - 0.15)
             end = min(duration, c["end"] + 0.4)
             if end - start < 2:  # a moment past the end of the video (can't be cut) - skip it
@@ -345,9 +359,18 @@ def run_pipeline(run: dict) -> None:
                 continue
             name = f"clip_{n:03d}"
             began = time.time()
+            intro, said = None, None
+            if s.get("voiceover"):
+                said = hook_lines.get(n) or commentary.fallback_line(c["title"])
+                try:
+                    intro = commentary.speak(said, run_dir / f"{name}_voice.mp3", voice)
+                except commentary.VoiceError as exc:
+                    said = None
+                    if "voice" not in (run["warning"] or ""):
+                        run["warning"] = " ".join(filter(None, [run["warning"], f"No narrator voice: {exc}"]))
             story = None
             if s["layout"] == "post":  # the story text under the video
-                update(message=f"Writing the text for clip {n} of {len(picks)}...")
+                update(message=f"Writing the text for clip {n - base} of {len(picks)}...")
                 paras = post.write(brain, c["text"], c["title"], s["kind"], s.get("lang", ""),
                                    campaign.ai_hint((s.get("c_focus") or []) + (s.get("focus") or []), s.get("c_ban") or []))
                 story = {"paragraphs": paras or post.fallback("" if s.get("lang") else c["text"], c["title"]),
@@ -365,17 +388,19 @@ def run_pipeline(run: dict) -> None:
                     gameplay=games.next(end - start) if games else None,
                     caption_pos=s.get("caption_pos", "middle"), emojis=s.get("emojis", False),
                     music=tunes.next(end - start, MUSIC_VOLUMES[s.get("music_vol", "low")]) if tunes else None,
-                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"), post=story, cap_size=s.get("cap_size", "m"), zooms=s.get("zooms", False),
+                    caption_words=caption_sets.get(n), size=s.get("out_size", "1080"), post=story, cap_size=s.get("cap_size", "m"), zooms=s.get("zooms", False), intro=intro,
                 )
             except renderer.Cancelled:
                 raise transcriber.Cancelled()
             except renderer.RenderError as exc:
+                (run_dir / f"{name}_voice.mp3").unlink(missing_ok=True)
                 failures_in_a_row += 1
                 run["failed"].append({"n": n, "error": str(exc)[:500]})
                 if failures_in_a_row >= 3:
                     raise
                 continue
             failures_in_a_row = 0
+            (run_dir / f"{name}_voice.mp3").unlink(missing_ok=True)
             thumbs = _make_thumbs(source, start, end, c["title"], run_dir, name)
             run["clips"].append({
                 "n": n, "file": f"{name}.mp4",
@@ -384,7 +409,7 @@ def run_pipeline(run: dict) -> None:
                 "start": round(start, 2), "end": round(end, 2), "length": round(end - start, 1),
                 "at": f"{fmt_time(start)} - {fmt_time(end)}", "text": c["text"],
                 "download_name": f"{n:03d} - {safe_filename(c['title'])}.mp4",
-                "render_seconds": round(time.time() - began, 1),
+                "render_seconds": round(time.time() - began, 1), "narration": said,
                 "policy": _clip_policy(c["policy"], bleeped),
                 "upload": None, **thumbs,
             })
@@ -396,7 +421,7 @@ def run_pipeline(run: dict) -> None:
                 run["clips"][-1]["upload"] = texts.get(n) or campaign.fix_upload(fb, s.get("c_must") or [], s.get("c_ban") or [], s.get("c_tags"))
             save_run(run)
 
-        made = len(run["clips"])
+        made = len(run["clips"]) - run.get("earlier", 0)
         run["status"] = "done"
         try:
             alerts.clips_done(run)
@@ -405,7 +430,7 @@ def run_pipeline(run: dict) -> None:
         update("done", f"Done - {made} clip{'s' if made != 1 else ''} ready.", 100)
     except transcriber.Cancelled:
         run["status"] = "cancelled"
-        update("done", f"Stopped - {len(run['clips'])} clip(s) were finished before that.")
+        update("done", f"Stopped - {len(run['clips']) - run.get('earlier', 0)} clip(s) were finished before that.")
     except (renderer.RenderError, transcriber.TranscriptionError) as exc:
         run["status"] = "error"
         run["error"] = str(exc)
@@ -928,6 +953,8 @@ def parse_settings(data: dict) -> dict:
         "out_size": data.get("out_size") if data.get("out_size") in renderer.OUT_SIZES else "1080",
         "cap_size": data.get("cap_size") if data.get("cap_size") in ("s", "m", "l", "xl") else "m",
         "zooms": bool(data.get("zooms", False)),
+        "voiceover": bool(data.get("voiceover", False)),
+        "voice": data.get("voice") if data.get("voice") in commentary.VOICES else commentary.DEFAULT_VOICE,
         "focus": campaign.words(str(data.get("focus") or "")),
         "post_cta": re.sub(r"[\r\n]+", " ", str(data.get("post_cta") or "")).strip()[:140],
         "music": str(data.get("music") or "") if (data.get("music") == "mix" or any(p.name == data.get("music") for p in _music_files())) else "",
@@ -943,16 +970,17 @@ def start_run(source: Path, settings: dict) -> str:
     with state_lock:
         if active_run["id"]:
             raise StartError("Another video is still being cut - wait for it to finish or press Stop.", 409)
-        run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(source.stem)}"
-        while (OUTPUT_DIR / run_id).exists():
-            time.sleep(1)
-            run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(source.stem)}"
-        (OUTPUT_DIR / run_id).mkdir(parents=True)
+        # one folder per video: making clips from the same video again adds them to its folder
+        run_id = slugify(source.stem)
+        (OUTPUT_DIR / run_id).mkdir(parents=True, exist_ok=True)
+        runs.pop(run_id, None)
+        earlier = load_run(run_id) or {}
         active_run["id"] = run_id
+    old_clips = [c for c in earlier.get("clips") or [] if (OUTPUT_DIR / run_id / c.get("file", "")).exists()]
     run = {
         "id": run_id, "video": source.name, "source": str(source.resolve()), "settings": settings,
         "status": "running", "stage": "start", "message": "Starting...", "percent": 0,
-        "clips": [], "planned": None, "created": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "clips": old_clips, "earlier": len(old_clips), "planned": None, "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         # every key exists from the start: the page reads this dict while the job thread fills it in
         "cancel": False, "warning": None, "note": None, "error": None, "failed": [], "stats": None,
         "video_duration": None, "finished_at": None, "engines": {}, "policy_note": None,
@@ -2308,6 +2336,10 @@ PAGE = r"""<!DOCTYPE html>
       <label class="check" style="margin:0"><input type="checkbox" id="emojis" checked> Emoji pops (&#128514; &#128293; &#128176; when those words are said)</label>
     </div>
     <div class="row" style="margin:6px 0">
+      <label class="check" style="margin:0"><input type="checkbox" id="voiceover"> &#127897; Narrator intro: a free AI voice says a hook line before the clip ("This man put Jack in his place.")</label>
+      <select id="voice" style="width:auto"><option value="en-US-AndrewNeural">Andrew (US, male - calm narrator)</option><option value="en-US-BrianNeural">Brian (US, male - casual)</option><option value="en-US-ChristopherNeural">Christopher (US, male - deep)</option><option value="en-US-AvaNeural">Ava (US, female)</option><option value="en-US-EmmaNeural">Emma (US, female - friendly)</option><option value="en-GB-RyanNeural">Ryan (British, male)</option></select>
+    </div>
+    <div class="row" style="margin:6px 0">
       <label for="outSize" style="margin:0">Clip quality:</label>
       <select id="outSize" style="width:auto"><option value="2160" selected>4K (2160x3840) - sharpest on YouTube, about 3x slower</option><option value="1440">1440p (1440x2560) - sharper, about 2x slower</option><option value="1080">1080p (1080x1920) - fastest</option></select>
       <span class="msg" style="font-size:12px">Download in 4K too (Find viral videos) for real 4K detail.</span>
@@ -2431,7 +2463,7 @@ const store = {
   async load() { try { const r = await fetch("/api/prefs"); if (r.ok) this.cache = await r.json(); } catch (e) {} },
 };
 const SETTINGS = ["channelName", "kind", "count", "minLen", "maxLen", "layout", "captions", "whisper", "host", "useAi", "showTitle", "safeMode", "bleep",
-  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize", "postCta", "capSize", "zooms", "focusWho", "styleUrl"];
+  "campOn", "cMust", "cBan", "cFocus", "cTags", "wmPos", "wmSize", "wmOpacity", "gpSel", "quality", "lang", "dlCookies", "capPos", "emojis", "music", "musicVol", "outSize", "postCta", "capSize", "zooms", "focusWho", "styleUrl", "voiceover", "voice"];
 
 let currentRun = null, pollTimer = null, shown = new Set();
 
@@ -2533,7 +2565,7 @@ function clipSettings() {
     safe_mode: $("safeMode").checked, bleep: $("bleep").checked, kind: $("kind").value, channel_name: $("channelName").value,
     gameplay: $("gpSel").value, lang: $("lang").value,
     caption_pos: $("capPos").value, emojis: $("emojis").checked, music: $("music").value, music_vol: $("musicVol").value, out_size: $("outSize").value, post_cta: $("postCta").value, cap_size: $("capSize").value,
-    zooms: $("zooms").checked, focus: $("focusWho").value,
+    zooms: $("zooms").checked, focus: $("focusWho").value, voiceover: $("voiceover").checked, voice: $("voice").value,
     ...($("campOn").checked ? { c_must: $("cMust").value, c_ban: $("cBan").value, c_focus: $("cFocus").value, c_tags: $("cTags").value,
       wm: $("wm").value, wm_pos: $("wmPos").value, wm_size: +$("wmSize").value, wm_opacity: +$("wmOpacity").value } : {}),
   };

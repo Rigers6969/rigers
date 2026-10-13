@@ -177,11 +177,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_input: int = 1,
                   pops: list | None = None, fonts: str = "", W: int = OUT_W, H: int = OUT_H, video_h: int = 0,
-                  zooms: list | None = None) -> str:
+                  zooms: list | None = None, intro: float = 0.0) -> str:
     """wm: {"size": share of the width, "opacity": 0-1, "y": centre as share of the height} - input wm_input is the logo.
     pops: [(input, start, end, x, y)] emoji pictures. The gameplay layout's second video is input 1."""
     subs = (f",subtitles={ass_name}" + (f":fontsdir={fonts}" if fonts else "")) if ass_name else ""
-    chain = _base_filter(layout, W, H, video_h)[: -len("[v]")] + "[b0]"
+    base = _base_filter(layout, W, H, video_h)
+    if intro:  # the clip's first picture stands still while the narrator speaks, then it plays
+        n = base.count("[0:v]")
+        labels = [f"[iv{i}]" for i in range(n)]
+        pre = f"[0:v]tpad=start_duration={intro:.2f}:start_mode=clone" + (f",split={n}" if n > 1 else "") + "".join(labels) + ";"
+        for lab in labels:
+            base = base.replace("[0:v]", lab, 1)
+        base = pre + base
+    chain = base[: -len("[v]")] + "[b0]"
     k = W / OUT_W  # 2 for 4K: logo and emojis grow with the picture (the captions scale by themselves)
     cur = "b0"
     if zooms:  # punch-ins: the picture jumps 15% closer on big moments
@@ -244,25 +252,41 @@ def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H, video_h: int = 0) 
 
 
 def _audio_filter(mute: list[tuple[float, float]], music_input: int | None = None, music_volume: float = 0.18,
-                  duration: float = 0.0) -> str:
-    """Silences the given (start, end) stretches - the "bleep" - and mixes in background music that gets
-    quieter whenever someone speaks (ducking). Output label [a] (or nothing to change)."""
-    if not mute and music_input is None:
+                  duration: float = 0.0, delay: float = 0.0, narration_input: int | None = None,
+                  has_audio: bool = True) -> str:
+    """Silences the given (start, end) stretches - the "bleep" -, puts the narrator's intro line in front (the clip's
+    own sound starts `delay` seconds later), and mixes in background music that gets quieter whenever someone
+    speaks (ducking). Output label [a] (or nothing to change)."""
+    if not mute and music_input is None and not delay and narration_input is None:
         return ""
-    speech = "[0:a:0]"
-    out = ""
-    if mute:
-        when = "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in mute)
-        out += f";[0:a:0]volume=enable='{when}':volume=0" + ("[sp]" if music_input is not None else "[a]")
-        speech = "[sp]"
+    parts, label = [], None
+    if has_audio:
+        chain = "[0:a:0]aformat=sample_rates=44100:channel_layouts=stereo"
+        if delay:
+            chain += f",adelay={int(delay * 1000)}:all=1"
+        if mute:
+            chain += ",volume=enable='" + "+".join(f"between(t,{a:.2f},{b:.2f})" for a, b in mute) + "':volume=0"
+        parts.append(chain + "[sp0]")
+        label = "sp0"
+    if narration_input is not None:
+        parts.append(f"[{narration_input}:a]aformat=sample_rates=44100:channel_layouts=stereo,adelay=100:all=1,volume=1.4[nar]")
+        if label:
+            parts.append(f"[{label}][nar]amix=inputs=2:duration=longest:normalize=0[sp1]")
+            label = "sp1"
+        else:
+            label = "nar"
+    if label is None:
+        return ""
     if music_input is not None:
         fade_out = max(0.0, duration - 1.2)
-        out += (f";{speech}asplit=2[s1][s2];"
-                f"[{music_input}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume={music_volume:.2f},"
-                f"afade=t=in:d=0.6,afade=t=out:st={fade_out:.2f}:d=1.2[mu];"
-                f"[mu][s2]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=350[duck];"
-                f"[s1][duck]amix=inputs=2:duration=first:normalize=0[a]")
-    return out
+        parts.append(f"[{label}]asplit=2[s1][s2];"
+                     f"[{music_input}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume={music_volume:.2f},"
+                     f"afade=t=in:d=0.6,afade=t=out:st={fade_out:.2f}:d=1.2[mu];"
+                     f"[mu][s2]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=350[duck];"
+                     f"[s1][duck]amix=inputs=2:duration=first:normalize=0[a]")
+    else:
+        parts.append(f"[{label}]anull[a]")
+    return ";" + ";".join(parts)
 
 
 def _run(cmd: list[str], cwd: Path, cancelled: Callable[[], bool], timeout: float) -> None:
@@ -298,13 +322,14 @@ def render_clip(
     has_audio: bool = True, cancelled: Callable[[], bool] = lambda: False, bleep: bool = False,
     watermark: dict | None = None, gameplay: dict | None = None, caption_words: list[dict] | None = None,
     caption_pos: str = "middle", emojis: bool = False, music: dict | None = None, size: str = "1080",
-    post: dict | None = None, cap_size: str = "m", zooms: bool = False,
+    post: dict | None = None, cap_size: str = "m", zooms: bool = False, intro: dict | None = None,
 ) -> int:
     """words: the whole video's words - the ones inside start..end are used.
     bleep: mute swear words and show them as F*** in the captions.
     size: "1080", "1440" or "2160" (4K) - the width of the finished clip, e.g. 4K = 2160x3840.
     post: the text post layout's text, {"paragraphs": [...], "ending": "..."} (key phrases in **stars**).
     zooms: zoom punch-ins on the big moments (the "super edited" look).
+    intro: the narrator's hook line said before the clip ({"path": mp3, "duration", "words"} from commentary.speak).
     Returns how many words were bleeped."""
     duration = end - start
     out_dir = out_path.parent
@@ -323,6 +348,14 @@ def render_clip(
             {"start": max(0.0, w["start"] - start), "end": min(duration, w["end"] - start), "text": w["text"]}
             for w in caption_words if w["start"] >= start - 0.05 and w["start"] < end
         ]
+    lead = 0.0
+    if intro:  # everything of the clip moves back by the narrator's intro; its words get captions too
+        lead = round(float(intro["duration"]) + 0.35, 2)
+        clip_words = [{"start": w["start"] + 0.1, "end": w["end"] + 0.1, "text": w["text"]} for w in intro.get("words") or []] + \
+                     [dict(w, start=w["start"] + lead, end=w["end"] + lead) for w in clip_words]
+        mute = [(a + lead, b + lead) for a, b in mute]
+    clip_len = duration  # the source part
+    duration = clip_len + lead  # the finished clip
     video_h = 0
     if layout == "post":  # the video keeps its shape across the top; the story text goes under it
         try:
@@ -343,7 +376,7 @@ def render_clip(
     tmp_name = out_path.stem + ".part.mp4"
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(source.resolve()),
+        "-ss", f"{start:.3f}", "-t", f"{clip_len:.3f}", "-i", str(source.resolve()),
     ]
     if layout == "gameplay":
         if not gameplay:
@@ -370,14 +403,23 @@ def render_clip(
         cmd += ["-stream_loop", "-1", "-ss", f"{music.get('offset', 0):.2f}", "-i", str(Path(music["path"]).resolve())]
         music_input = n_in
         n_in += 1
-    audio = _audio_filter(mute if has_audio else [], music_input, music.get("volume", 0.18) if music else 0.18, duration)
+    nar_input = None
+    if intro:
+        cmd += ["-i", str(Path(intro["path"]).resolve())]
+        nar_input = n_in
+        n_in += 1
+    audio = _audio_filter(mute if has_audio else [], music_input, music.get("volume", 0.18) if music else 0.18, duration,
+                          lead, nar_input, has_audio)
+    zoom_list = styles.zoom_moments(clip_words, duration) if zooms and layout != "post" else []
+    if intro and layout != "post":  # the frozen picture zooms in while the narrator talks
+        zoom_list = [(0.0, round(lead - 0.05, 2))] + [z for z in zoom_list if z[0] >= lead]
     cmd += [
         "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "",
                                          *OUT_SIZES.get(size, OUT_SIZES["1080"]), video_h,
-                                         styles.zoom_moments(clip_words, duration) if zooms and layout != "post" else None)
+                                         zoom_list or None, lead)
         + audio, "-map", "[v]", "-t", f"{duration:.3f}",
     ]
-    if has_audio:
+    if has_audio or audio:
         cmd += ["-map", "[a]" if audio else "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "44100"]
     big = size in ("1440", "2160")
     cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", "30", "-pix_fmt", "yuv420p",

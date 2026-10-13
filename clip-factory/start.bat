@@ -3,10 +3,10 @@ cd /d "%~dp0"
 title Clip Factory
 where python >nul 2>&1 || (echo Python is not installed - get it from python.org and tick "Add python.exe to PATH". & pause & exit /b)
 where ffmpeg >nul 2>&1 || echo WARNING: ffmpeg was not found - clips cannot be cut until it is installed. See README.md.
-if not exist ".installed-v5" (
+if not exist ".installed-v6" (
   echo Installing what Clip Factory needs, this takes a minute...
   python -m pip install -r requirements.txt || (echo Install failed - check your internet and run start.bat again. & pause & exit /b)
-  echo ok> .installed-v5
+  echo ok> .installed-v6
 )
 rem YouTube downloads need a JavaScript runtime - install Deno once if there's none
 where deno >nul 2>&1 && goto jsok
@@ -19,6 +19,27 @@ winget install --id DenoLand.Deno -e --accept-source-agreements --accept-package
 rem YouTube changes often - keep the downloader up to date
 echo Checking for downloader updates...
 python -m pip install -U -q "yt-dlp[default,curl-cffi]" >nul 2>&1
+
+rem Ollama: the free AI on this PC - installed once, started if it isn't running, and a small fast model fetched once.
+rem To never use it, create an empty file called no-ollama.txt in this folder.
+if exist "no-ollama.txt" goto ollamadone
+if exist "%LOCALAPPDATA%\Programs\Ollama\ollama.exe" set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Ollama"
+where ollama >nul 2>&1 && goto ollamahave
+echo Installing Ollama - the free AI that runs on this PC. One time, a few minutes...
+winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Ollama"
+where ollama >nul 2>&1 || goto ollamadone
+:ollamahave
+powershell -NoProfile -Command "try { $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', 11434); $c.Close(); exit 0 } catch { exit 1 }"
+if not errorlevel 1 goto ollamaup
+echo Starting Ollama...
+start "Ollama - the AI on this PC - leave open" /min ollama serve
+timeout /t 5 >nul
+:ollamaup
+ollama list 2>nul | findstr /r /c:"^[a-z]" | findstr /v /c:"NAME" >nul && goto ollamadone
+echo Getting a small fast AI model for this PC - about 2 GB, one time...
+ollama pull llama3.2
+:ollamadone
 
 rem OmniRoute: a free AI router (many free AIs behind one address) - install once, start it if it isn't running.
 rem To never use it, create an empty file called no-omniroute.txt in this folder.

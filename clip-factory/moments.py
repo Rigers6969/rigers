@@ -169,7 +169,7 @@ def heuristic_title(text: str) -> str:
     words = source[:10] if len(source) <= 10 else source[:8]
     while len(words) < len(source) and len(words) < 11 and source[len(words)][:1].isupper():
         words.append(source[len(words)])  # never cut a name in half ("Elon" -> "Elon Musk")
-    while len(words) > 3 and words[-1].lower().strip(".,!?;:'\"") in DANGLING:
+    while len(words) < len(source) and len(words) > 3 and words[-1].lower().strip(".,!?;:'\"") in DANGLING:
         words.pop()
     title = _title_case(words).rstrip(",;:.")
     if words != source and not title.endswith(("?", "!")):
@@ -200,8 +200,12 @@ def check_ollama(host: str, model: str, timeout: float = 5) -> str:
     for name in names:
         if name.split(":")[0] == model.split(":")[0] and (":" not in model or name == model):
             return name
-    installed = ", ".join(names) or "none"
-    raise OllamaUnavailable(f"The model '{model}' isn't installed (installed: {installed}) - run: ollama pull {model}")
+    chat = [n for n in names if not re.search(r"embed|vision|whisper", n, re.I)]
+    if chat:  # the chosen model isn't there: use one that is (llama first), instead of failing
+        return next((n for pref in ("llama3.2", "llama3.1", "llama3", "qwen", "gemma", "mistral", "phi")
+                     for n in chat if n.startswith(pref)), chat[0])
+    raise OllamaUnavailable("Ollama has no AI model yet - close the app and start it again with start.bat (it downloads one), "
+                            "or run: ollama pull llama3.2")
 
 
 def list_models(host: str) -> list[str]:

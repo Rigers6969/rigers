@@ -14,6 +14,12 @@ much faster (see **AI engines** below).
 
 ## Start it
 
+`start.bat` also starts **Ollama** (the free AI on this PC): it installs it
+the first time and downloads a small, fast model (`llama3.2`, about 2 GB) if
+there is none. If the chosen model isn't installed, the app uses one that is.
+To never use Ollama, create an empty file called `no-ollama.txt`.
+
+
 Double-click **`start.bat`**. The page opens at http://localhost:5003.
 
 **Get the newest version:** double-click **`update.bat`**. It downloads the
@@ -190,6 +196,17 @@ presets. On their **Produce** page, pick the caption style (or a preset), size
 and zooms once - every video produced after that uses them. On the **Edit**
 page you can apply them to one video. Clip Factory has to stay in its folder
 next to them (it is, after the normal update).
+
+**Narrator intro:** tick **Narrator intro** (under Captions) and choose a
+voice. Before each clip, a free AI voice (Microsoft's neural voices, no key
+needed) says one hook line the AI wrote for it - "This man put Jack in his
+place." - while the first picture stands still and zooms in, with captions;
+then the clip plays. Without an AI, the narrator reads the clip's title.
+Clips with captions in another language get a narrator in that language.
+
+**One folder per video:** every video's clips are in `output/<video name>/`.
+Making clips from the same video again adds the new clips to that folder,
+numbered after the old ones, and skips the moments you already clipped.
 
 **Zoom punch-ins on big moments:** the picture jumps 15% closer for a moment on
 strong words (numbers, money, "insane", "never"...), the "super edited" look.
