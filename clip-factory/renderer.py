@@ -449,7 +449,8 @@ PREVIEW_POST = {"paragraphs": ["This guy **paid a million dollars** for somethin
 
 
 def preview_image(style: str, layout: str, position: str, out_png: Path, work_dir: Path,
-                  source: Path | None = None, post: dict | None = None, cap_size: str = "m") -> Path:
+                  source: Path | None = None, post: dict | None = None, cap_size: str = "m",
+                  title: str = "Your hook title is here") -> Path:
     """A still of how the captions look: a short sample clip is made with the real settings and one frame is kept.
     On the chosen video when there is one, else on a plain background."""
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -472,7 +473,7 @@ def preview_image(style: str, layout: str, position: str, out_png: Path, work_di
         t += 0.3
     shown_at = words[6]["start"] + 0.12  # just after "million": a key word is on screen in every style
     clip = work_dir / "preview.mp4"
-    render_clip(source, start, shown_at + 1.0, words, "Your hook title is here", layout, style, clip,
+    render_clip(source, start, shown_at + 1.0, words, title, layout, style, clip,
                 work_dir / "preview_poster.jpg", has_audio=False, caption_pos=position, emojis=False, post=post or PREVIEW_POST, cap_size=cap_size)
     _run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{shown_at - start:.2f}", "-i", clip.name, "-frames:v", "1",
           "-vf", "scale=540:-2", str(out_png.resolve())], work_dir, lambda: False, timeout=60)
