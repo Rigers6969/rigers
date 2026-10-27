@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+<link rel="stylesheet" href="news.css">
+<style>
+  .r-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .r-tab{padding:8px 14px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;border-radius:2px}
+  .r-tab.on{border-color:var(--gold);color:var(--gold)}
+  .topic{background:var(--panel);border:1px solid var(--border);border-radius:2px;padding:16px 20px;margin-bottom:12px}
+  .topic:hover{border-color:var(--gold)}
+  .topic-head{display:flex;gap:14px;align-items:flex-start;justify-content:space-between}
+  .topic-score{font-size:22px;font-weight:600;color:var(--gold);min-width:52px;text-align:right}
+  .topic-title{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;line-height:1.35}
+  .topic-meta{font-size:12px;color:var(--text-dim);margin-top:6px}
+  .topic-angle{font-size:13.5px;margin-top:8px}
+  .topic-yt{font-size:12.5px;margin-top:6px;color:var(--text-dim)}
+  .topic-yt b{color:var(--text)}
+  .topic details{margin-top:8px;font-size:13px}
+  .topic details a{color:var(--text)}
+  .topic-actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+  .idea{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
+  .idea.done .idea-title{text-decoration:line-through;color:var(--text-dim)}
+  .idea-chan{font-size:11px;text-transform:uppercase;color:var(--gold)}
+  .setup textarea,.setup input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:8px;font:inherit;margin:4px 0 10px}
+  .setup .chan{border:1px solid var(--border);padding:14px;margin-bottom:12px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/videos.html">Videos</a>
+        <a href="/studio.html">Studio</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/research.html">Research</a>
+        <a href="/news.html">News</a>
+        <a href="/english.html">English</a>
+        <a href="/thumbnails.html">Thumbnails</a>
+      </div>
+      <div class="nav-right"></div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">Researcher</span>
+      <h1>What to make next</h1>
+      <p>Fresh topics for each channel from the last 7 days: news, Reddit's top posts and Wikipedia. Stories carried by many outlets, fresh and full of your channel's strong words score highest. With a YouTube key it also shows how crowded each topic already is on YouTube.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="panel news-toolbar">
+      <div>
+        <span id="r-updated" class="hint">Not run yet.</span>
+        <span id="r-status" class="hint"></span>
+      </div>
+      <div>
+        <button id="r-setup-btn" class="btn-ghost">Channels &amp; words</button>
+        <button id="r-run" class="btn-ghost">Research now</button>
+      </div>
+    </div>
+    <div id="r-error" class="error-line hidden"></div>
+
+    <div id="r-setup" class="panel setup hidden">
+      <p class="hint">One box per channel. Write the words separated by commas. "Strong words" make a topic score higher. Tick History-type channels to add Wikipedia's most-read pages and upcoming anniversaries.</p>
+      <div id="r-setup-list"></div>
+      <button id="r-add" class="btn-ghost">+ Add channel</button>
+      <button id="r-save" class="btn-ghost">Save</button>
+    </div>
+
+    <div class="news-layout">
+      <div>
+        <div id="r-tabs" class="r-tabs"></div>
+        <div id="r-failed" class="hint"></div>
+        <div id="r-topics"></div>
+      </div>
+      <aside class="panel">
+        <h3>Saved ideas</h3>
+        <p class="hint">Click "Save idea" on a topic. Tick it when the video is out.</p>
+        <div id="r-ideas"></div>
+      </aside>
+    </div>
+  </section>
+  <script src="research.js"></script>
+</body>
+</html>
