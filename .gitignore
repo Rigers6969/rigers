@@ -21,3 +21,5 @@ video_look.json
 research_channels.json
 research_latest.json
 research_ideas.json
+books/
+books_progress.json

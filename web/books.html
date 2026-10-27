@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Books &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+<link rel="stylesheet" href="news.css">
+<link rel="stylesheet" href="books.css">
+<link rel="stylesheet" href="gotham.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/videos.html">Videos</a>
+        <a href="/studio.html">Studio</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/research.html">Research</a>
+        <a href="/books.html">Books</a>
+        <a href="/news.html">News</a>
+        <a href="/english.html">English</a>
+        <a href="/thumbnails.html">Thumbnails</a>
+      </div>
+      <div class="nav-right"></div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">The Library</span>
+      <h1>100 books in 400 days</h1>
+      <p>Your reading list from the 400-day plan. Free books (old, public-domain books from Project Gutenberg) download straight into Wayne Factory and you can read them here. The newer books are still under copyright, so they can't be downloaded for free &mdash; borrow them from a library (Open Library is free online) or get the audiobook.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="panel b-top">
+      <div class="b-ring" id="b-ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="b-ring-bg"/><circle cx="60" cy="60" r="52" class="b-ring-fg" id="b-ring-fg"/></svg>
+        <div class="b-ring-text"><b id="b-done">0</b><span>of 100 read</span></div></div>
+      <div class="b-stats">
+        <div><b id="b-reading">0</b><span>reading now</span></div>
+        <div><b id="b-down">0</b><span>downloaded</span></div>
+        <div><b id="b-pace">-</b><span>pace needed</span></div>
+      </div>
+      <div class="b-actions">
+        <button id="b-all" class="btn-ghost">Download all free books</button>
+        <span id="b-job" class="hint"></span>
+      </div>
+    </div>
+    <div id="b-error" class="error-line hidden"></div>
+
+    <div class="b-filters" id="b-filters"></div>
+    <div class="b-grid" id="b-grid"></div>
+  </section>
+
+  <div id="b-reader" class="b-reader hidden">
+    <div class="b-reader-box">
+      <div class="b-reader-head">
+        <div><div id="r-title" class="b-r-title"></div><div id="r-author" class="hint"></div></div>
+        <button id="r-close" class="btn-ghost">Close</button>
+      </div>
+      <div id="r-text" class="b-r-text"></div>
+      <div class="b-reader-foot">
+        <button id="r-prev" class="btn-ghost">&larr; Back</button>
+        <span id="r-page" class="hint"></span>
+        <button id="r-next" class="btn-ghost">Next &rarr;</button>
+      </div>
+    </div>
+  </div>
+  <script src="books.js"></script>
+  <script src="gotham.js"></script>
+</body>
+</html>
