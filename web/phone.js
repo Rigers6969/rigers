@@ -16,6 +16,8 @@
     $("ph-connect").style.opacity = st.enabled ? 1 : 0.35;
     $("ph-url").textContent = st.url;
     $("ph-pin").textContent = st.pin;
+    const others = (st.urls || []).filter((u) => u !== st.url);
+    $("ph-more").innerHTML = others.length ? "If that one doesn't open, try: " + others.map((u) => `<b>${u}</b>`).join(" &middot; ") : "";
     $("ph-qr").innerHTML = "";
     if (window.qrcode) {  // web/qrcode.js (MIT, Kazuhiko Arase) - works without internet
       const qr = qrcode(0, "M");

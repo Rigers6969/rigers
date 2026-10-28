@@ -81,8 +81,31 @@ def lan_ip() -> str:
         s.close()
 
 
+def all_ips() -> list[str]:
+    """Every IPv4 address of this PC, home-Wi-Fi-looking ones first (192.168 / 10.x), Tailscale (100.x) last."""
+    found = {lan_ip()}
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            found.add(info[4][0])
+    except OSError:
+        pass
+    found = {ip for ip in found if not ip.startswith(("127.", "169.254."))}
+
+    def rank(ip: str) -> int:
+        if ip.startswith("192.168."):
+            return 0
+        if ip.startswith("10."):
+            return 1
+        if ip.startswith("172."):
+            return 2
+        if ip.startswith("100."):
+            return 4
+        return 3
+    return sorted(found, key=lambda ip: (rank(ip), ip)) or ["127.0.0.1"]
+
+
 def phone_url() -> str:
-    return f"http://{lan_ip()}:{PORT}"
+    return f"http://{all_ips()[0]}:{PORT}"
 
 
 # ---------- who may come in ----------

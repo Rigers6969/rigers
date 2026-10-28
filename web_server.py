@@ -154,6 +154,7 @@ def api_phone():
         phone_access.new_pin()
     cfg = phone_access.load()
     return jsonify({"enabled": cfg["enabled"], "pin": cfg["pin"], "url": phone_access.phone_url(),
+                    "urls": [f"http://{ip}:{phone_access.PORT}" for ip in phone_access.all_ips()],
                     "running_open": app.config.get("PHONE_HOST") == "0.0.0.0"})
 
 
@@ -222,6 +223,7 @@ if __name__ == "__main__":
     if host != "127.0.0.1":
         cfg = phone_access.load()
         print("\n  PHONE MODE IS ON")
-        print(f"  On your phone (same Wi-Fi) open:  {phone_access.phone_url()}")
+        for ip in phone_access.all_ips():
+            print(f"  On your phone (same Wi-Fi) open:  http://{ip}:{phone_access.PORT}")
         print(f"  PIN: {cfg['pin']}\n")
     app.run(host=host, port=phone_access.PORT, debug=False, threaded=True)
