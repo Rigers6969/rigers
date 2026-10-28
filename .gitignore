@@ -23,3 +23,6 @@ research_latest.json
 research_ideas.json
 books/
 books_progress.json
+autopilot.json
+autopilot_state.json
+tokens/

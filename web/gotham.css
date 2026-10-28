@@ -147,3 +147,4 @@ header .btn-ghost, header .btn-primary{ padding:8px 16px !important; font-size:1
   transition:transform .18s, box-shadow .25s;
 }
 .nav-cta:hover{ transform:translateY(-1px); box-shadow:0 6px 24px rgba(214,169,74,.5); }
+@media (max-width:1500px){ .navlinks a[href^="#"]{ display:none; } }

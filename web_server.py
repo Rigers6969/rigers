@@ -44,6 +44,7 @@ from grammar_guide_api import bp as grammar_guide_bp
 from thumbnail_api import bp as thumbnail_bp
 from research_api import bp as research_bp
 from books_api import bp as books_bp
+from autopilot_api import bp as autopilot_bp
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -60,6 +61,7 @@ app.register_blueprint(editor_bp)
 app.register_blueprint(thumbnail_bp)
 app.register_blueprint(research_bp)
 app.register_blueprint(books_bp)
+app.register_blueprint(autopilot_bp)
 
 
 def load_config() -> dict:

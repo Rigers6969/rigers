@@ -37,8 +37,12 @@ def upload_to_youtube(
     client_secret_path: str = "client_secret.json",
     token_path: str = "token.json",
     privacy_status: str = "private",
+    publish_at: Optional[str] = None,
 ) -> str:
     """Uploads a video to YouTube via the Data API v3. Returns the new video ID.
+
+    publish_at (RFC 3339, e.g. "2026-11-03T16:00:00Z") uploads it private and
+    lets YouTube make it public by itself at that time.
 
     Requires: pip install google-api-python-client google-auth-oauthlib
     """
@@ -72,8 +76,10 @@ def upload_to_youtube(
     youtube = build("youtube", "v3", credentials=creds)
     body = {
         "snippet": {"title": title[:100], "description": description[:5000], "tags": tags or []},
-        "status": {"privacyStatus": privacy_status},
+        "status": {"privacyStatus": "private" if publish_at else privacy_status, "selfDeclaredMadeForKids": False},
     }
+    if publish_at:
+        body["status"]["publishAt"] = publish_at
     media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True)
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 

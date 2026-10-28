@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autopilot &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+<link rel="stylesheet" href="news.css">
+<style>
+  .ap-top{display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+  .ap-switch{position:relative;width:74px;height:40px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);cursor:pointer;transition:background .3s}
+  .ap-switch i{position:absolute;top:4px;left:4px;width:30px;height:30px;border-radius:50%;background:#9aa0ab;transition:left .3s,background .3s,box-shadow .3s}
+  .ap-switch.on{background:linear-gradient(135deg,rgba(243,212,136,.35),rgba(196,148,60,.35));border-color:rgba(243,212,136,.6)}
+  .ap-switch.on i{left:38px;background:#f3d488;box-shadow:0 0 18px rgba(243,212,136,.8)}
+  .ap-state{font-family:'Playfair Display',serif;font-size:26px}
+  .ap-state small{display:block;font-family:Inter,sans-serif;font-size:13px;color:var(--text-dim)}
+  .ap-time{display:flex;align-items:center;gap:10px;margin-left:auto}
+  .ap-time input,.ap-row select,.ap-row input,.ap-engine input,.ap-engine select{background:rgba(0,0,0,.35);color:var(--text);border:1px solid rgba(255,255,255,.12);padding:8px 10px;font:inherit;font-size:13.5px}
+  .ap-chan{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .ap-chan:last-child{border-bottom:none}
+  .ap-name{font-family:'Playfair Display',serif;font-size:19px;font-weight:600}
+  .ap-meta{font-size:12.5px;color:var(--text-dim);margin-top:3px}
+  .ap-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--text-dim);align-items:center}
+  .ap-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12)}
+  .ap-pill.ok{color:#9be59b;border-color:rgba(155,229,155,.35)}
+  .ap-pill.no{color:#f0a39a;border-color:rgba(240,163,154,.35)}
+  .ap-btns{display:flex;flex-direction:column;gap:8px}
+  .ap-log{max-height:420px;overflow:auto;font-size:13.5px}
+  .ap-log div{padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);display:flex;gap:12px}
+  .ap-log time{color:var(--text-dim);white-space:nowrap;font-size:12px;min-width:120px}
+  .ap-log .bad{color:#f0a39a}
+  .ap-log a{color:#f3d488}
+  .ap-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:6px}
+  .ap-step{padding:16px;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.06);font-size:13.5px}
+  .ap-step b{display:block;color:#f3d488;font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+  .ap-engine{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .ap-busy{color:#f3d488}
+  @media(max-width:700px){.ap-chan{grid-template-columns:auto 1fr}.ap-btns{grid-column:1/-1;flex-direction:row}}
+</style>
+<link rel="stylesheet" href="gotham.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/videos.html">Videos</a>
+        <a href="/studio.html">Studio</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/autopilot.html">Autopilot</a>
+        <a href="/research.html">Research</a>
+        <a href="/books.html">Books</a>
+        <a href="/news.html">News</a>
+        <a href="/english.html">English</a>
+        <a href="/thumbnails.html">Thumbnails</a>
+      </div>
+      <div class="nav-right"></div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">Autopilot</span>
+      <h1>Your channels, on their own</h1>
+      <p>Every night it finds the best fresh topic for each channel, makes the full video (script, voice, footage, captions, music) and uploads it to that channel. "Scheduled" videos go public by themselves at your posting hour. Keep Wayne Factory open on this PC.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="panel ap-top">
+      <div id="ap-switch" class="ap-switch" role="switch" tabindex="0"><i></i></div>
+      <div class="ap-state" id="ap-state">Off<small>Nothing runs until you switch it on.</small></div>
+      <div class="ap-time"><span class="hint">Every night at</span><input id="ap-time" type="time" value="02:30"></div>
+      <button id="ap-run" class="btn-primary">Make videos now</button>
+    </div>
+    <div id="ap-busy" class="hint ap-busy"></div>
+    <div id="ap-error" class="error-line hidden"></div>
+
+    <div class="panel">
+      <h3>Channels</h3>
+      <div id="ap-chans"></div>
+      <div class="ap-row"><button id="ap-add" class="btn-ghost">+ Add channel</button><button id="ap-save" class="btn-ghost">Save changes</button></div>
+    </div>
+
+    <div class="panel">
+      <h3>Script writer</h3>
+      <div class="ap-engine">
+        <select id="ap-engine"><option value="ollama">Ollama (free, on this PC)</option><option value="claude">Claude (API key)</option></select>
+        <input id="ap-model" placeholder="Model (empty = default)">
+        <input id="ap-host" placeholder="Ollama address">
+        <input id="ap-key" type="password" placeholder="Anthropic API key">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>What it did</h3>
+      <div id="ap-log" class="ap-log"><p class="hint">Nothing yet.</p></div>
+    </div>
+
+    <div class="panel" id="ap-setup">
+      <h3>One-time setup for uploading</h3>
+      <div class="ap-steps">
+        <div class="ap-step"><b>1. Google key</b>In Google Cloud Console make a project, turn on "YouTube Data API v3", create an OAuth "Desktop app" and download it. Save it as <code>client_secret.json</code> in the Wayne Factory folder.</div>
+        <div class="ap-step"><b>2. Connect each channel</b>Click "Connect YouTube" next to a channel. Google's page opens: pick that channel's account and allow it. Done once per channel.</div>
+        <div class="ap-step"><b>3. Switch it on</b>Turn the Autopilot on and choose the hour. Leave Wayne Factory open (Ollama running) and it works every night.</div>
+      </div>
+      <p class="hint" id="ap-secret" style="margin-top:14px"></p>
+    </div>
+  </section>
+  <script src="autopilot.js"></script>
+  <script src="gotham.js"></script>
+</body>
+</html>
