@@ -89,6 +89,22 @@ def upload_to_youtube(
     return response["id"]
 
 
+def set_thumbnail(video_id: str, image_path: Path, client_secret_path: str = "client_secret.json",
+                  token_path: str = "token.json") -> None:
+    """Sets a custom thumbnail (the channel must be phone-verified on YouTube for custom thumbnails)."""
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    creds = Credentials.from_authorized_user_file(str(token_path), ["https://www.googleapis.com/auth/youtube.upload"])
+    if not creds.valid and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        Path(token_path).write_text(creds.to_json())
+    youtube = build("youtube", "v3", credentials=creds)
+    youtube.thumbnails().set(videoId=video_id, media_body=MediaFileUpload(str(image_path), mimetype="image/jpeg")).execute()
+
+
 def post_to_instagram(
     caption: str,
     access_token: str,

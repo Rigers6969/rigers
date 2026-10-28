@@ -228,6 +228,9 @@ def make_one(chan: dict, settings: dict, st: dict, progress: Callable[[str], Non
     vid = upload_to_youtube(video, title, str(meta.get("description") or ""), [str(t) for t in meta.get("tags") or []][:30],
                             client_secret_path=str(CLIENT_SECRET), token_path=str(token_path(name)), publish_at=when)
     cst["last_upload"] = vid
+    thumb = vdir / "thumb_1.jpg"
+    if thumb.exists():
+        _set_thumb(vid, thumb, name, st)
     _log(st, name, f"Uploaded: {title}" + (f" (goes public {when})" if when else " (private - check it in YouTube Studio)"),
          True, slug=result["slug"], url=f"https://youtu.be/{vid}", topic=topic["title"])
     return result
@@ -316,7 +319,8 @@ def review_list() -> list[dict]:
     for item in load_state()["review"]:
         vdir = CONTENT_ROOT / item["slug"]
         hooks = _read(vdir / "hooks.json", {"hooks": [], "chosen": None})
-        out.append({**item, "hooks": hooks.get("hooks", [])[:5], "chosen_hook": hooks.get("chosen"),
+        thumbs = [n for n in (1, 2, 3) if (vdir / f"thumb_{n}.jpg").exists()]
+        out.append({**item, "hooks": hooks.get("hooks", [])[:5], "chosen_hook": hooks.get("chosen"), "thumbs": thumbs,
                     "exists": (vdir / "final.mp4").exists()})
     return out
 
@@ -333,7 +337,7 @@ def video_file(slug: str) -> Optional[Path]:
     return None
 
 
-def approve(slug: str, title: Optional[str] = None) -> dict:
+def approve(slug: str, title: Optional[str] = None, thumb: int = 1) -> dict:
     st = load_state()
     item = next((r for r in st["review"] if r["slug"] == slug), None)
     if item is None:
@@ -352,10 +356,32 @@ def approve(slug: str, title: Optional[str] = None) -> dict:
     vid = upload_to_youtube(video, title, item.get("description", ""), item.get("tags", []),
                             client_secret_path=str(CLIENT_SECRET), token_path=str(token_path(item["channel"])),
                             publish_at=when)
+    tpath = thumb_file(slug, int(thumb or 1))
+    if tpath:
+        _set_thumb(vid, tpath, item["channel"], st)
     st["review"] = [r for r in st["review"] if r["slug"] != slug]
     _log(st, item["channel"], f"Approved and uploaded: {title} (goes public {when})", True, slug=slug,
          url=f"https://youtu.be/{vid}")
     return {"video_id": vid, "publish_at": when}
+
+
+def _set_thumb(video_id: str, path: Path, channel: str, st: dict) -> None:
+    try:
+        from publishing import set_thumbnail
+
+        set_thumbnail(video_id, path, str(CLIENT_SECRET), str(token_path(channel)))
+    except Exception as exc:  # most often: the channel isn't phone-verified for custom thumbnails yet
+        _log(st, channel, f"Video uploaded but the thumbnail wasn't set ({type(exc).__name__}: {exc}). "
+                          "Verify the channel by phone at youtube.com/verify, then set it in YouTube Studio.", False)
+
+
+def thumb_file(slug: str, n: int) -> Optional[Path]:
+    from producer import CONTENT_ROOT
+
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,80}", slug or "") or n not in (1, 2, 3):
+        return None
+    p = CONTENT_ROOT / slug / f"thumb_{n}.jpg"
+    return p if p.exists() else None
 
 
 def reject(slug: str) -> None:

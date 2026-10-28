@@ -103,6 +103,8 @@
         <div>
           <div class="ap-meta">${esc(r.channel)} &middot; made ${when(r.made)}</div>
           <input type="text" value="${esc(r.title)}" maxlength="100">
+          ${r.thumbs && r.thumbs.length ? `<div class="hint" style="margin-top:10px">Pick the thumbnail:</div><div class="rv-thumbs">${r.thumbs.map((n, k) =>
+            `<img data-thumb="${n}" class="${k === 0 ? "on" : ""}" src="/api/autopilot/review/${esc(r.slug)}/thumb/${n}?t=${Date.now()}" alt="Thumbnail ${n}">`).join("")}</div>` : ""}
           ${r.hooks.length ? `<div class="rv-hooks">Opening hooks the AI tried (gold = used):<ol>${r.hooks.map((h) =>
             `<li class="${h.text === r.chosen_hook ? "on" : ""}">${esc(h.text)} <span class="hint">(${h.score})</span></li>`).join("")}</ol></div>` : ""}
           <div class="rv-checks">
@@ -115,10 +117,14 @@
       document.querySelectorAll(".rv").forEach((row) => {
         const slug = row.dataset.slug, ok = row.querySelector("[data-ok]");
         const boxes = [...row.querySelectorAll(".rv-checks input")];
+        row.querySelectorAll("[data-thumb]").forEach((img) => img.onclick = () => {
+          row.querySelectorAll("[data-thumb]").forEach((x) => x.classList.remove("on")); img.classList.add("on");
+        });
         boxes.forEach((b) => b.onchange = () => { ok.disabled = !boxes.every((x) => x.checked); });
         ok.onclick = async () => {
           ok.disabled = true; ok.textContent = "Uploading...";
-          try { await api(`/api/autopilot/review/${slug}`, { title: row.querySelector("input[type=text]").value }); load(); loadReview(); }
+          try { await api(`/api/autopilot/review/${slug}`, { title: row.querySelector("input[type=text]").value,
+            thumb: +((row.querySelector("[data-thumb].on") || {}).dataset || {}).thumb || 1 }); load(); loadReview(); }
           catch (e) { err(e.message); ok.textContent = "Approve & schedule"; ok.disabled = false; }
         };
         row.querySelector("[data-no]").onclick = async () => {

@@ -48,6 +48,9 @@
   .rv-hooks{margin:10px 0;font-size:13px}
   .rv-hooks li{margin:6px 0 6px 16px;color:var(--text-dim)}
   .rv-hooks li.on{color:#f3d488}
+  .rv-thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+  .rv-thumbs img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;cursor:pointer;border:3px solid transparent;opacity:.7;transition:all .2s}
+  .rv-thumbs img.on{border-color:#f3d488;opacity:1;box-shadow:0 0 18px rgba(243,212,136,.4)}
   .rv-checks label{display:flex;gap:9px;align-items:center;font-size:13.5px;margin:7px 0}
   @media(max-width:800px){.rv{grid-template-columns:1fr}}
 </style>

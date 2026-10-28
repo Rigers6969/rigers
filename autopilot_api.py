@@ -58,6 +58,14 @@ def api_autopilot_review_video(slug):
     return send_file(path, conditional=True)
 
 
+@bp.route("/api/autopilot/review/<slug>/thumb/<int:n>")
+def api_autopilot_review_thumb(slug, n):
+    path = autopilot.thumb_file(slug, n)
+    if path is None:
+        return jsonify({"error": "Not found."}), 404
+    return send_file(path, max_age=0)
+
+
 @bp.route("/api/autopilot/review/<slug>", methods=["POST"])
 def api_autopilot_review_action(slug):
     data = request.get_json(silent=True) or {}
@@ -65,7 +73,7 @@ def api_autopilot_review_action(slug):
         if data.get("action") == "reject":
             autopilot.reject(slug)
             return jsonify({"ok": True})
-        return jsonify(autopilot.approve(slug, data.get("title")))
+        return jsonify(autopilot.approve(slug, data.get("title"), int(data.get("thumb") or 1)))
     except autopilot.AutopilotError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:

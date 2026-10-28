@@ -343,6 +343,15 @@ def produce_video(
     else:
         video_error = "No media was kept, so there's nothing to build a video from."
 
+    if video_error is None:
+        report("Making 3 thumbnails from the video's best pictures...")
+        try:
+            from pro_thumbnails import make_thumbnails
+
+            make_thumbnails(video_dir, str((metadata.get("youtube") or {}).get("title") or topic), topic, channel, writer)
+        except Exception as exc:  # the video is still fine without them
+            report(f"Thumbnails skipped ({exc}).")
+
     report("Writing Obsidian note...")
     from obsidian_export import update_index, write_video_note
 
