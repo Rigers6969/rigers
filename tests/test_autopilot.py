@@ -62,7 +62,7 @@ def test_make_one_researches_produces_and_uploads(ap, monkeypatch, tmp_path):
 
     st = autopilot.load_state()
     st["channels"]["Paper Trail"] = {"used": [autopilot._norm("Old story")]}
-    chan = autopilot.load_settings()["channels"][0]
+    chan = dict(autopilot.load_settings()["channels"][0], publish="schedule")
     autopilot.TOKENS_DIR.mkdir()
     autopilot.token_path("Paper Trail").write_text("{}")
     autopilot.make_one(chan, autopilot.load_settings(), st)
@@ -87,3 +87,32 @@ def test_not_connected_keeps_video_and_says_so(ap, monkeypatch, tmp_path):
     st = autopilot.load_state()
     autopilot.make_one({"name": "History", "voice": "en-GB-RyanNeural", "length": "long", "publish": "schedule", "publish_hour": 17}, autopilot.load_settings(), st)
     assert "connect" in autopilot.load_state()["log"][-1]["msg"].lower()
+
+
+def test_review_waits_for_approve_then_uploads(ap, monkeypatch, tmp_path):
+    import producer, researcher, publishing, studio_api
+    content = tmp_path / "content"
+    monkeypatch.setattr(producer, "CONTENT_ROOT", content)
+    monkeypatch.setattr(researcher, "load_channels", lambda: [{"name": "Paper Trail", "lang": "en", "searches": [], "subreddits": [], "strong": [], "wiki": False}])
+    monkeypatch.setattr(researcher, "research_channel", lambda *a, **k: {"topics": [{"title": "Acme", "angle": "a"}], "failed": []})
+    monkeypatch.setattr(studio_api, "make_writer", lambda e, d: object())
+    def fake_produce(*a, **k):
+        d = content / "acme"; d.mkdir(parents=True)
+        (d / "final.mp4").write_bytes(b"x")
+        (d / "metadata.json").write_text(json.dumps({"youtube": {"title": "Acme", "description": "d"}}))
+        (d / "hooks.json").write_text(json.dumps({"hooks": [{"text": "h", "score": 1}], "chosen": "h"}))
+        return {"slug": "acme", "video_error": None}
+    monkeypatch.setattr(producer, "produce_video", fake_produce)
+    uploads = []
+    monkeypatch.setattr(publishing, "upload_to_youtube", lambda *a, **kw: uploads.append(kw) or "V1")
+    chan = autopilot.load_settings()["channels"][0]
+    assert chan["publish"] == "review"
+    autopilot.make_one(chan, autopilot.load_settings(), autopilot.load_state())
+    assert uploads == [] and autopilot.review_list()[0]["chosen_hook"] == "h"
+    with pytest.raises(autopilot.AutopilotError):
+        autopilot.approve("acme")  # not connected yet
+    autopilot.TOKENS_DIR.mkdir()
+    autopilot.token_path("Paper Trail").write_text("{}")
+    out = autopilot.approve("acme", "Better title")
+    assert out["video_id"] == "V1" and uploads[0]["publish_at"].endswith("Z")
+    assert autopilot.review_list() == []

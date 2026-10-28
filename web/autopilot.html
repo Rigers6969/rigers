@@ -41,6 +41,15 @@
   .ap-engine{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .ap-busy{color:#f3d488}
   @media(max-width:700px){.ap-chan{grid-template-columns:auto 1fr}.ap-btns{grid-column:1/-1;flex-direction:row}}
+  .rv{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:22px;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+  .rv:last-child{border-bottom:none}
+  .rv video{width:100%;border-radius:12px;background:#000;max-height:420px}
+  .rv input[type=text]{width:100%;background:rgba(0,0,0,.35);color:var(--text);border:1px solid rgba(255,255,255,.12);padding:9px 11px;font:inherit;font-size:15px}
+  .rv-hooks{margin:10px 0;font-size:13px}
+  .rv-hooks li{margin:6px 0 6px 16px;color:var(--text-dim)}
+  .rv-hooks li.on{color:#f3d488}
+  .rv-checks label{display:flex;gap:9px;align-items:center;font-size:13.5px;margin:7px 0}
+  @media(max-width:800px){.rv{grid-template-columns:1fr}}
 </style>
 <link rel="stylesheet" href="gotham.css">
 </head>
@@ -87,6 +96,12 @@
     </div>
     <div id="ap-busy" class="hint ap-busy"></div>
     <div id="ap-error" class="error-line hidden"></div>
+
+    <div class="panel">
+      <h3>Review before it goes online</h3>
+      <p class="hint">Videos the Autopilot made wait here. Watch it, fix the title, tick the checks, then Approve: it uploads and goes public at the channel's posting hour. This is what keeps your channel safe from YouTube's "mass-produced AI" demonetization.</p>
+      <div id="ap-review"><p class="hint">Nothing waiting.</p></div>
+    </div>
 
     <div class="panel">
       <h3>Channels</h3>

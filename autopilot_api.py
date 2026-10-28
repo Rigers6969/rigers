@@ -1,7 +1,7 @@
 """Flask blueprint for the Autopilot page (autopilot.py)."""
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 import autopilot
 
@@ -43,3 +43,30 @@ def api_autopilot_connect():
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": f"Sign-in failed: {type(exc).__name__}: {exc}"}), 502
+
+
+@bp.route("/api/autopilot/review")
+def api_autopilot_review():
+    return jsonify({"review": autopilot.review_list()})
+
+
+@bp.route("/api/autopilot/review/<slug>/video")
+def api_autopilot_review_video(slug):
+    path = autopilot.video_file(slug)
+    if path is None:
+        return jsonify({"error": "Not found."}), 404
+    return send_file(path, conditional=True)
+
+
+@bp.route("/api/autopilot/review/<slug>", methods=["POST"])
+def api_autopilot_review_action(slug):
+    data = request.get_json(silent=True) or {}
+    try:
+        if data.get("action") == "reject":
+            autopilot.reject(slug)
+            return jsonify({"ok": True})
+        return jsonify(autopilot.approve(slug, data.get("title")))
+    except autopilot.AutopilotError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Upload failed: {type(exc).__name__}: {exc}"}), 502

@@ -27,7 +27,7 @@
           <select data-k="per_week">${[1, 2, 3, 4, 5, 6, 7].map((n) => opt(n, n + " video" + (n > 1 ? "s" : "") + " / week", c.per_week)).join("")}</select>
           <select data-k="length">${opt("long", "Long video (16:9)", c.length)}${opt("short", "Short (9:16)", c.length)}</select>
           <select data-k="voice">${VOICES.map(([v, l]) => opt(v, l, c.voice)).join("")}</select>
-          <select data-k="publish">${opt("schedule", "Goes public by itself", c.publish)}${opt("private", "Stays private (I check first)", c.publish)}</select>
+          <select data-k="publish">${opt("review", "I review it first (safest)", c.publish)}${opt("schedule", "Goes public by itself", c.publish)}${opt("private", "Uploads as private", c.publish)}</select>
           <select data-k="publish_hour">${Array.from({ length: 24 }, (_, h) => opt(h, "at " + String(h).padStart(2, "0") + ":00", c.publish_hour)).join("")}</select>
         </div>
       </div>
@@ -95,7 +95,45 @@
     dirty = false; err(""); render();
   }
 
-  async function load() { try { st = await api("/api/autopilot"); render(); } catch (e) { err(e.message); } }
+  async function loadReview() {
+    try {
+      const d = await api("/api/autopilot/review");
+      $("ap-review").innerHTML = d.review.length ? d.review.map((r) => `<div class="rv" data-slug="${esc(r.slug)}">
+        <video controls preload="metadata" src="/api/autopilot/review/${esc(r.slug)}/video"></video>
+        <div>
+          <div class="ap-meta">${esc(r.channel)} &middot; made ${when(r.made)}</div>
+          <input type="text" value="${esc(r.title)}" maxlength="100">
+          ${r.hooks.length ? `<div class="rv-hooks">Opening hooks the AI tried (gold = used):<ol>${r.hooks.map((h) =>
+            `<li class="${h.text === r.chosen_hook ? "on" : ""}">${esc(h.text)} <span class="hint">(${h.score})</span></li>`).join("")}</ol></div>` : ""}
+          <div class="rv-checks">
+            <label><input type="checkbox"> I watched it all, it's good</label>
+            <label><input type="checkbox"> The facts and numbers are right</label>
+            <label><input type="checkbox"> The title and thumbnail are mine / checked</label>
+          </div>
+          <div class="ap-row"><button class="btn-primary" data-ok disabled>Approve &amp; schedule</button><button class="btn-ghost" data-no>Skip it</button></div>
+        </div></div>`).join("") : '<p class="hint">Nothing waiting.</p>';
+      document.querySelectorAll(".rv").forEach((row) => {
+        const slug = row.dataset.slug, ok = row.querySelector("[data-ok]");
+        const boxes = [...row.querySelectorAll(".rv-checks input")];
+        boxes.forEach((b) => b.onchange = () => { ok.disabled = !boxes.every((x) => x.checked); });
+        ok.onclick = async () => {
+          ok.disabled = true; ok.textContent = "Uploading...";
+          try { await api(`/api/autopilot/review/${slug}`, { title: row.querySelector("input[type=text]").value }); load(); loadReview(); }
+          catch (e) { err(e.message); ok.textContent = "Approve & schedule"; ok.disabled = false; }
+        };
+        row.querySelector("[data-no]").onclick = async () => {
+          if (!confirm("Skip this video? It won't be uploaded.")) return;
+          try { await api(`/api/autopilot/review/${slug}`, { action: "reject" }); load(); loadReview(); } catch (e) { err(e.message); }
+        };
+      });
+    } catch (e) { err(e.message); }
+  }
+
+  async function load() {
+    const wasRunning = st && st.running;
+    try { st = await api("/api/autopilot"); render(); } catch (e) { err(e.message); }
+    if (wasRunning && st && !st.running) loadReview();
+  }
 
   $("ap-switch").onclick = () => saveAll({ enabled: !st.settings.enabled }).catch((e) => err(e.message));
   $("ap-time").onchange = () => saveAll().catch((e) => err(e.message));
@@ -103,9 +141,10 @@
   $("ap-run").onclick = async () => { try { await saveAll(); await api("/api/autopilot/run", {}); load(); } catch (e) { err(e.message); } };
   $("ap-add").onclick = () => {
     $("ap-chans").insertAdjacentHTML("beforeend", chanRow({ name: "New channel", enabled: false, per_week: 1, length: "long",
-      voice: "en-GB-RyanNeural", publish: "schedule", publish_hour: 17 }, document.querySelectorAll(".ap-chan").length));
+      voice: "en-GB-RyanNeural", publish: "review", publish_hour: 17 }, document.querySelectorAll(".ap-chan").length));
     dirty = true; wireChans();
   };
   ["ap-engine", "ap-model", "ap-host", "ap-key"].forEach((id) => $(id).onchange = () => saveAll().catch((e) => err(e.message)));
   load();
+  loadReview();
 })();

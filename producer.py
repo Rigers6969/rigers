@@ -267,6 +267,11 @@ def produce_video(
     else:
         report("Writing script...")
         script = writer.generate_script(topic, target_words=target_words, progress=lambda m: report(f"Script: {m}"))
+    if writer is not None and not prepared.get("script"):
+        report("Writing and testing hooks for the first 15 seconds...")
+        from hooks import improve_opening
+
+        script, _hooks = improve_opening(writer, topic, channel, script, video_dir)
     (video_dir / "script.txt").write_text(script, encoding="utf-8")
 
     report("Planning shots...")

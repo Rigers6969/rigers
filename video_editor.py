@@ -259,6 +259,7 @@ def apply_edits(
     progress: Optional[ProgressCB] = None,
     caption_size: str = "m",
     zooms: bool = False,
+    graphics: bool = True,
 ) -> Path:
     """Always starts fresh from video_dir/final.mp4 and writes
     video_dir/final_edited.mp4 - never edits final.mp4 itself, so it
@@ -279,7 +280,7 @@ def apply_edits(
     if caption_style in ("none", ""):
         add_captions = False
     zooms = bool(zooms and cf)
-    if not add_captions and not music_path and not zooms:
+    if not add_captions and not music_path and not zooms and not graphics:
         shutil.copyfile(base_path, out_path)
         report("Done.")
         return out_path
@@ -289,14 +290,15 @@ def apply_edits(
     current_input = base_path
 
     try:
-        if add_captions or zooms:
+        words = []
+        if add_captions or zooms or graphics:
             voiceover_path = video_dir / "voiceover.mp3"
             if not voiceover_path.exists():
                 raise AssemblyError("No voiceover.mp3 to transcribe for captions.")
             words = transcribe_words(voiceover_path, whisper_model, progress)
             if not words:
                 report("No speech detected for captions - skipping captions.")
-            else:
+            elif add_captions or zooms:
                 real_width, real_height = get_video_dimensions(base_path)
                 duration = words[-1]["end"] + 1
                 viral = bool(cf) and caption_style in cf.LABELS
@@ -328,6 +330,18 @@ def apply_edits(
                     timeout=max(300, duration * 4), error_prefix="ffmpeg failed burning in captions",
                 )
                 current_input = captioned_path
+
+        if graphics and words:
+            # animated money counters / dates / percentages when the narrator says them
+            try:
+                from story_graphics import add_graphics
+
+                gw, gh = get_video_dimensions(current_input)
+                graphics_path = work_dir / "graphics.mp4"
+                if add_graphics(current_input, words, graphics_path, gw, gh, work_dir, report):
+                    current_input = graphics_path
+            except Exception as exc:  # graphics are a bonus - never lose the video over them
+                report(f"Story graphics skipped ({exc}).")
 
         if music_path:
             report("Mixing in background music...")

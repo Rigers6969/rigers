@@ -6,10 +6,11 @@ due a new video:
                  (one it hasn't used before)
   2. Produce   - producer.py writes the script, records the voice-over, finds
                  footage, assembles the video, adds captions/music
-  3. Upload    - publishing.py uploads it to that channel's own YouTube
-                 account. "schedule" uploads it private and YouTube makes it
-                 public by itself at your posting hour; "private" leaves it
-                 private for you to check first.
+  3. Upload    - "review" (the default) puts it in the Review list: nothing
+                 goes on YouTube until you watch it and press Approve (then
+                 it's scheduled for the posting hour). "schedule" uploads it
+                 straight away to go public at the posting hour; "private"
+                 uploads it private.
 
 Each channel needs its own YouTube login once (the "Connect" button: Google's
 own sign-in page opens in your browser on this PC, and the key it gives back
@@ -43,11 +44,11 @@ DEFAULT_SETTINGS = {
     "anthropic_key": "",
     "channels": [
         {"name": "Paper Trail", "enabled": True, "per_week": 2, "length": "long",
-         "voice": "en-GB-RyanNeural", "publish": "schedule", "publish_hour": 17},
+         "voice": "en-GB-RyanNeural", "publish": "review", "publish_hour": 17},
         {"name": "History", "enabled": False, "per_week": 1, "length": "long",
-         "voice": "en-GB-ThomasNeural", "publish": "schedule", "publish_hour": 17},
+         "voice": "en-GB-ThomasNeural", "publish": "review", "publish_hour": 17},
         {"name": "The Forgotten Lab", "enabled": False, "per_week": 1, "length": "long",
-         "voice": "en-GB-RyanNeural", "publish": "schedule", "publish_hour": 17},
+         "voice": "en-GB-RyanNeural", "publish": "review", "publish_hour": 17},
     ],
 }
 
@@ -99,7 +100,7 @@ def save_settings(changes: dict) -> dict:
                 "per_week": max(1, min(7, int(c.get("per_week") or 1))),
                 "length": "short" if c.get("length") == "short" else "long",
                 "voice": str(c.get("voice") or "en-GB-RyanNeural"),
-                "publish": "private" if c.get("publish") == "private" else "schedule",
+                "publish": c.get("publish") if c.get("publish") in ("review", "private", "schedule") else "review",
                 "publish_hour": max(0, min(23, int(c.get("publish_hour") or 17))),
             })
         s["channels"] = chans
@@ -108,8 +109,9 @@ def save_settings(changes: dict) -> dict:
 
 
 def load_state() -> dict:
-    st = _read(STATE_FILE, {"last_run_day": None, "channels": {}, "log": []})
+    st = _read(STATE_FILE, {"last_run_day": None, "channels": {}, "log": [], "review": []})
     st.setdefault("channels", {})
+    st.setdefault("review", [])
     st.setdefault("log", [])
     return st
 
@@ -209,6 +211,12 @@ def make_one(chan: dict, settings: dict, st: dict, progress: Callable[[str], Non
     video = vdir / "final_edited.mp4" if (vdir / "final_edited.mp4").exists() else vdir / "final.mp4"
     meta = json.loads((vdir / "metadata.json").read_text(encoding="utf-8")).get("youtube", {})
     title = str(meta.get("title") or topic["title"])[:100]
+    if chan["publish"] == "review":
+        st["review"].append({"channel": name, "slug": result["slug"], "title": title, "topic": topic["title"],
+                             "description": str(meta.get("description") or ""), "tags": [str(t) for t in meta.get("tags") or []][:30],
+                             "made": datetime.now().isoformat(timespec="seconds")})
+        _log(st, name, f"Ready for you to check (Review list): {title}", True, slug=result["slug"], topic=topic["title"])
+        return result
     if not connected(name):
         _log(st, name, f"Video ready, not uploaded - connect this channel's YouTube first: {title}", False,
              slug=result["slug"], topic=topic["title"])
@@ -297,3 +305,64 @@ def start_scheduler() -> None:
     if not _started:
         _started = True
         threading.Thread(target=_scheduler, daemon=True).start()
+
+
+# ---------- review: you watch it, then approve ----------
+
+def review_list() -> list[dict]:
+    from producer import CONTENT_ROOT
+
+    out = []
+    for item in load_state()["review"]:
+        vdir = CONTENT_ROOT / item["slug"]
+        hooks = _read(vdir / "hooks.json", {"hooks": [], "chosen": None})
+        out.append({**item, "hooks": hooks.get("hooks", [])[:5], "chosen_hook": hooks.get("chosen"),
+                    "exists": (vdir / "final.mp4").exists()})
+    return out
+
+
+def video_file(slug: str) -> Optional[Path]:
+    from producer import CONTENT_ROOT
+
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,80}", slug or ""):
+        return None
+    vdir = CONTENT_ROOT / slug
+    for name in ("final_edited.mp4", "final.mp4"):
+        if (vdir / name).exists():
+            return vdir / name
+    return None
+
+
+def approve(slug: str, title: Optional[str] = None) -> dict:
+    st = load_state()
+    item = next((r for r in st["review"] if r["slug"] == slug), None)
+    if item is None:
+        raise AutopilotError("That video is not in the Review list any more.")
+    chan = next((c for c in load_settings()["channels"] if c["name"] == item["channel"]), None)
+    hour = chan["publish_hour"] if chan else 17
+    if not connected(item["channel"]):
+        raise AutopilotError(f"Connect {item['channel']}'s YouTube first (Connect YouTube button).")
+    video = video_file(slug)
+    if video is None:
+        raise AutopilotError("The video file is missing.")
+    from publishing import upload_to_youtube
+
+    title = (title or item["title"]).strip()[:100]
+    when = publish_time(hour)
+    vid = upload_to_youtube(video, title, item.get("description", ""), item.get("tags", []),
+                            client_secret_path=str(CLIENT_SECRET), token_path=str(token_path(item["channel"])),
+                            publish_at=when)
+    st["review"] = [r for r in st["review"] if r["slug"] != slug]
+    _log(st, item["channel"], f"Approved and uploaded: {title} (goes public {when})", True, slug=slug,
+         url=f"https://youtu.be/{vid}")
+    return {"video_id": vid, "publish_at": when}
+
+
+def reject(slug: str) -> None:
+    st = load_state()
+    item = next((r for r in st["review"] if r["slug"] == slug), None)
+    st["review"] = [r for r in st["review"] if r["slug"] != slug]
+    if item:
+        _log(st, item["channel"], f"Skipped (not uploaded): {item['title']}", True, slug=slug)
+    else:
+        _save_state(st)
