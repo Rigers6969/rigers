@@ -117,6 +117,15 @@ def phone_gate():
     return redirect("/phone-login")
 
 
+@app.after_request
+def phone_keep_logged_in(resp):
+    """A phone that keeps using the app stays logged in (the 30 days restart on every visit)."""
+    cookie = request.cookies.get(phone_access.COOKIE, "")
+    if cookie and not phone_access.is_local(request.remote_addr) and phone_access.allowed(request.remote_addr, cookie):
+        resp.set_cookie(phone_access.COOKIE, cookie, max_age=phone_access.COOKIE_DAYS * 86400, httponly=True, samesite="Lax")
+    return resp
+
+
 @app.route("/phone-login", methods=["GET", "POST"])
 def phone_login():
     error = ""

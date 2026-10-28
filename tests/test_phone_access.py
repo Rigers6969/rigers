@@ -41,3 +41,10 @@ def test_new_pin_logs_phones_out(client):
     old = phone_access.token()
     phone_access.new_pin()
     assert phone_access.token() != old
+
+
+def test_cookie_is_renewed_on_each_visit(client):
+    phone = {"REMOTE_ADDR": "192.168.1.60"}
+    client.post("/phone-login", data={"pin": phone_access.load()["pin"]}, environ_base=phone)
+    r = client.get("/api/research", environ_base=phone)
+    assert "Max-Age=2592000" in r.headers.get("Set-Cookie", "")
