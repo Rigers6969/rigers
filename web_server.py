@@ -31,7 +31,9 @@ import json
 import os
 from pathlib import Path
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, make_response, redirect, request, send_from_directory
+
+import phone_access
 
 from analytics import StatsFetchError, fetch_youtube_revenue, fetch_youtube_stats
 from video_api import bp as video_bp
@@ -105,6 +107,47 @@ def load_config() -> dict:
     }
 
 
+@app.before_request
+def phone_gate():
+    """Other devices (your phone) must type the PIN once; this PC never has to."""
+    if request.path in ("/phone-login",) or phone_access.allowed(request.remote_addr, request.cookies.get(phone_access.COOKIE, "")):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Type the PIN first."}), 401
+    return redirect("/phone-login")
+
+
+@app.route("/phone-login", methods=["GET", "POST"])
+def phone_login():
+    error = ""
+    if request.method == "POST":
+        addr = request.remote_addr or ""
+        if phone_access.locked(addr):
+            error = "Too many wrong PINs. Wait 10 minutes."
+        elif phone_access.check_pin(addr, request.form.get("pin", "")):
+            resp = make_response(redirect("/"))
+            resp.set_cookie(phone_access.COOKIE, phone_access.token(), max_age=phone_access.COOKIE_DAYS * 86400,
+                            httponly=True, samesite="Lax")
+            return resp
+        else:
+            error = "Wrong PIN."
+    return phone_access.LOGIN_PAGE.replace("%ERROR%", error)
+
+
+@app.route("/api/phone", methods=["GET", "POST"])
+def api_phone():
+    if not phone_access.is_local(request.remote_addr):
+        return jsonify({"error": "Change phone settings on the PC itself."}), 403
+    data = request.get_json(silent=True) or {}
+    if "enabled" in data:
+        phone_access.set_enabled(bool(data["enabled"]))
+    if data.get("new_pin"):
+        phone_access.new_pin()
+    cfg = phone_access.load()
+    return jsonify({"enabled": cfg["enabled"], "pin": cfg["pin"], "url": phone_access.phone_url(),
+                    "running_open": app.config.get("PHONE_HOST") == "0.0.0.0"})
+
+
 @app.route("/")
 def index():
     return send_from_directory(WEB_DIR, "index.html")
@@ -165,4 +208,11 @@ def api_revenue():
 if __name__ == "__main__":
     # threaded=True so a slow pipeline run (media search, whisper transcription)
     # doesn't block the stats dashboard from loading in another tab.
-    app.run(host="127.0.0.1", port=5001, debug=False, threaded=True)
+    host = phone_access.host()
+    app.config["PHONE_HOST"] = host
+    if host != "127.0.0.1":
+        cfg = phone_access.load()
+        print("\n  PHONE MODE IS ON")
+        print(f"  On your phone (same Wi-Fi) open:  {phone_access.phone_url()}")
+        print(f"  PIN: {cfg['pin']}\n")
+    app.run(host=host, port=phone_access.PORT, debug=False, threaded=True)

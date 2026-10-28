@@ -163,6 +163,17 @@
   const logoSvg = document.querySelector(".logo > svg");
   if (logoSvg) logoSvg.outerHTML = BAT.replace("<svg ", '<svg class="g-bat" ');
 
+  // phone button + a menu button for small screens
+  const nav = document.querySelector("header nav");
+  if (nav && !nav.querySelector(".g-phone")) {
+    const right = nav.querySelector(".nav-right") || nav;
+    right.insertAdjacentHTML("afterbegin",
+      `<a class="g-phone" href="/phone.html" title="Open on your phone" aria-label="Phone"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><circle cx="12" cy="18" r="1.2"/></svg></a>
+       <button class="g-burger" aria-label="Menu"><span></span><span></span><span></span></button>`);
+    nav.querySelector(".g-burger").onclick = () => document.body.classList.toggle("g-menu");
+    document.querySelectorAll(".navlinks a").forEach((a) => a.addEventListener("click", () => document.body.classList.remove("g-menu")));
+  }
+
   const here = location.pathname === "/" ? "/" : location.pathname;
   document.querySelectorAll(".navlinks a").forEach((a) => {
     if (a.getAttribute("href") === here) a.classList.add("g-here");

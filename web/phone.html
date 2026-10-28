@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phone &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+<link rel="stylesheet" href="gotham.css">
+<style>
+  .ph-grid{display:grid;grid-template-columns:auto 1fr;gap:34px;align-items:center}
+  .ph-qr{background:#fff;padding:14px;border-radius:16px;width:220px;height:220px}
+  .ph-qr svg{width:192px;height:192px;display:block}
+  .ph-pin{font-family:'Playfair Display',serif;font-size:54px;letter-spacing:10px;color:#f3d488;text-shadow:0 0 24px rgba(243,212,136,.35)}
+  .ph-url{font-size:20px;margin:6px 0 16px;word-break:break-all}
+  .ph-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .ph-switch{position:relative;width:74px;height:40px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);cursor:pointer}
+  .ph-switch i{position:absolute;top:4px;left:4px;width:30px;height:30px;border-radius:50%;background:#9aa0ab;transition:left .3s,background .3s}
+  .ph-switch.on{border-color:rgba(243,212,136,.6);background:rgba(243,212,136,.2)}
+  .ph-switch.on i{left:38px;background:#f3d488;box-shadow:0 0 18px rgba(243,212,136,.8)}
+  .ph-note{margin-top:14px;padding:12px 16px;border-radius:12px;background:rgba(243,212,136,.1);border:1px solid rgba(243,212,136,.3);font-size:14px}
+  .ph-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .ph-step{padding:16px;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.06);font-size:14px}
+  .ph-step b{display:block;color:#f3d488;font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+  @media(max-width:700px){.ph-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/videos.html">Videos</a>
+        <a href="/studio.html">Studio</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/autopilot.html">Autopilot</a>
+        <a href="/research.html">Research</a>
+        <a href="/books.html">Books</a>
+        <a href="/news.html">News</a>
+        <a href="/english.html">English</a>
+        <a href="/thumbnails.html">Thumbnails</a>
+      </div>
+      <div class="nav-right"></div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">Phone</span>
+      <h1>Wayne Factory on your phone</h1>
+      <p>Approve videos, start the Autopilot, check research and read books from your phone. Your PC does the work, the phone is the remote control. Every device except this PC needs the PIN.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="panel">
+      <div class="ph-row">
+        <div id="ph-switch" class="ph-switch"><i></i></div>
+        <div><b id="ph-state">Phone mode is off</b><div class="hint" id="ph-sub">Only this PC can open Wayne Factory.</div></div>
+      </div>
+      <div id="ph-restart" class="ph-note hidden">Close the black Wayne Factory window and start Wayne Factory again &mdash; then phone mode works. If Windows asks about the firewall, click <b>Allow</b> (private networks).</div>
+    </div>
+
+    <div class="panel" id="ph-connect">
+      <div class="ph-grid">
+        <div class="ph-qr" id="ph-qr"></div>
+        <div>
+          <h3>At home (same Wi-Fi)</h3>
+          <div class="hint">Scan the code with your phone camera, or type this address in the phone's browser:</div>
+          <div class="ph-url" id="ph-url">-</div>
+          <div class="hint">Then type the PIN:</div>
+          <div class="ph-pin" id="ph-pin">------</div>
+          <div class="ph-row" style="margin-top:14px">
+            <button id="ph-new" class="btn-ghost">New PIN (logs all phones out)</button>
+          </div>
+          <p class="hint" style="margin-top:14px">Tip: on the phone, tap Share &rarr; "Add to Home Screen" and it opens like an app.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>From anywhere (school, work)</h3>
+      <p class="hint" style="margin-bottom:16px">Use Tailscale: free, private, nothing is opened to the internet. Phone mode must be on.</p>
+      <div class="ph-steps">
+        <div class="ph-step"><b>1. On this PC</b>Install Tailscale from tailscale.com/download and sign in (Google account is fine).</div>
+        <div class="ph-step"><b>2. On your phone</b>Install the Tailscale app, sign in with the same account and switch it on.</div>
+        <div class="ph-step"><b>3. Open it</b>In the Tailscale app find this PC's address (starts with 100.). Open <code>http://100.x.x.x:5001</code> on the phone and type the PIN.</div>
+      </div>
+      <p class="hint" style="margin-top:14px">The PC has to be on, with Wayne Factory open. In Windows power settings set "Sleep" to Never while it's plugged in.</p>
+    </div>
+  </section>
+  <script src="qrcode.js"></script>
+  <script src="phone.js"></script>
+  <script src="gotham.js"></script>
+</body>
+</html>
