@@ -98,7 +98,7 @@ function Make-Shortcut($name, $target, $workdir) {
 
 try {
     Say ""
-    Say "Clip Factory updater v4" DarkGray
+    Say "Wayne Factory + Clip Factory updater v5" DarkGray
     Say "Looking for Clip Factory on this PC (can take a minute)..." Cyan
     $copies = @(Find-Copies)
     $full = $null
@@ -157,16 +157,30 @@ try {
     $ok1 = Make-Shortcut "Clip Factory" (Join-Path $clip "start.bat") $clip
     $ok2 = Make-Shortcut "Update Clip Factory" (Join-Path $clip "update.bat") $clip
 
+    $wayne = $null
+    if ($full -and (Test-Path -LiteralPath (Join-Path $full "start.bat"))) {
+        $wayne = $full
+        $ok3 = Make-Shortcut "Wayne Factory" (Join-Path $full "start.bat") $full
+    }
+
     Say ""
-    Say "Done - Clip Factory is up to date (version $version)." Green
-    Say "Folder: $clip"
-    if ($ok1 -and $ok2) { Say "On your Desktop: 'Clip Factory' starts it, 'Update Clip Factory' updates it." Green }
+    if ($wayne) { Say "Done - Wayne Factory and Clip Factory are up to date (version $version)." Green }
+    else { Say "Done - Clip Factory is up to date (version $version)." Green }
+    Say "Folder: $dest"
+    if ($ok1 -and $ok2) { Say "On your Desktop: 'Clip Factory' starts it, 'Update Clip Factory' updates both apps." Green }
+    if ($wayne -and $ok3) { Say "On your Desktop: 'Wayne Factory' starts Wayne Factory." Green }
     if ($copies.Count -gt 1) {
         Say "Your old copies in Downloads aren't needed any more - you can delete them (your things are in $clip now)." Yellow
     }
     Say ""
-    $answer = Read-Host "Start Clip Factory now? (y/n)"
-    if ($answer -match "^[yY]") { Start-Process -FilePath (Join-Path $clip "start.bat") -WorkingDirectory $clip }
+    if ($wayne) {
+        $answer = Read-Host "Start which app now?  w = Wayne Factory,  c = Clip Factory,  n = none"
+        if ($answer -match "^[wW]") { Start-Process -FilePath (Join-Path $wayne "start.bat") -WorkingDirectory $wayne }
+        elseif ($answer -match "^[cC]") { Start-Process -FilePath (Join-Path $clip "start.bat") -WorkingDirectory $clip }
+    } else {
+        $answer = Read-Host "Start Clip Factory now? (y/n)"
+        if ($answer -match "^[yY]") { Start-Process -FilePath (Join-Path $clip "start.bat") -WorkingDirectory $clip }
+    }
 } catch {
     Say ""
     Say "Something went wrong:" Red
