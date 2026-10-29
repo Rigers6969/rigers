@@ -33,6 +33,27 @@ SETTINGS_FILE = APP_DIR / "autopilot.json"
 STATE_FILE = APP_DIR / "autopilot_state.json"
 TOKENS_DIR = APP_DIR / "tokens"
 CLIENT_SECRET = APP_DIR / "client_secret.json"
+
+
+def find_client_secret() -> Optional[Path]:
+    """The Google key file: client_secret.json here, Google's own long name for it
+    (client_secret_....apps.googleusercontent.com.json, also with a doubled .json),
+    or the one Clip Factory already uses. A copy found elsewhere is saved here."""
+    if CLIENT_SECRET.exists():
+        return CLIENT_SECRET
+    places = [APP_DIR, APP_DIR / "clip-factory", Path.home() / "ClipFactory", Path.home() / "Downloads", Path.home() / "Desktop"]
+    for folder in places:
+        if not folder.is_dir():
+            continue
+        for f in sorted(folder.glob("client_secret*.json*"), key=lambda p: -p.stat().st_mtime):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if "installed" in data or "web" in data:
+                CLIENT_SECRET.write_text(json.dumps(data), encoding="utf-8")
+                return CLIENT_SECRET
+    return None
 MAX_LOG = 200
 
 DEFAULT_SETTINGS = {
@@ -139,8 +160,9 @@ def connected(channel: str) -> bool:
 
 def connect(channel: str) -> str:
     """Opens Google's sign-in page in this PC's browser; pick the channel's account there."""
-    if not CLIENT_SECRET.exists():
-        raise AutopilotError("client_secret.json is missing - see the setup steps on the page (one time only).")
+    if not find_client_secret():
+        raise AutopilotError("The Google key file wasn't found. Put the file you downloaded from Google Cloud "
+                             "(client_secret_....json) in the Wayne Factory folder or in Downloads, then click Connect again.")
     from google_auth_oauthlib.flow import InstalledAppFlow
 
     flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET), ["https://www.googleapis.com/auth/youtube.upload"])
@@ -253,7 +275,7 @@ def status() -> dict:
     safe = {k: v for k, v in s.items() if k != "anthropic_key"} | {"has_anthropic_key": bool(s.get("anthropic_key")),
                                                                    "channels": chans}
     return {"settings": safe, "running": _status["running"], "message": _status["message"],
-            "log": list(reversed(st["log"][-60:])), "client_secret": CLIENT_SECRET.exists(),
+            "log": list(reversed(st["log"][-60:])), "client_secret": bool(find_client_secret()),
             "last_run_day": st.get("last_run_day")}
 
 

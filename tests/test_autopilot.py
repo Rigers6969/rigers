@@ -116,3 +116,17 @@ def test_review_waits_for_approve_then_uploads(ap, monkeypatch, tmp_path):
     out = autopilot.approve("acme", "Better title")
     assert out["video_id"] == "V1" and uploads[0]["publish_at"].endswith("Z")
     assert autopilot.review_list() == []
+
+
+def test_finds_googles_long_key_name(ap, monkeypatch, tmp_path):
+    import json as _j
+    home = tmp_path / "home"
+    (home / "Downloads").mkdir(parents=True)
+    monkeypatch.setattr(autopilot, "APP_DIR", tmp_path / "app")
+    monkeypatch.setattr(autopilot, "CLIENT_SECRET", tmp_path / "app" / "client_secret.json")
+    (tmp_path / "app").mkdir()
+    monkeypatch.setattr(autopilot.Path, "home", staticmethod(lambda: home))
+    assert autopilot.find_client_secret() is None
+    (home / "Downloads" / "client_secret_123-abc.apps.googleusercontent.com.json.json").write_text(_j.dumps({"installed": {"client_id": "x"}}))
+    found = autopilot.find_client_secret()
+    assert found == tmp_path / "app" / "client_secret.json" and "installed" in found.read_text()
