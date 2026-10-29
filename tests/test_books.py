@@ -57,3 +57,28 @@ def test_reading_saves_page_and_status(lib):
     assert books.read_page(9)["page"] == 1  # remembers where you stopped
     data = books.set_status(9, "done")
     assert data["done"] == 1
+
+
+def test_gutendex_down_uses_gutenberg_search(lib, monkeypatch):
+    import requests
+    opds = b"""<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom">
+    <entry><title>Some Other Book</title><content type="text">by Someone</content>
+      <link type="application/atom+xml;profile=opds-catalog" href="/ebooks/111.opds"/></entry>
+    <entry><title>The Art of Money Getting</title><content type="text">P. T. Barnum</content>
+      <link type="application/atom+xml;profile=opds-catalog" href="/ebooks/8581.opds"/></entry></feed>"""
+    calls = []
+    def fake_get(url, **kw):
+        calls.append(url)
+        if url == books.GUTENDEX:
+            raise requests.HTTPError("503 Server Error")
+        if "search.opds" in url:
+            return Resp(content=opds)
+        if url.endswith(".txt.utf-8"):
+            return Resp(text="*** START OF THE PROJECT GUTENBERG EBOOK X ***\nMoney!\n*** END OF THE PROJECT GUTENBERG EBOOK X ***")
+        return Resp(content=b"EPUB")
+    monkeypatch.setattr(books, "_get", fake_get)
+    monkeypatch.setattr(books.time, "sleep", lambda s: None)
+    out = books.download(4)  # The Art of Money Getting - P. T. Barnum
+    assert out["gutenberg_id"] == 8581
+    assert "Money!" in books.book(4)["txt"].read_text(encoding="utf-8")
+    assert calls.count(books.GUTENDEX) == 2  # tried twice before the backup

@@ -215,9 +215,47 @@ def _get(url: str, **kw) -> requests.Response:
     return r
 
 
+GUTENBERG = "https://www.gutenberg.org"
+
+
+def _gutendex(search: str) -> list[dict]:
+    """Gutendex is a free catalogue that is sometimes down (503) - try it twice."""
+    for attempt in range(2):
+        try:
+            return _get(GUTENDEX, params={"search": search, "languages": "en"}).json().get("results") or []
+        except requests.RequestException:
+            if attempt == 0:
+                time.sleep(3)
+    raise BookError("Gutendex is down")
+
+
+def _gutenberg_search(search: str, author: str) -> Optional[dict]:
+    """Backup: Project Gutenberg's own search feed, then its standard download links."""
+    import feedparser
+
+    feed = feedparser.parse(_get(f"{GUTENBERG}/ebooks/search.opds/", params={"query": search}).content)
+    last = author.split()[-1].lower()
+    hits = []
+    for e in feed.entries:
+        ids = [m.group(1) for l in e.get("links", []) for m in [re.search(r"/ebooks/(\d+)", l.get("href", ""))] if m]
+        if not ids:
+            continue
+        text = " ".join(str(e.get(k, "")) for k in ("title", "author", "summary", "content")).lower()
+        hits.append((last in text, int(ids[0]), e.get("title", "")))
+    if not hits:
+        return None
+    hits.sort(key=lambda h: not h[0])  # right author first, keep Gutenberg's order otherwise
+    num = hits[0][1]
+    return {"id": num, "title": hits[0][2], "formats": {
+        "text/plain; charset=utf-8": f"{GUTENBERG}/ebooks/{num}.txt.utf-8",
+        "application/epub+zip": f"{GUTENBERG}/ebooks/{num}.epub3.images"}}
+
+
 def find_gutenberg(search: str, author: str) -> Optional[dict]:
-    data = _get(GUTENDEX, params={"search": search, "languages": "en"}).json()
-    results = data.get("results") or []
+    try:
+        results = _gutendex(search)
+    except BookError:
+        return _gutenberg_search(search, author)
     last = author.split()[-1].lower()
     for r in results:  # prefer the right author
         if any(last in (a.get("name") or "").lower() for a in r.get("authors", [])):
