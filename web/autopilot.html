@@ -53,6 +53,25 @@
   .rv-thumbs img.on{border-color:#f3d488;opacity:1;box-shadow:0 0 18px rgba(243,212,136,.4)}
   .rv-checks label{display:flex;gap:9px;align-items:center;font-size:13.5px;margin:7px 0}
   @media(max-width:800px){.rv{grid-template-columns:1fr}}
+  #mk textarea{width:100%;box-sizing:border-box;background:rgba(0,0,0,.35);color:var(--text);border:1px solid rgba(255,255,255,.12);padding:12px 14px;font:inherit;font-size:14.5px;line-height:1.5;margin:12px 0}
+  .mk-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  #mk-chan{background:rgba(0,0,0,.35);color:var(--text);border:1px solid rgba(255,255,255,.12);padding:10px 12px;font:inherit;font-size:14px}
+  .mk-pills{display:inline-flex;padding:4px;border-radius:999px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1)}
+  .mk-pills button{border:0;background:transparent;color:var(--text-dim);padding:8px 18px;border-radius:999px;font:inherit;font-size:13.5px;cursor:pointer}
+  .mk-pills button.on{background:linear-gradient(135deg,#f3d488,#c4943c);color:#120e05;font-weight:600}
+  .pg-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+  .pg-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600}
+  .pg-pct{font-family:'Playfair Display',serif;font-size:34px;color:#f3d488}
+  .pg-bar{height:8px;border-radius:999px;background:rgba(255,255,255,.08);margin:14px 0 18px;overflow:hidden}
+  .pg-bar i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#c4943c,#f3d488);box-shadow:0 0 14px rgba(243,212,136,.6);transition:width .6s}
+  .pg-steps{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:8px}
+  .pg-steps li{display:flex;gap:12px;align-items:center;font-size:14.5px;color:var(--text-dim)}
+  .pg-steps li i{width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.18);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px}
+  .pg-steps li.done{color:var(--text)}
+  .pg-steps li.done i{background:#f3d488;border-color:#f3d488;color:#120e05}
+  .pg-steps li.now{color:#f3d488;font-weight:600}
+  .pg-steps li.now i{border-color:#f3d488;border-top-color:transparent;animation:pgspin 1s linear infinite}
+  @keyframes pgspin{to{transform:rotate(360deg)}}
 </style>
 <link rel="stylesheet" href="gotham.css">
 </head>
@@ -97,7 +116,29 @@
       <div class="ap-time"><span class="hint">Every night at</span><input id="ap-time" type="time" value="02:30"></div>
       <button id="ap-run" class="btn-primary">Make videos now</button>
     </div>
-    <div id="ap-busy" class="hint ap-busy"></div>
+    <div class="panel" id="mk">
+      <h3>Make a video</h3>
+      <div class="mk-row">
+        <select id="mk-chan"></select>
+        <div class="mk-pills" id="mk-len">
+          <button type="button" data-len="long" class="on">Long video</button>
+          <button type="button" data-len="short">Short</button>
+        </div>
+      </div>
+      <textarea id="mk-brief" rows="4" placeholder="What should the video be about? A few lines are enough, for example:&#10;The Enron scandal. How they hid billions with fake profits, the whistleblower Sherron Watkins, and how it collapsed in 2001.&#10;&#10;Leave empty and it picks today's best topic from Research."></textarea>
+      <div class="mk-row"><button id="mk-go" class="btn-primary">Make it</button><span class="hint">It goes to the Review list when it's done (if the channel is set to review).</span></div>
+    </div>
+
+    <div class="panel hidden" id="pg">
+      <div class="pg-head">
+        <div><div class="pg-title" id="pg-title">Making a video</div><div class="hint" id="pg-sub"></div></div>
+        <div class="pg-pct" id="pg-pct">0%</div>
+      </div>
+      <div class="pg-bar"><i id="pg-bar"></i></div>
+      <ol class="pg-steps" id="pg-steps"></ol>
+      <div class="hint" id="pg-msg"></div>
+    </div>
+    <div id="ap-busy" class="hint ap-busy hidden"></div>
     <div id="ap-error" class="error-line hidden"></div>
 
     <div class="panel">

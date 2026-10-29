@@ -25,8 +25,13 @@ def api_autopilot_settings():
 
 @bp.route("/api/autopilot/run", methods=["POST"])
 def api_autopilot_run():
-    only = (request.get_json(silent=True) or {}).get("channel") or None
-    if not autopilot.run_now(only):
+    data = request.get_json(silent=True) or {}
+    only = data.get("channel") or None
+    length = data.get("length") if data.get("length") in ("short", "long") else None
+    brief = str(data.get("brief") or "")[:3000]
+    if brief.strip() and not only:
+        return jsonify({"error": "Pick the channel for your video."}), 400
+    if not autopilot.run_now(only, length, brief):
         return jsonify({"error": "The Autopilot is already working."}), 409
     return jsonify({"ok": True})
 

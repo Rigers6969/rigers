@@ -59,7 +59,13 @@
       $("ap-key").placeholder = s.has_anthropic_key ? "Anthropic key saved (type to change)" : "Anthropic API key";
       wireChans();
     }
-    $("ap-busy").textContent = st.running ? "Working: " + st.message : "";
+    renderProgress();
+    const sel = $("mk-chan");
+    if (document.activeElement !== sel) {
+      const cur = sel.value;
+      sel.innerHTML = s.channels.map((c) => `<option>${esc(c.name)}</option>`).join("");
+      if (cur) sel.value = cur;
+    }
     $("ap-run").disabled = st.running;
     $("ap-secret").textContent = st.client_secret ? "client_secret.json found - step 1 is done." : "client_secret.json not found yet - do step 1 before connecting channels.";
     $("ap-log").innerHTML = st.log.length ? st.log.map((l) => `<div><time>${when(l.time)}</time>
@@ -93,6 +99,23 @@
     if ($("ap-key").value) body.anthropic_key = $("ap-key").value;
     st = await api("/api/autopilot/settings", body);
     dirty = false; err(""); render();
+  }
+
+  function renderProgress() {
+    const j = st.job || {};
+    $("pg").classList.toggle("hidden", !st.running);
+    $("mk-go").disabled = st.running;
+    if (!st.running) return;
+    const total = j.steps.length, step = Math.min(j.step || 0, total - 1);
+    const pct = Math.round((step + 0.5) / total * 100);
+    $("pg-title").textContent = j.channel ? `${j.channel} - ${j.length === "short" ? "Short" : "Long video"}` : "Starting...";
+    const mins = j.started ? Math.max(0, Math.round((Date.now() - new Date(j.started)) / 60000)) : 0;
+    $("pg-sub").textContent = (j.topic ? j.topic + " · " : "") + `${mins} min so far`;
+    $("pg-pct").textContent = pct + "%";
+    $("pg-bar").style.width = pct + "%";
+    $("pg-steps").innerHTML = j.steps.map((label, i) =>
+      `<li class="${i < step ? "done" : i === step ? "now" : ""}"><i>${i < step ? "✓" : ""}</i>${esc(label)}</li>`).join("");
+    $("pg-msg").textContent = j.message || "";
   }
 
   async function loadReview() {
@@ -151,6 +174,19 @@
     dirty = true; wireChans();
   };
   ["ap-engine", "ap-model", "ap-host", "ap-key"].forEach((id) => $(id).onchange = () => saveAll().catch((e) => err(e.message)));
+  document.querySelectorAll("#mk-len button").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("#mk-len button").forEach((x) => x.classList.remove("on")); b.classList.add("on");
+  });
+  $("mk-go").onclick = async () => {
+    const length = document.querySelector("#mk-len button.on").dataset.len;
+    try {
+      await api("/api/autopilot/run", { channel: $("mk-chan").value, length, brief: $("mk-brief").value });
+      $("mk-brief").value = "";
+      load();
+      $("pg").scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (e) { err(e.message); }
+  };
   load();
   loadReview();
+  setInterval(() => { if (!poll) load(); }, 15000);  // notices runs started on another device or at night
 })();

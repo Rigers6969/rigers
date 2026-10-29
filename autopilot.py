@@ -210,16 +210,26 @@ def publish_time(hour: int, now: Optional[datetime] = None) -> str:
     return when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def make_one(chan: dict, settings: dict, st: dict, progress: Callable[[str], None] = lambda m: None) -> dict:
+def make_one(chan: dict, settings: dict, st: dict, progress: Callable[[str], None] = lambda m: None,
+             brief: str = "") -> dict:
+    """brief: your own few lines about what the video should say; empty = today's best Research topic."""
     from producer import CONTENT_ROOT, produce_video, resolve_target_words
     from studio_api import make_writer
 
     name = chan["name"]
-    progress(f"{name}: researching...")
-    topic = pick_topic(chan, st, progress)
+    brief = (brief or "").strip()
+    if brief:
+        first = brief.splitlines()[0].strip()
+        topic = {"title": first[:120], "angle": brief}
+        prompt_topic = brief
+    else:
+        progress(f"{name}: researching...")
+        topic = pick_topic(chan, st, progress)
+        prompt_topic = f"{topic['title']}. Angle: {topic['angle']}"
+    _status["topic"] = topic["title"]
     progress(f"{name}: making '{topic['title'][:60]}'...")
     writer = make_writer(settings["engine"], settings)
-    result = produce_video(f"{topic['title']}. Angle: {topic['angle']}", name, writer, voice=chan["voice"],
+    result = produce_video(prompt_topic, name, writer, voice=chan["voice"],
                            target_words=resolve_target_words(chan["length"]), length=chan["length"],
                            progress=lambda m: progress(f"{name}: {m}"))
     cst = st["channels"].setdefault(name, {"used": []})
@@ -261,6 +271,29 @@ def make_one(chan: dict, settings: dict, st: dict, progress: Callable[[str], Non
 # ---------- the nightly run ----------
 
 _status = {"running": False, "message": ""}
+
+# the steps shown on the progress view, and words in the progress messages that mean "we're on this step now"
+STEPS = [
+    ("research", "Find the topic", ("researching", "reading", "google news", "reddit", "wikipedia", "checking youtube")),
+    ("script", "Write the script", ("writing script", "script:", "planning shots", "metadata")),
+    ("hooks", "Test 5 hooks", ("hooks",)),
+    ("voice", "Record the voice", ("voiceover",)),
+    ("footage", "Find the footage", ("stock media", "media:")),
+    ("video", "Build the video", ("assembling", "video:")),
+    ("edit", "Captions, graphics, music", ("auto-edit", "caption", "graphic", "music", "transcrib", "zoom")),
+    ("thumbs", "Make 3 thumbnails", ("thumbnail",)),
+    ("upload", "Upload / Review list", ("uploading", "obsidian", "done")),
+]
+
+
+def _progress(msg: str) -> None:
+    """Keeps the message and moves the step marker forward (never back) for the progress view."""
+    low = msg.lower()
+    cur = _status.get("step", 0)
+    for i, (_key, _label, words) in enumerate(STEPS):
+        if i >= cur and any(w in low for w in words):
+            cur = i
+    _status.update(message=msg, step=cur)
 _lock = threading.Lock()
 
 
@@ -274,16 +307,21 @@ def status() -> dict:
                       "used": len(cst.get("used", []))})
     safe = {k: v for k, v in s.items() if k != "anthropic_key"} | {"has_anthropic_key": bool(s.get("anthropic_key")),
                                                                    "channels": chans}
-    return {"settings": safe, "running": _status["running"], "message": _status["message"],
+    job = {"running": _status["running"], "message": _status.get("message", ""), "step": _status.get("step", 0),
+           "steps": [label for _k, label, _w in STEPS], "channel": _status.get("channel"), "topic": _status.get("topic"),
+           "length": _status.get("length"), "started": _status.get("started"), "queue": _status.get("queue", [])}
+    return {"settings": safe, "running": _status["running"], "message": _status["message"], "job": job,
             "log": list(reversed(st["log"][-60:])), "client_secret": bool(find_client_secret()),
             "last_run_day": st.get("last_run_day")}
 
 
-def run_now(only: Optional[str] = None) -> bool:
+def run_now(only: Optional[str] = None, length: Optional[str] = None, brief: str = "") -> bool:
+    """only: one channel; length: "short"/"long" for this video (else the channel's own); brief: your own topic notes."""
     with _lock:
         if _status["running"]:
             return False
-        _status.update(running=True, message="Starting...")
+        _status.update(running=True, message="Starting...", step=0, channel=None, topic=None, length=None,
+                       started=datetime.now().isoformat(timespec="seconds"), queue=[])
 
     def job():
         try:
@@ -297,8 +335,12 @@ def run_now(only: Optional[str] = None) -> bool:
                     continue
                 if not only and (not chan["enabled"] or not due(chan, st, today)):
                     continue
+                if length in ("short", "long"):
+                    chan = {**chan, "length": length}
+                _status.update(channel=chan["name"], length=chan["length"], step=0, topic=None,
+                               started=datetime.now().isoformat(timespec="seconds"))
                 try:
-                    make_one(chan, settings, st, lambda m: _status.update(message=m))
+                    make_one(chan, settings, st, _progress, brief=brief if only else "")
                 except Exception as exc:
                     _log(st, chan["name"], f"{type(exc).__name__}: {exc}", False)
                     traceback.print_exc()

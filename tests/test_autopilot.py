@@ -130,3 +130,27 @@ def test_finds_googles_long_key_name(ap, monkeypatch, tmp_path):
     (home / "Downloads" / "client_secret_123-abc.apps.googleusercontent.com.json.json").write_text(_j.dumps({"installed": {"client_id": "x"}}))
     found = autopilot.find_client_secret()
     assert found == tmp_path / "app" / "client_secret.json" and "installed" in found.read_text()
+
+
+def test_brief_skips_research_and_steps_move_forward(ap, monkeypatch, tmp_path):
+    import producer, researcher, studio_api
+    monkeypatch.setattr(producer, "CONTENT_ROOT", tmp_path / "c")
+    monkeypatch.setattr(researcher, "research_channel", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no research")))
+    monkeypatch.setattr(studio_api, "make_writer", lambda e, d: object())
+    seen = {}
+    def fake_produce(topic, channel, writer, **kw):
+        seen.update(topic=topic, **kw)
+        kw["progress"]("Writing script...")
+        kw["progress"]("Generating voiceover...")
+        d = tmp_path / "c" / "x"; d.mkdir(parents=True)
+        (d / "final.mp4").write_bytes(b"x"); (d / "metadata.json").write_text("{}")
+        return {"slug": "x", "video_error": None}
+    monkeypatch.setattr(producer, "produce_video", fake_produce)
+    chan = {**autopilot.load_settings()["channels"][0], "length": "short"}
+    autopilot._status["step"] = 0
+    autopilot.make_one(chan, autopilot.load_settings(), autopilot.load_state(), autopilot._progress,
+                       brief="Enron scandal\nHow they hid billions.")
+    assert seen["topic"].startswith("Enron scandal") and seen["length"] == "short"
+    labels = [l for _k, l, _w in autopilot.STEPS]
+    assert labels[autopilot._status["step"]] == "Record the voice"
+    assert autopilot.review_list()[0]["topic"] == "Enron scandal"
