@@ -83,3 +83,17 @@ def api_autopilot_review_action(slug):
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": f"Upload failed: {type(exc).__name__}: {exc}"}), 502
+
+
+@bp.route("/api/autopilot/videos")
+def api_autopilot_videos():
+    return jsonify({"videos": autopilot.all_videos()})
+
+
+@bp.route("/api/autopilot/videos/<slug>/file")
+def api_autopilot_video_download(slug):
+    path = autopilot.video_file(slug)
+    if path is None:
+        return jsonify({"error": "Not found."}), 404
+    return send_file(path, as_attachment=request.args.get("download") == "1", download_name=f"{slug}.mp4",
+                     conditional=True)

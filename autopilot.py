@@ -401,6 +401,51 @@ def video_file(slug: str) -> Optional[Path]:
     return None
 
 
+def all_videos(limit: int = 60) -> list[dict]:
+    """Every video made (newest first) with its title, channel, length, thumbnail and what happened to it."""
+    from producer import CONTENT_ROOT
+
+    if not CONTENT_ROOT.exists():
+        return []
+    st = load_state()
+    waiting = {r["slug"] for r in st["review"]}
+    status: dict[str, dict] = {}
+    for entry in st["log"]:  # later log lines win
+        if entry.get("slug"):
+            status[entry["slug"]] = entry
+    out = []
+    dirs = [d for d in CONTENT_ROOT.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))]
+    for d in sorted(dirs, key=lambda d: d.stat().st_mtime, reverse=True)[:limit]:
+        video = video_file(d.name)
+        meta = _read(d / "metadata.json", {})
+        title = str((meta.get("youtube") or {}).get("title") or d.name.replace("-", " ").capitalize())
+        notes = (d / "notes.txt").read_text(encoding="utf-8", errors="replace").splitlines()[:1] if (d / "notes.txt").exists() else []
+        channel = notes[0].split(" - ", 1)[0] if notes and " - " in notes[0] else ""
+        log = status.get(d.name, {})
+        if d.name in waiting:
+            state = "review"
+        elif log.get("url"):
+            state = "uploaded"
+        elif "Skipped" in log.get("msg", ""):
+            state = "skipped"
+        elif video is None:
+            state = "failed"
+        else:
+            state = "made"
+        size = 0
+        try:
+            if video:
+                from video_assembler import get_video_dimensions
+                w, h = get_video_dimensions(video)
+                size = 1 if h > w else 0
+        except Exception:
+            pass
+        out.append({"slug": d.name, "title": title, "channel": channel, "state": state, "url": log.get("url"),
+                    "has_video": video is not None, "thumb": (d / "thumb_1.jpg").exists(), "short": bool(size),
+                    "made": datetime.fromtimestamp(d.stat().st_mtime).isoformat(timespec="minutes")})
+    return out
+
+
 def approve(slug: str, title: Optional[str] = None, thumb: int = 1) -> dict:
     st = load_state()
     item = next((r for r in st["review"] if r["slug"] == slug), None)

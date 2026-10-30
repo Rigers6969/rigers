@@ -118,6 +118,38 @@
     $("pg-msg").textContent = j.message || "";
   }
 
+  let vids = [], vfilter = "all";
+  const VLABEL = { review: "Waiting for review", uploaded: "On YouTube", skipped: "Skipped", failed: "Failed", made: "Made" };
+  async function loadVideos() {
+    try { vids = (await api("/api/autopilot/videos")).videos; renderVideos(); } catch (e) { err(e.message); }
+  }
+  function renderVideos() {
+    const tabs = [["all", "All"], ["review", "To review"], ["uploaded", "On YouTube"], ["short", "Shorts"], ["long", "Long"]];
+    $("vg-filters").innerHTML = tabs.map(([k, l]) => `<button data-f="${k}" class="${k === vfilter ? "on" : ""}">${l}</button>`).join("");
+    $("vg-filters").querySelectorAll("button").forEach((b) => b.onclick = () => { vfilter = b.dataset.f; renderVideos(); });
+    const list = vids.filter((v) => vfilter === "all" || (vfilter === "short" ? v.short : vfilter === "long" ? !v.short : v.state === vfilter));
+    $("vg-grid").innerHTML = list.length ? list.map((v) => `<div class="vg-card" data-slug="${esc(v.slug)}">
+        <div class="vg-pic" style="${v.thumb ? `background-image:url('/api/autopilot/review/${esc(v.slug)}/thumb/1')` : ""}">
+          ${v.has_video ? '<div class="play"></div>' : ""}
+          <span class="vg-tag ${v.state}">${VLABEL[v.state] || v.state}</span>
+          <span class="vg-len">${v.short ? "Short" : "Long"}</span>
+        </div>
+        <div class="vg-info"><b>${esc(v.title)}</b><span>${esc(v.channel || "")}${v.channel ? " · " : ""}${when(v.made)}</span></div>
+      </div>`).join("") : '<p class="hint">No videos here yet.</p>';
+    $("vg-grid").querySelectorAll(".vg-card").forEach((c) => c.onclick = () => openVideo(vids.find((v) => v.slug === c.dataset.slug)));
+  }
+  function openVideo(v) {
+    if (!v || !v.has_video) return;
+    $("vg-title").textContent = v.title;
+    $("vg-player").src = `/api/autopilot/videos/${encodeURIComponent(v.slug)}/file`;
+    $("vg-dl").href = `/api/autopilot/videos/${encodeURIComponent(v.slug)}/file?download=1`;
+    $("vg-yt").classList.toggle("hidden", !v.url);
+    if (v.url) $("vg-yt").href = v.url;
+    $("vg-modal").classList.remove("hidden");
+    $("vg-player").play().catch(() => {});
+  }
+  $("vg-close").onclick = () => { $("vg-player").pause(); $("vg-player").removeAttribute("src"); $("vg-modal").classList.add("hidden"); };
+
   async function loadReview() {
     try {
       const d = await api("/api/autopilot/review");
@@ -147,12 +179,12 @@
         ok.onclick = async () => {
           ok.disabled = true; ok.textContent = "Uploading...";
           try { await api(`/api/autopilot/review/${slug}`, { title: row.querySelector("input[type=text]").value,
-            thumb: +((row.querySelector("[data-thumb].on") || {}).dataset || {}).thumb || 1 }); load(); loadReview(); }
+            thumb: +((row.querySelector("[data-thumb].on") || {}).dataset || {}).thumb || 1 }); load(); loadReview(); loadVideos(); }
           catch (e) { err(e.message); ok.textContent = "Approve & schedule"; ok.disabled = false; }
         };
         row.querySelector("[data-no]").onclick = async () => {
           if (!confirm("Skip this video? It won't be uploaded.")) return;
-          try { await api(`/api/autopilot/review/${slug}`, { action: "reject" }); load(); loadReview(); } catch (e) { err(e.message); }
+          try { await api(`/api/autopilot/review/${slug}`, { action: "reject" }); load(); loadReview(); loadVideos(); } catch (e) { err(e.message); }
         };
       });
     } catch (e) { err(e.message); }
@@ -161,7 +193,7 @@
   async function load() {
     const wasRunning = st && st.running;
     try { st = await api("/api/autopilot"); render(); } catch (e) { err(e.message); }
-    if (wasRunning && st && !st.running) loadReview();
+    if (wasRunning && st && !st.running) { loadReview(); loadVideos(); }
   }
 
   $("ap-switch").onclick = () => saveAll({ enabled: !st.settings.enabled }).catch((e) => err(e.message));
@@ -188,5 +220,6 @@
   };
   load();
   loadReview();
+  loadVideos();
   setInterval(() => { if (!poll) load(); }, 15000);  // notices runs started on another device or at night
 })();

@@ -154,3 +154,24 @@ def test_brief_skips_research_and_steps_move_forward(ap, monkeypatch, tmp_path):
     labels = [l for _k, l, _w in autopilot.STEPS]
     assert labels[autopilot._status["step"]] == "Record the voice"
     assert autopilot.review_list()[0]["topic"] == "Enron scandal"
+
+
+def test_all_videos_lists_states(ap, monkeypatch):
+    import producer
+    root = ap / "content"
+    monkeypatch.setattr(producer, "CONTENT_ROOT", root)
+    for slug in ("waiting-one", "done-one", "broken-one", "_tmp"):
+        (root / slug).mkdir(parents=True)
+    (root / "waiting-one" / "final.mp4").write_bytes(b"x")
+    (root / "done-one" / "final.mp4").write_bytes(b"x")
+    (root / "done-one" / "metadata.json").write_text(json.dumps({"youtube": {"title": "Done video"}}))
+    (root / "done-one" / "notes.txt").write_text("History - something\n")
+    autopilot._save_state({"log": [{"slug": "done-one", "url": "https://youtu.be/abc", "msg": "Uploaded"}],
+                           "review": [{"slug": "waiting-one", "channel": "Paper Trail", "title": "W"}],
+                           "channels": {}})
+    vids = {v["slug"]: v for v in autopilot.all_videos()}
+    assert set(vids) == {"waiting-one", "done-one", "broken-one"}
+    assert vids["waiting-one"]["state"] == "review"
+    assert vids["done-one"]["state"] == "uploaded" and vids["done-one"]["title"] == "Done video"
+    assert vids["done-one"]["channel"] == "History" and vids["done-one"]["url"].endswith("abc")
+    assert vids["broken-one"]["state"] == "failed" and not vids["broken-one"]["has_video"]

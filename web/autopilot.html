@@ -72,6 +72,25 @@
   .pg-steps li.now{color:#f3d488;font-weight:600}
   .pg-steps li.now i{border-color:#f3d488;border-top-color:transparent;animation:pgspin 1s linear infinite}
   @keyframes pgspin{to{transform:rotate(360deg)}}
+  .vg-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .vg-filters button{border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.3);color:var(--text-dim);padding:7px 14px;border-radius:999px;font:inherit;font-size:13px;cursor:pointer}
+  .vg-filters button.on{background:linear-gradient(135deg,#f3d488,#c4943c);color:#120e05;border-color:transparent;font-weight:600}
+  .vg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+  .vg-card{border-radius:14px;overflow:hidden;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.07);cursor:pointer;transition:transform .2s,border-color .2s}
+  .vg-card:hover{transform:translateY(-3px);border-color:rgba(243,212,136,.4)}
+  .vg-pic{position:relative;aspect-ratio:16/9;background:#0b0d12 center/cover no-repeat;display:flex;align-items:center;justify-content:center}
+  .vg-pic .play{width:54px;height:54px;border-radius:50%;background:rgba(0,0,0,.55);border:2px solid #f3d488;display:flex;align-items:center;justify-content:center}
+  .vg-pic .play::after{content:'';border-left:16px solid #f3d488;border-top:10px solid transparent;border-bottom:10px solid transparent;margin-left:4px}
+  .vg-tag{position:absolute;top:8px;left:8px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:rgba(0,0,0,.65)}
+  .vg-tag.review{color:#f3d488}.vg-tag.uploaded{color:#9be59b}.vg-tag.skipped{color:#9aa0ab}.vg-tag.failed{color:#f0a39a}.vg-tag.made{color:#cfd6e4}
+  .vg-len{position:absolute;bottom:8px;right:8px;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(0,0,0,.7)}
+  .vg-info{padding:10px 12px}
+  .vg-info b{display:block;font-size:14px;line-height:1.35;font-weight:600}
+  .vg-info span{font-size:12px;color:var(--text-dim)}
+  .vg-modal{position:fixed;inset:0;z-index:250;background:rgba(3,4,7,.9);display:flex;align-items:center;justify-content:center;padding:16px}
+  .vg-box{width:min(960px,100%);max-height:96vh;display:flex;flex-direction:column;gap:12px}
+  .vg-head,.vg-foot{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .vg-box video{width:100%;max-height:78vh;border-radius:12px;background:#000}
 </style>
 <link rel="stylesheet" href="gotham.css">
 </head>
@@ -140,6 +159,20 @@
     </div>
     <div id="ap-busy" class="hint ap-busy hidden"></div>
     <div id="ap-error" class="error-line hidden"></div>
+
+    <div class="panel">
+      <h3>My videos</h3>
+      <div class="vg-filters" id="vg-filters"></div>
+      <div class="vg-grid" id="vg-grid"><p class="hint">No videos yet - make one above.</p></div>
+    </div>
+
+    <div class="vg-modal hidden" id="vg-modal">
+      <div class="vg-box">
+        <div class="vg-head"><b id="vg-title"></b><button class="btn-ghost" id="vg-close">Close</button></div>
+        <video id="vg-player" controls playsinline></video>
+        <div class="vg-foot"><a class="btn-primary" id="vg-dl">Download</a><a class="btn-ghost hidden" id="vg-yt" target="_blank" rel="noopener">Open on YouTube</a></div>
+      </div>
+    </div>
 
     <div class="panel">
       <h3>Review before it goes online</h3>
