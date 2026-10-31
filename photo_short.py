@@ -399,7 +399,7 @@ def build(story_path: Path, offline: Path | None = None, voice: str | None = Non
     black = Image.new("RGB", (W, H), (0, 0, 0))
     silent = out_dir / "video_silent.mp4"
     ff = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS),
-                           "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", str(silent)],
+                           "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "12M", "-bufsize", "24M", "-pix_fmt", "yuv420p", str(silent)],
                           stdin=subprocess.PIPE)
     nframes = int(dur * FPS)
     last_photo = None
