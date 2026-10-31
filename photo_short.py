@@ -95,10 +95,11 @@ def page_images(title: str, session) -> list[dict]:
 def pick_photos(scenes: list[dict], folder: Path, offline: Path | None) -> tuple[list, list]:
     """One photo (or None) per scene, plus the credits list."""
     folder.mkdir(parents=True, exist_ok=True)
-    if offline:  # testing without internet: use local pictures in order
-        files = sorted(p for p in offline.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png"))
-        return [Image.open(files[i % len(files)]).convert("RGB") if files and sc.get("img") else None
-                for i, sc in enumerate(scenes)], []
+    if offline:  # local pictures instead of Wikipedia: scene_01.png, scene_02.jpg ... (missing number = no picture)
+        def local(i):
+            hits = [p for p in offline.glob(f"scene_{i + 1:02d}.*") if p.suffix.lower() in (".jpg", ".jpeg", ".png")]
+            return Image.open(hits[0]).convert("RGB") if hits else None
+        return [local(i) if sc.get("img") else None for i, sc in enumerate(scenes)], []
     import requests
     s = requests.Session()
     s.headers["User-Agent"] = UA
@@ -234,10 +235,10 @@ def grade(img: Image.Image, tint: tuple) -> Image.Image:
 BAND_Y, BAND_H = 300, 980
 
 
-def prepare(photo: Image.Image | None, tint: tuple) -> dict | None:
+def prepare(photo: Image.Image | None, tint: tuple | None) -> dict | None:
     if photo is None:
         return None
-    ph = grade(photo, tint)
+    ph = grade(photo, tint) if tint else photo
     # big version for the moving shot (cover the band with 15% to spare)
     scale = max(W * 1.18 / ph.width, BAND_H * 1.18 / ph.height)
     big = ph.resize((int(ph.width * scale), int(ph.height * scale)), Image.LANCZOS)
@@ -345,7 +346,7 @@ def draw_caption(img: Image.Image, words: list, age: float, accent: tuple) -> No
 
 # ---------------------------------------------------------------- main
 
-def build(story_path: Path, offline: Path | None = None, voice: str | None = None) -> Path:
+def build(story_path: Path, offline: Path | None = None, voice: str | None = None, no_grade: bool = False) -> Path:
     story = json.loads(story_path.read_text(encoding="utf-8"))
     if not shutil.which("ffmpeg"):
         sys.exit("ffmpeg is missing. Open PowerShell, type:  winget install Gyan.FFmpeg  then close it and try again.")
@@ -392,7 +393,7 @@ def build(story_path: Path, offline: Path | None = None, voice: str | None = Non
             tt += (z - a) * wt / sum(wts)
 
     say(f"3/4  Building the video ({dur:.0f} seconds)...")
-    prepped = [prepare(p, tint) for p in photos]
+    prepped = [prepare(p, None if no_grade else tint) for p in photos]
     plain_bg = Image.new("RGB", (W, H), (8, 10, 12))
     mask, grains, vig = band_mask(), grain_tiles(), vignette()
     black = Image.new("RGB", (W, H), (0, 0, 0))
@@ -480,5 +481,6 @@ if __name__ == "__main__":
     ap.add_argument("story")
     ap.add_argument("--offline-images", type=Path, help="test with local pictures instead of Wikipedia")
     ap.add_argument("--voice", help="edge-tts voice, e.g. en-US-AndrewNeural")
+    ap.add_argument("--no-grade", action="store_true", help="keep the pictures' own colours (for drawn pictures)")
     a = ap.parse_args()
-    build(Path(a.story), a.offline_images, a.voice)
+    build(Path(a.story), a.offline_images, a.voice, a.no_grade)
