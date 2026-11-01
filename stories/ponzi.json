@@ -1,9 +1,9 @@
 {
-  "slug": "paper-trail-charles-ponzi-short",
+  "slug": "paper-trail-ponzi-35s",
   "channel": "Paper Trail",
   "brand": "PAPER TRAIL",
   "voice": "en-US-AndrewNeural",
-  "rate": "+6%",
+  "rate": "+12%",
   "accent": [
     243,
     196,
@@ -16,8 +16,8 @@
   ],
   "scenes": [
     {
-      "say": "This man's scam was so famous, it's still named after him.",
-      "cap": "This man's scam was so FAMOUS, it's still NAMED after him.",
+      "say": "This scam is so famous, it's named after him.",
+      "cap": "This scam is so FAMOUS, it's NAMED after him.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -36,8 +36,8 @@
       }
     },
     {
-      "say": "Boston, nineteen twenty. Charles Ponzi made a promise. Fifty percent profit, in forty-five days.",
-      "cap": "Boston, 1920. Charles Ponzi made a promise. 50% PROFIT, in 45 DAYS.",
+      "say": "Boston, nineteen twenty. Charles Ponzi promised fifty percent profit, in forty-five days.",
+      "cap": "Boston, 1920. Charles Ponzi promised 50% PROFIT in 45 DAYS.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -55,8 +55,8 @@
       }
     },
     {
-      "say": "His secret? Postal reply coupons. Buy them cheap in Europe, and swap them in America for more.",
-      "cap": "His secret? POSTAL REPLY COUPONS. Buy them cheap in Europe, and swap them in America for MORE.",
+      "say": "His secret? Cheap postal coupons from Europe.",
+      "cap": "His secret? Cheap POSTAL COUPONS from Europe.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -67,8 +67,8 @@
       }
     },
     {
-      "say": "It sounded smart. So people lined up down the street with their savings.",
-      "cap": "It sounded SMART. So people lined up down the street with their SAVINGS.",
+      "say": "People lined up with their life savings.",
+      "cap": "People lined up with their LIFE SAVINGS.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -80,8 +80,8 @@
       }
     },
     {
-      "say": "Money flooded in. He bought a mansion, and even took control of a bank.",
-      "cap": "Money FLOODED in. He bought a MANSION, and even took control of a BANK.",
+      "say": "He bought a mansion. Then a bank.",
+      "cap": "He bought a MANSION. Then a BANK.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -93,8 +93,8 @@
       }
     },
     {
-      "say": "But here's the trick. He wasn't really buying coupons. He paid old investors with new investors' money.",
-      "cap": "But here's the trick. He wasn't really buying coupons. He paid OLD investors with NEW investors' money.",
+      "say": "But he was paying old investors with new investors' money.",
+      "cap": "But he was paying OLD investors with NEW investors' money.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -105,8 +105,8 @@
       }
     },
     {
-      "say": "Then a journalist did the math. To cover it all, Ponzi would need a hundred and sixty million coupons.",
-      "cap": "Then a journalist did the MATH. To cover it all, Ponzi would need 160 MILLION coupons.",
+      "say": "A journalist did the math. He'd need a hundred and sixty million coupons.",
+      "cap": "A journalist did the MATH. He'd need 160 MILLION coupons.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -117,8 +117,8 @@
       }
     },
     {
-      "say": "There were only about twenty-seven thousand in circulation.",
-      "cap": "There were only about 27,000 in circulation.",
+      "say": "Only about twenty-seven thousand existed.",
+      "cap": "Only about 27,000 EXISTED.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -135,8 +135,8 @@
       }
     },
     {
-      "say": "In August nineteen twenty, it all collapsed. Investors lost about twenty million dollars.",
-      "cap": "In August 1920, it all COLLAPSED. Investors lost about $20 MILLION.",
+      "say": "It collapsed. About twenty million dollars, gone.",
+      "cap": "It COLLAPSED. About $20 MILLION, gone.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -148,13 +148,13 @@
       "fx": {
         "type": "big",
         "text": "$20M",
-        "sub": "LOST",
+        "sub": "GONE",
         "size": 300
       }
     },
     {
-      "say": "Ponzi went to prison, was deported to Italy, and died poor in Brazil.",
-      "cap": "Ponzi went to PRISON, was DEPORTED to Italy, and died POOR in Brazil.",
+      "say": "Prison. Deported. He died poor.",
+      "cap": "PRISON. DEPORTED. He died POOR.",
       "img": {
         "pages": [
           "Charles Ponzi"
@@ -165,26 +165,14 @@
       }
     },
     {
-      "say": "Today, every scam that pays old investors with new money carries his name.",
-      "cap": "Today, every scam that pays old investors with new money carries his NAME.",
+      "say": "And a hundred years later...",
+      "cap": "And 100 years later...",
       "img": {
         "pages": [
           "Charles Ponzi"
         ],
         "want": [
           "pyramid"
-        ]
-      }
-    },
-    {
-      "say": "Follow Paper Trail, for the money stories nobody tells you.",
-      "cap": "Follow PAPER TRAIL for the money stories nobody tells you.",
-      "img": {
-        "pages": [
-          "Charles Ponzi"
-        ],
-        "want": [
-          "ponzi"
         ]
       }
     }
@@ -203,6 +191,8 @@
       "money",
       "paper trail"
     ],
-    "pinned": "Have you ever seen a Ponzi scheme in real life? 👇"
-  }
+    "pinned": "Would you have invested? Follow Paper Trail for more money stories 👇"
+  },
+  "gap": 0.06,
+  "tail": 0.25
 }

@@ -150,10 +150,11 @@ def _decode(path: Path) -> np.ndarray:
 
 
 def voice_lines(texts: list[str], voice: str, rate: str) -> list[np.ndarray]:
-    if voice.startswith("kokoro:"):  # offline voice (used for testing)
+    if voice.startswith("kokoro:"):  # offline voice (used when Microsoft's voice can't be reached)
         from kokoro_onnx import Kokoro
         k = Kokoro(str(APP / "kokoro.onnx"), str(APP / "voices.bin"))
-        return [k.create(t, voice=voice.split(":", 1)[1], speed=1.1, lang="en-us")[0].astype(np.float32) for t in texts]
+        speed = 1.04 + int(re.sub(r"[^0-9-]", "", rate) or 0) / 100
+        return [k.create(t, voice=voice.split(":", 1)[1], speed=speed, lang="en-us")[0].astype(np.float32) for t in texts]
     import edge_tts
     out = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -364,13 +365,13 @@ def build(story_path: Path, offline: Path | None = None, voice: str | None = Non
     say("2/4  Recording the voice...")
     lines = [trim(v) for v in voice_lines([s["say"] for s in scenes], voice or story.get("voice", "en-US-AndrewNeural"),
                                            story.get("rate", "+6%"))]
-    gap, lead = 0.14, 0.3
+    gap, lead = float(story.get("gap", 0.14)), 0.3
     parts, starts, t = [np.zeros(int(SR * lead), np.float32)], [], lead
     for v in lines:
         starts.append((t, t + len(v) / SR))
         parts += [v, np.zeros(int(SR * gap), np.float32)]
         t += len(v) / SR + gap
-    parts.append(np.zeros(int(SR * 1.0), np.float32))
+    parts.append(np.zeros(int(SR * float(story.get("tail", 1.0))), np.float32))  # short tail = smoother loop
     vo = np.concatenate(parts)
     vo = vo / (np.abs(vo).max() + 1e-9) * 0.9
     mix = vo + soundtrack(len(vo), starts, scenes)

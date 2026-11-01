@@ -1,9 +1,9 @@
 {
-  "slug": "paper-trail-fake-country-poyais-short",
+  "slug": "paper-trail-fake-country-35s",
   "channel": "Paper Trail",
   "brand": "PAPER TRAIL",
   "voice": "en-US-AndrewNeural",
-  "rate": "+6%",
+  "rate": "+12%",
   "accent": [
     243,
     196,
@@ -16,8 +16,8 @@
   ],
   "scenes": [
     {
-      "say": "In eighteen twenty-two, a man sold land in a country that did not exist. And hundreds of people sailed there.",
-      "cap": "In 1822, a man sold land in a country that DID NOT EXIST. And hundreds of people SAILED there.",
+      "say": "This man sold land in a country that did not exist.",
+      "cap": "This man sold land in a country that DID NOT EXIST.",
       "img": {
         "pages": [
           "Poyais",
@@ -37,8 +37,8 @@
       }
     },
     {
-      "say": "His name was Gregor MacGregor, a Scottish soldier back from the wars in South America.",
-      "cap": "His name was GREGOR MacGREGOR, a Scottish soldier back from the wars in South America.",
+      "say": "Gregor MacGregor. A Scottish soldier.",
+      "cap": "GREGOR MacGREGOR. A Scottish soldier.",
       "img": {
         "pages": [
           "Gregor MacGregor"
@@ -50,12 +50,12 @@
       },
       "fx": {
         "type": "tag",
-        "text": "GREGOR MacGREGOR · 1822"
+        "text": "LONDON · 1822"
       }
     },
     {
-      "say": "In London, he said he was the ruler of Poyais, a rich new nation in Central America.",
-      "cap": "In London, he said he was the RULER of POYAIS, a rich new nation in Central America.",
+      "say": "He told London he ruled Poyais, a rich nation in Central America.",
+      "cap": "He told London he RULED POYAIS, a rich nation in Central America.",
       "img": {
         "pages": [
           "Poyais"
@@ -68,8 +68,8 @@
       }
     },
     {
-      "say": "He published a guidebook. A capital city. A cathedral. An opera house. Rivers with gold.",
-      "cap": "He published a GUIDEBOOK. A capital city. A cathedral. An opera house. Rivers with GOLD.",
+      "say": "He had a guidebook. A capital city. An opera house.",
+      "cap": "He had a GUIDEBOOK. A capital city. An OPERA HOUSE.",
       "img": {
         "pages": [
           "Poyais"
@@ -82,8 +82,8 @@
       }
     },
     {
-      "say": "He sold land, and raised a loan of two hundred thousand pounds in London.",
-      "cap": "He sold land, and raised a loan of £200,000 in LONDON.",
+      "say": "He raised two hundred thousand pounds.",
+      "cap": "He raised £200,000.",
       "img": {
         "pages": [
           "Poyais"
@@ -95,8 +95,8 @@
       }
     },
     {
-      "say": "He even printed his own money. Settlers swapped their real savings for Poyais dollars.",
-      "cap": "He even printed his own MONEY. Settlers swapped their real savings for POYAIS DOLLARS.",
+      "say": "He even printed his own money.",
+      "cap": "He even printed his own MONEY.",
       "img": {
         "pages": [
           "Poyais"
@@ -109,8 +109,8 @@
       }
     },
     {
-      "say": "Then the ships left, with around two hundred and fifty settlers.",
-      "cap": "Then the SHIPS left, with around 250 settlers.",
+      "say": "Two hundred and fifty settlers sailed there.",
+      "cap": "250 SETTLERS sailed there.",
       "img": {
         "pages": [
           "Poyais"
@@ -121,8 +121,8 @@
       }
     },
     {
-      "say": "When they landed, there was no city. No cathedral. Just jungle.",
-      "cap": "When they landed, there was NO CITY. No cathedral. Just JUNGLE.",
+      "say": "They found no city. Just jungle.",
+      "cap": "They found NO CITY. Just JUNGLE.",
       "img": {
         "pages": [
           "Mosquito Coast"
@@ -134,8 +134,8 @@
       }
     },
     {
-      "say": "Disease spread fast. About a hundred and eighty of them died.",
-      "cap": "Disease spread fast. About 180 of them DIED.",
+      "say": "About a hundred and eighty of them died.",
+      "cap": "About 180 of them DIED.",
       "img": {
         "pages": [
           "Mosquito Coast"
@@ -152,8 +152,8 @@
       }
     },
     {
-      "say": "And MacGregor? He went to France, and tried the same scam again.",
-      "cap": "And MacGregor? He went to FRANCE, and tried the same scam AGAIN.",
+      "say": "MacGregor? He tried the same scam in France.",
+      "cap": "MacGregor? He tried the same scam in FRANCE.",
       "img": {
         "pages": [
           "Gregor MacGregor"
@@ -165,8 +165,8 @@
       }
     },
     {
-      "say": "He was never truly punished. He died in Venezuela in eighteen forty-five, honored as a general.",
-      "cap": "He was never truly PUNISHED. He died in Venezuela in 1845, honored as a GENERAL.",
+      "say": "And he died honored as a general. Which is crazy, because...",
+      "cap": "And he died HONORED as a general. Which is crazy, because...",
       "img": {
         "pages": [
           "Gregor MacGregor"
@@ -174,18 +174,6 @@
         "want": [
           "venezuela",
           "medal"
-        ]
-      }
-    },
-    {
-      "say": "The country that never existed. Follow Paper Trail for the money stories nobody tells you.",
-      "cap": "The country that NEVER EXISTED. Follow PAPER TRAIL for the money stories nobody tells you.",
-      "img": {
-        "pages": [
-          "Poyais"
-        ],
-        "want": [
-          "map"
         ]
       }
     }
@@ -204,6 +192,8 @@
       "true crime",
       "paper trail"
     ],
-    "pinned": "Would you have bought land in Poyais? 👇"
-  }
+    "pinned": "Would you have bought land in Poyais? Follow Paper Trail for more 👇"
+  },
+  "gap": 0.06,
+  "tail": 0.25
 }
