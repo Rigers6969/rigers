@@ -664,11 +664,275 @@ def s_tower_end():
     return finish(over(base, tag))
 
 
+# ------------------------------------------------------------------ Paper Trail: Poyais, the country that never existed
+
+PARCH = ((232, 216, 178), (198, 176, 132))
+BROWN = (70, 48, 30)
+
+
+def parchment(seed=1):
+    p = gradient(*PARCH)
+    p += np.random.default_rng(seed).normal(0, 7, p.shape[:2])[..., None]
+    yy, xx = np.mgrid[0:IH, 0:IW]
+    r = np.sqrt(((xx - IW / 2) / (IW * 0.7)) ** 2 + ((yy - IH / 2) / (IH * 0.7)) ** 2)
+    return p * np.clip(1.15 - r * 0.45, 0.55, 1)[..., None]
+
+
+def coastline(d, pts, fill=None, outline=BROWN, width=6):
+    if fill:
+        d.polygon(pts, fill=fill)
+    d.line(pts + [pts[0]], fill=outline, width=width, joint="curve")
+
+
+def blob(cx, cy, rx, ry, seed, n=40, rough=0.18):
+    r = random.Random(seed)
+    pts = []
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        f = 1 + r.uniform(-rough, rough)
+        pts.append((cx + math.cos(a) * rx * f, cy + math.sin(a) * ry * f))
+    return pts
+
+
+def s_map(stamp=True):
+    def fn():
+        img = finish(parchment(2))
+        d = ImageDraw.Draw(img)
+        coastline(d, blob(520, 640, 420, 330, 4), fill=(206, 186, 140))
+        for k in range(6):  # sea lines
+            y = 180 + k * 190
+            d.arc([960, y, 1360, y + 80], 200, 340, fill=(120, 100, 70), width=4)
+        d.text((520, 640), "POYAIS", font=F(ANTON, 150), fill=BROWN, anchor="mm")
+        d.text((520, 760), "St. Joseph (capital)", font=F(ARCH, 34), fill=BROWN, anchor="mm")
+        d.ellipse([500, 790, 540, 830], fill=(150, 30, 30))
+        d.text((1150, 1120), "N", font=F(ANTON, 80), fill=BROWN, anchor="mm")
+        d.polygon([(1150, 960), (1120, 1070), (1180, 1070)], fill=BROWN)
+        if stamp:
+            st = Image.new("RGBA", (760, 220), (0, 0, 0, 0))
+            sd = ImageDraw.Draw(st)
+            sd.rounded_rectangle([8, 8, 752, 212], 20, outline=(170, 20, 24, 255), width=14)
+            sd.text((380, 112), "DOES NOT EXIST", font=F(ANTON, 120), fill=(170, 20, 24, 255), anchor="mm")
+            st = st.rotate(-12, expand=True)
+            img.paste(st, (440, 820), st)
+        return img
+    return fn
+
+
+def s_general():
+    base = gradient((40, 20, 18), (8, 5, 5))
+    sil = blank("RGBA")
+    d = ImageDraw.Draw(sil)
+    man(d, 700, 1200, 1.6, (16, 18, 34, 255), hat=False)
+    d.chord([700 - 240, 1200 - 820, 700 + 240, 1200 - 560], 180, 360, fill=(16, 18, 34, 255))  # bicorne
+    d.polygon([(700 - 260, 1200 - 690), (700 + 260, 1200 - 690), (700, 1200 - 630)], fill=(16, 18, 34, 255))
+    base = over(base, sil)
+    g = blank()
+    gd = ImageDraw.Draw(g)
+    for sx in (-1, 1):  # epaulettes
+        x = 700 + sx * 250
+        gd.ellipse([x - 90, 1000, x + 90, 1060], fill=GOLD)
+        for k in range(7):
+            gd.line([(x - 80 + k * 26, 1050), (x - 80 + k * 26, 1110)], fill=GOLD, width=6)
+    for k in range(3):
+        gd.ellipse([600 + k * 70, 1150, 650 + k * 70, 1200], fill=GOLD)
+    for k in range(4):
+        gd.ellipse([690, 1080 + k * 50, 710, 1100 + k * 50], fill=GOLD)
+    base = add(base, g, glow=0.5, radius=10)
+    return finish(add(base, outline_of(lambda dd: man(dd, 700, 1200, 1.6, 255, hat=False), GOLD, 3), glow=0.3, radius=8))
+
+
+def s_crown():
+    base = gradient((44, 16, 22), (10, 4, 6))
+    g = blank()
+    d = ImageDraw.Draw(g)
+    cx, cy = 700, 560
+    d.polygon([(cx - 300, cy + 160), (cx - 330, cy - 120), (cx - 170, cy + 20), (cx, cy - 200), (cx + 170, cy + 20),
+               (cx + 330, cy - 120), (cx + 300, cy + 160)], fill=GOLD)
+    d.rectangle([cx - 300, cy + 160, cx + 300, cy + 230], fill=(220, 170, 60))
+    for x, col in ((cx - 180, (200, 40, 50)), (cx, (60, 120, 220)), (cx + 180, (40, 160, 90))):
+        d.ellipse([x - 32, cy + 168, x + 32, cy + 222], fill=col)
+    for x, y in ((cx - 330, cy - 120), (cx, cy - 200), (cx + 330, cy - 120)):
+        d.ellipse([x - 26, y - 26, x + 26, y + 26], fill=(255, 240, 200))
+    base = add(base, g, glow=0.5, radius=24)
+    t = blank()
+    td = ImageDraw.Draw(t)
+    td.text((700, 940), "THE RULER OF", font=F(ARCH, 64), fill=(230, 220, 200), anchor="mm")
+    td.text((700, 1070), "POYAIS", font=F(ANTON, 170), fill=GOLD, anchor="mm")
+    return finish(add(base, t, glow=0.3, radius=10))
+
+
+def s_guidebook():
+    base = gradient((30, 22, 16), (8, 6, 4))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.polygon([(120, 260), (700, 300), (700, 1120), (100, 1080)], fill=(236, 222, 190, 255))
+    d.polygon([(700, 300), (1280, 260), (1300, 1080), (700, 1120)], fill=(228, 212, 178, 255))
+    d.line([(700, 300), (700, 1120)], fill=(150, 120, 90, 255), width=6)
+    ink = (60, 44, 30, 255)
+    d.text((400, 360), "A SKETCH OF", font=F(ARCH, 34), fill=ink, anchor="mm")
+    d.text((400, 420), "POYAIS", font=F(ANTON, 90), fill=ink, anchor="mm")
+    for k in range(8):
+        y = 520 + k * 55
+        d.line([(180, y), (640 - (k % 3) * 60, y)], fill=(130, 110, 90, 255), width=6)
+    # the dream city on the right page
+    d.rectangle([780, 760, 1220, 900], outline=ink, width=5)
+    d.chord([900, 560, 1100, 800], 180, 360, outline=ink, width=5)        # cathedral dome
+    d.line([(1000, 560), (1000, 500)], fill=ink, width=5)
+    d.line([(980, 520), (1020, 520)], fill=ink, width=5)
+    for x in range(800, 1210, 60):
+        d.rectangle([x, 800, x + 30, 860], outline=ink, width=3)
+    d.text((1000, 960), "CATHEDRAL · OPERA · BANK", font=F(ARCH, 30), fill=ink, anchor="mm")
+    base = over(base, l)
+    gold = blank()
+    specks(gold, 40, (800, 990, 1220, 1060), 4, color=GOLD, size=(5, 12))
+    return finish(add(base, gold, glow=0.6, radius=8))
+
+
+def s_bond():
+    img = finish(parchment(5))
+    d = ImageDraw.Draw(img)
+    d.rectangle([70, 70, IW - 70, IH - 70], outline=BROWN, width=10)
+    d.rectangle([100, 100, IW - 100, IH - 100], outline=BROWN, width=3)
+    d.text((IW // 2, 250), "POYAIS LOAN", font=F(ANTON, 150), fill=BROWN, anchor="mm")
+    d.text((IW // 2, 380), "LONDON · 1822", font=F(ARCH, 50), fill=BROWN, anchor="mm")
+    d.text((IW // 2, 640), "£200,000", font=F(ANTON, 260), fill=(150, 30, 30), anchor="mm")
+    for k in range(4):
+        y = 860 + k * 55
+        d.line([(260, y), (IW - 260, y)], fill=(140, 115, 85), width=5)
+    d.ellipse([IW - 330, 940, IW - 150, 1120], outline=(150, 30, 30), width=10)
+    d.text((IW - 240, 1030), "SEAL", font=F(ARCH, 34), fill=(150, 30, 30), anchor="mm")
+    return img
+
+
+def s_banknote():
+    base = gradient((20, 26, 22), (6, 8, 7))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    for k, (dx, dy, rot) in enumerate(((-60, 80, -8), (40, -40, 5), (0, 0, 0))):
+        note = Image.new("RGBA", (1100, 560), (0, 0, 0, 0))
+        n = ImageDraw.Draw(note)
+        n.rounded_rectangle([0, 0, 1099, 559], 20, fill=(206, 214, 184, 255), outline=(50, 80, 60, 255), width=10)
+        n.rounded_rectangle([30, 30, 1069, 529], 14, outline=(50, 80, 60, 255), width=4)
+        n.text((550, 120), "BANK OF POYAIS", font=F(ANTON, 90), fill=(40, 70, 50, 255), anchor="mm")
+        n.ellipse([90, 200, 330, 440], outline=(40, 70, 50, 255), width=8)
+        n.text((210, 320), "1", font=F(ANTON, 160), fill=(40, 70, 50, 255), anchor="mm")
+        n.text((700, 300), "ONE DOLLAR", font=F(ANTON, 110), fill=(40, 70, 50, 255), anchor="mm")
+        n.text((700, 430), "Payable to the bearer", font=F(ARCH, 36), fill=(60, 90, 70, 255), anchor="mm")
+        note = note.rotate(rot, expand=True)
+        l.paste(note, (150 + dx, 350 + dy), note)
+    base = over(base, l)
+    return finish(base)
+
+
+def s_ship():
+    base = gradient((70, 60, 90), (240, 150, 90), h=IH)
+    sun = blank()
+    ImageDraw.Draw(sun).ellipse([840, 520, 1100, 780], fill=(255, 220, 160))
+    base = add(base, sun, glow=0.5, radius=50)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 760, IW, IH], fill=(30, 40, 70, 255))
+    for k in range(30):
+        y = 790 + k * 16
+        d.line([(random.Random(k).randint(0, 600), y), (random.Random(k + 50).randint(700, IW), y)], fill=(60, 70, 100, 255), width=3)
+    f = (14, 12, 18, 255)
+    d.polygon([(260, 760), (900, 760), (840, 860), (320, 860)], fill=f)         # hull
+    for x, h in ((420, 520), (600, 600), (760, 480)):
+        d.rectangle([x - 8, 760 - h, x + 8, 760], fill=f)
+        d.polygon([(x - 120, 760 - h + 60), (x + 120, 760 - h + 60), (x + 100, 760 - h + 260), (x - 100, 760 - h + 260)], fill=f)
+        d.polygon([(x - 140, 760 - h + 290), (x + 140, 760 - h + 290), (x + 120, 760 - h * 0.25), (x - 120, 760 - h * 0.25)], fill=f)
+    d.line([(260, 760), (120, 600)], fill=f, width=8)
+    base = over(base, l)
+    return finish(base)
+
+
+def s_jungle():
+    base = gradient((40, 60, 50), (10, 16, 12))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 980, IW, IH], fill=(170, 150, 110, 255))      # beach
+    d.rectangle([0, 900, IW, 990], fill=(50, 80, 100, 255))       # sea
+    r = random.Random(3)
+    for x in range(-50, IW + 100, 120):   # dense jungle
+        h = r.randint(300, 520)
+        d.ellipse([x - 140, 900 - h, x + 140, 900 - h + 420], fill=(16 + r.randint(0, 20), 50 + r.randint(0, 30), 24, 255))
+    def palm(x, y, s):
+        d.line([(x, y), (x + 30 * s, y - 380 * s)], fill=(40, 30, 20, 255), width=int(24 * s))
+        for a in range(0, 360, 45):
+            ax = x + 30 * s + math.cos(math.radians(a)) * 220 * s
+            ay = y - 380 * s + math.sin(math.radians(a)) * 90 * s + 40 * s
+            d.line([(x + 30 * s, y - 380 * s), (ax, ay)], fill=(14, 40, 18, 255), width=int(26 * s))
+    palm(200, 1150, 1.3)
+    palm(1180, 1180, 1.5)
+    base = over(base, l)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 230), "NO CITY.", font=F(ANTON, 170), fill=(240, 236, 220), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_graves():
+    base = gradient((16, 20, 30), (4, 5, 8))
+    moon = blank()
+    ImageDraw.Draw(moon).ellipse([980, 140, 1160, 320], fill=(220, 220, 210))
+    base = add(base, moon, glow=0.4, radius=40)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.polygon([(0, 900), (500, 840), (900, 860), (IW, 820), (IW, IH), (0, IH)], fill=(14, 16, 18, 255))
+    r = random.Random(8)
+    for k in range(14):
+        x = 80 + k * 95 + r.randint(-20, 20)
+        y = 900 + (k % 3) * 90 + r.randint(-10, 10)
+        s = 0.7 + (k % 3) * 0.25
+        d.rectangle([x - 8 * s, y - 120 * s, x + 8 * s, y], fill=(150, 140, 120, 255))
+        d.rectangle([x - 45 * s, y - 95 * s, x + 45 * s, y - 80 * s], fill=(150, 140, 120, 255))
+    base = over(base, l)
+    return finish(base)
+
+
+def s_france():
+    img = finish(parchment(7))
+    d = ImageDraw.Draw(img)
+    coastline(d, blob(420, 420, 200, 300, 9), fill=(206, 186, 140))     # Britain
+    coastline(d, blob(900, 900, 380, 300, 12), fill=(206, 186, 140))    # France
+    d.text((420, 420), "LONDON", font=F(ARCH, 48), fill=BROWN, anchor="mm")
+    d.text((900, 900), "PARIS", font=F(ANTON, 110), fill=BROWN, anchor="mm")
+    for k in range(0, 100, 8):  # dashed route
+        t0, t1 = k / 100, (k + 4) / 100
+        p = lambda t: (480 + (820 - 480) * t, 470 + (820 - 470) * t - math.sin(math.pi * t) * 160)
+        d.line([p(t0), p(t1)], fill=(160, 30, 30), width=10)
+    d.polygon([(820, 820), (770, 790), (790, 840)], fill=(160, 30, 30))
+    d.text((1000, 300), "AGAIN.", font=F(ANTON, 160), fill=(160, 30, 30), anchor="mm")
+    return img
+
+
+def s_medal():
+    base = gradient((60, 14, 20), (14, 4, 6))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    d.polygon([(560, 120), (840, 120), (760, 560), (640, 560)], fill=(30, 60, 130))
+    d.polygon([(640, 120), (760, 120), (720, 560), (680, 560)], fill=(200, 40, 40))
+    cx, cy = 700, 760
+    pts = []
+    for k in range(16):
+        r = 260 if k % 2 == 0 else 140
+        a = math.pi * 2 * k / 16 - math.pi / 2
+        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    d.polygon(pts, fill=GOLD)
+    d.ellipse([cx - 110, cy - 110, cx + 110, cy + 110], fill=(220, 170, 60))
+    d.text((cx, cy), "1845", font=F(ANTON, 80), fill=(90, 60, 20), anchor="mm")
+    base = add(base, l, glow=0.4, radius=20)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 1140), "NEVER PUNISHED", font=F(ANTON, 110), fill=(240, 230, 210), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
 STORIES = {
     "radium_girls": {1: s_glowing_women, 2: s_factory, 3: s_undark_ad, 4: s_brush_lips, 5: s_painting_dial, 6: s_glowing_smile,
                      7: s_xray_jaw, 9: s_court, 10: s_deathbed, 11: s_safety, 13: s_final},
     "eiffel_tower": {1: s_tower_night, 2: s_con_man, 3: s_rust_tower, 4: s_letter, 5: s_meeting, 6: s_dealer, 7: s_bribe,
                      8: s_cash, 9: s_train, 10: s_head_in_hands, 11: s_escape, 12: s_alcatraz, 13: s_tower_end},
+    "poyais": {1: s_map(False), 2: s_general, 3: s_crown, 4: s_guidebook, 5: s_bond, 6: s_banknote, 7: s_ship, 8: s_jungle,
+               9: s_graves, 10: s_france, 11: s_medal, 12: s_map(True)},
 }
 
 

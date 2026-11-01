@@ -90,6 +90,16 @@ def api_autopilot_videos():
     return jsonify({"videos": autopilot.all_videos()})
 
 
+@bp.route("/api/autopilot/videos/<slug>/post", methods=["POST"])
+def api_autopilot_video_post(slug):
+    try:
+        return jsonify(autopilot.post_now(slug))
+    except autopilot.AutopilotError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # Google / network
+        return jsonify({"error": f"Upload failed: {type(exc).__name__}: {exc}"}), 502
+
+
 @bp.route("/api/autopilot/videos/<slug>/file")
 def api_autopilot_video_download(slug):
     path = autopilot.video_file(slug)

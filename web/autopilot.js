@@ -145,6 +145,19 @@
     $("vg-dl").href = `/api/autopilot/videos/${encodeURIComponent(v.slug)}/file?download=1`;
     $("vg-yt").classList.toggle("hidden", !v.url);
     if (v.url) $("vg-yt").href = v.url;
+    const post = $("vg-post");
+    post.classList.toggle("hidden", !!v.url || !v.channel);
+    post.disabled = false; post.textContent = "Post to YouTube now";
+    post.onclick = async () => {
+      if (!confirm(`Post "${v.title}" to ${v.channel} now? It goes public straight away.`)) return;
+      post.disabled = true; post.textContent = "Uploading... (keep this open)";
+      try {
+        const r = await api(`/api/autopilot/videos/${encodeURIComponent(v.slug)}/post`, {});
+        post.classList.add("hidden");
+        $("vg-yt").href = r.url; $("vg-yt").classList.remove("hidden");
+        loadVideos();
+      } catch (e) { post.disabled = false; post.textContent = "Post to YouTube now"; alert(e.message); }
+    };
     $("vg-modal").classList.remove("hidden");
     $("vg-player").play().catch(() => {});
   }

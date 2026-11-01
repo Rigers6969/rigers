@@ -1,0 +1,209 @@
+{
+  "slug": "paper-trail-fake-country-poyais-short",
+  "channel": "Paper Trail",
+  "brand": "PAPER TRAIL",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+6%",
+  "accent": [
+    243,
+    196,
+    72
+  ],
+  "tint": [
+    96,
+    80,
+    60
+  ],
+  "scenes": [
+    {
+      "say": "In eighteen twenty-two, a man sold land in a country that did not exist. And hundreds of people sailed there.",
+      "cap": "In 1822, a man sold land in a country that DID NOT EXIST. And hundreds of people SAILED there.",
+      "img": {
+        "pages": [
+          "Poyais",
+          "Gregor MacGregor"
+        ],
+        "want": [
+          "map",
+          "poyais"
+        ]
+      },
+      "fx": {
+        "type": "stamp",
+        "words": [
+          "FAKE",
+          "COUNTRY"
+        ]
+      }
+    },
+    {
+      "say": "His name was Gregor MacGregor, a Scottish soldier back from the wars in South America.",
+      "cap": "His name was GREGOR MacGREGOR, a Scottish soldier back from the wars in South America.",
+      "img": {
+        "pages": [
+          "Gregor MacGregor"
+        ],
+        "want": [
+          "macgregor",
+          "portrait"
+        ]
+      },
+      "fx": {
+        "type": "tag",
+        "text": "GREGOR MacGREGOR · 1822"
+      }
+    },
+    {
+      "say": "In London, he said he was the ruler of Poyais, a rich new nation in Central America.",
+      "cap": "In London, he said he was the RULER of POYAIS, a rich new nation in Central America.",
+      "img": {
+        "pages": [
+          "Poyais"
+        ],
+        "want": [
+          "poyais",
+          "flag",
+          "arms"
+        ]
+      }
+    },
+    {
+      "say": "He published a guidebook. A capital city. A cathedral. An opera house. Rivers with gold.",
+      "cap": "He published a GUIDEBOOK. A capital city. A cathedral. An opera house. Rivers with GOLD.",
+      "img": {
+        "pages": [
+          "Poyais"
+        ],
+        "want": [
+          "sketch",
+          "book",
+          "title"
+        ]
+      }
+    },
+    {
+      "say": "He sold land, and raised a loan of two hundred thousand pounds in London.",
+      "cap": "He sold land, and raised a loan of £200,000 in LONDON.",
+      "img": {
+        "pages": [
+          "Poyais"
+        ],
+        "want": [
+          "bond",
+          "loan"
+        ]
+      }
+    },
+    {
+      "say": "He even printed his own money. Settlers swapped their real savings for Poyais dollars.",
+      "cap": "He even printed his own MONEY. Settlers swapped their real savings for POYAIS DOLLARS.",
+      "img": {
+        "pages": [
+          "Poyais"
+        ],
+        "want": [
+          "dollar",
+          "note",
+          "bank"
+        ]
+      }
+    },
+    {
+      "say": "Then the ships left, with around two hundred and fifty settlers.",
+      "cap": "Then the SHIPS left, with around 250 settlers.",
+      "img": {
+        "pages": [
+          "Poyais"
+        ],
+        "want": [
+          "ship"
+        ]
+      }
+    },
+    {
+      "say": "When they landed, there was no city. No cathedral. Just jungle.",
+      "cap": "When they landed, there was NO CITY. No cathedral. Just JUNGLE.",
+      "img": {
+        "pages": [
+          "Mosquito Coast"
+        ],
+        "want": [
+          "coast",
+          "beach"
+        ]
+      }
+    },
+    {
+      "say": "Disease spread fast. About a hundred and eighty of them died.",
+      "cap": "Disease spread fast. About 180 of them DIED.",
+      "img": {
+        "pages": [
+          "Mosquito Coast"
+        ],
+        "want": [
+          "grave"
+        ]
+      },
+      "fx": {
+        "type": "big",
+        "text": "~180",
+        "sub": "SETTLERS DIED",
+        "size": 260
+      }
+    },
+    {
+      "say": "And MacGregor? He went to France, and tried the same scam again.",
+      "cap": "And MacGregor? He went to FRANCE, and tried the same scam AGAIN.",
+      "img": {
+        "pages": [
+          "Gregor MacGregor"
+        ],
+        "want": [
+          "paris",
+          "france"
+        ]
+      }
+    },
+    {
+      "say": "He was never truly punished. He died in Venezuela in eighteen forty-five, honored as a general.",
+      "cap": "He was never truly PUNISHED. He died in Venezuela in 1845, honored as a GENERAL.",
+      "img": {
+        "pages": [
+          "Gregor MacGregor"
+        ],
+        "want": [
+          "venezuela",
+          "medal"
+        ]
+      }
+    },
+    {
+      "say": "The country that never existed. Follow Paper Trail for the money stories nobody tells you.",
+      "cap": "The country that NEVER EXISTED. Follow PAPER TRAIL for the money stories nobody tells you.",
+      "img": {
+        "pages": [
+          "Poyais"
+        ],
+        "want": [
+          "map"
+        ]
+      }
+    }
+  ],
+  "upload": {
+    "title": "He Sold Land in a Country That Didn’t Exist 🗺️ #shorts",
+    "description": "In 1822, Gregor MacGregor convinced London investors and settlers that he ruled 'Poyais', a rich nation in Central America. He sold land, raised a £200,000 loan and printed his own money. The country did not exist. Around 250 settlers sailed there - most of them never came home.\n\nRead more: https://en.wikipedia.org/wiki/Gregor_MacGregor\n\n#scam #history #truecrime #papertrail",
+    "tags": [
+      "gregor macgregor",
+      "poyais",
+      "fake country",
+      "scam",
+      "fraud",
+      "con man",
+      "history",
+      "true crime",
+      "paper trail"
+    ],
+    "pinned": "Would you have bought land in Poyais? 👇"
+  }
+}

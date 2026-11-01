@@ -12,6 +12,7 @@ def ap(tmp_path, monkeypatch):
     for name, fname in (("SETTINGS_FILE", "s.json"), ("STATE_FILE", "st.json")):
         monkeypatch.setattr(autopilot, name, tmp_path / fname)
     monkeypatch.setattr(autopilot, "TOKENS_DIR", tmp_path / "tokens")
+    monkeypatch.setattr(autopilot, "READY_DIR", tmp_path / "no_ready_videos")
     return tmp_path
 
 
@@ -175,3 +176,36 @@ def test_all_videos_lists_states(ap, monkeypatch):
     assert vids["done-one"]["state"] == "uploaded" and vids["done-one"]["title"] == "Done video"
     assert vids["done-one"]["channel"] == "History" and vids["done-one"]["url"].endswith("abc")
     assert vids["broken-one"]["state"] == "failed" and not vids["broken-one"]["has_video"]
+
+
+def test_ready_videos_import_and_post(ap, monkeypatch):
+    import producer
+    import publishing
+    root, ready = ap / "content", ap / "ready"
+    ready.mkdir()
+    monkeypatch.setattr(producer, "CONTENT_ROOT", root)
+    monkeypatch.setattr(autopilot, "READY_DIR", ready)
+    (ready / "a.mp4").write_bytes(b"x")
+    (ready / "b.mp4").write_bytes(b"x")
+    (ready / "a.json").write_text(json.dumps({"slug": "new-one", "channel": "Paper Trail", "video": "a.mp4", "title": "New",
+                                              "description": "D", "tags": ["t"], "posted": False}))
+    (ready / "b.json").write_text(json.dumps({"slug": "old-one", "channel": "Paper Trail", "video": "b.mp4", "title": "Old",
+                                              "posted": True}))
+    vids = {v["slug"]: v for v in autopilot.all_videos()}
+    assert vids["new-one"]["state"] == "made" and vids["new-one"]["channel"] == "Paper Trail"
+    assert vids["old-one"]["state"] == "uploaded"
+    assert autopilot.import_ready() == 0  # second time: nothing new
+
+    with pytest.raises(autopilot.AutopilotError, match="Connect"):
+        autopilot.post_now("new-one")
+    autopilot.token_path("Paper Trail").parent.mkdir(parents=True, exist_ok=True)
+    autopilot.token_path("Paper Trail").write_text("{}")
+    calls = []
+    monkeypatch.setattr(publishing, "upload_to_youtube", lambda *a, **k: calls.append((a, k)) or "VID123")
+    r = autopilot.post_now("new-one")
+    assert r["url"] == "https://youtu.be/VID123"
+    assert calls[0][1]["privacy_status"] == "public" and calls[0][0][1] == "New"
+    with pytest.raises(autopilot.AutopilotError, match="already"):
+        autopilot.post_now("new-one")
+    with pytest.raises(autopilot.AutopilotError, match="already"):
+        autopilot.post_now("old-one")

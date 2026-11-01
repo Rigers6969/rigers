@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import threading
 import time
 import traceback
@@ -33,6 +34,7 @@ SETTINGS_FILE = APP_DIR / "autopilot.json"
 STATE_FILE = APP_DIR / "autopilot_state.json"
 TOKENS_DIR = APP_DIR / "tokens"
 CLIENT_SECRET = APP_DIR / "client_secret.json"
+READY_DIR = APP_DIR / "ready_videos"
 
 
 def find_client_secret() -> Optional[Path]:
@@ -401,10 +403,71 @@ def video_file(slug: str) -> Optional[Path]:
     return None
 
 
+def import_ready() -> int:
+    """Finished videos shipped in ready_videos/ (a .json next to each .mp4) are copied into content/<slug>,
+    so they show in My videos with Play / Download / Post to YouTube. Already-imported ones are skipped."""
+    from producer import CONTENT_ROOT
+
+    n = 0
+    for mf in sorted(READY_DIR.glob("*.json")) if READY_DIR.exists() else []:
+        item = _read(mf, {})
+        slug, video = str(item.get("slug", "")), READY_DIR / str(item.get("video", ""))
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,80}", slug) or not video.is_file() or (CONTENT_ROOT / slug).exists():
+            continue
+        vdir = CONTENT_ROOT / slug
+        vdir.mkdir(parents=True)
+        shutil.copyfile(video, vdir / "final.mp4")
+        cover = READY_DIR / str(item.get("cover", ""))
+        if item.get("cover") and cover.is_file():
+            shutil.copyfile(cover, vdir / "thumb_1.jpg")
+        (vdir / "metadata.json").write_text(json.dumps({"youtube": {"title": item.get("title", slug), "description": item.get("description", ""),
+                                                                     "tags": item.get("tags", [])}}, indent=2, ensure_ascii=False), encoding="utf-8")
+        (vdir / "notes.txt").write_text(f"{item.get('channel', '')} - {item.get('title', '')}\n", encoding="utf-8")
+        if item.get("posted"):
+            st = load_state()
+            _log(st, item.get("channel", ""), f"Posted by hand: {item.get('title', slug)}", True, slug=slug,
+                 url=item.get("posted") if str(item.get("posted")).startswith("http") else "https://studio.youtube.com")
+        n += 1
+    return n
+
+
+def post_now(slug: str) -> dict:
+    """Uploads a finished video from My videos to its channel, public right away."""
+    from producer import CONTENT_ROOT
+
+    video = video_file(slug)
+    if video is None:
+        raise AutopilotError("The video file is missing.")
+    st = load_state()
+    if any(e.get("slug") == slug and e.get("url") for e in st["log"]):
+        raise AutopilotError("This video is already on YouTube.")
+    vdir = CONTENT_ROOT / slug
+    meta = (_read(vdir / "metadata.json", {}).get("youtube") or {})
+    first = (vdir / "notes.txt").read_text(encoding="utf-8").splitlines()[:1] if (vdir / "notes.txt").exists() else []
+    channel = first[0].split(" - ", 1)[0].strip() if first and " - " in first[0] else ""
+    if not channel:
+        raise AutopilotError("This video doesn't say which channel it's for.")
+    if not connected(channel):
+        raise AutopilotError(f"Connect {channel}'s YouTube first: on this page, Channels -> Connect YouTube (one time, on the PC).")
+    from publishing import upload_to_youtube
+
+    title = str(meta.get("title") or slug)[:100]
+    vid = upload_to_youtube(video, title, str(meta.get("description") or ""), [str(t) for t in meta.get("tags") or []][:30],
+                            client_secret_path=str(CLIENT_SECRET), token_path=str(token_path(channel)), privacy_status="public")
+    st = load_state()
+    st["review"] = [r for r in st["review"] if r["slug"] != slug]
+    _log(st, channel, f"Posted to YouTube: {title}", True, slug=slug, url=f"https://youtu.be/{vid}")
+    return {"video_id": vid, "url": f"https://youtu.be/{vid}"}
+
+
 def all_videos(limit: int = 60) -> list[dict]:
     """Every video made (newest first) with its title, channel, length, thumbnail and what happened to it."""
     from producer import CONTENT_ROOT
 
+    try:
+        import_ready()
+    except OSError:
+        pass
     if not CONTENT_ROOT.exists():
         return []
     st = load_state()

@@ -394,6 +394,7 @@ def build(story_path: Path, offline: Path | None = None, voice: str | None = Non
 
     say(f"3/4  Building the video ({dur:.0f} seconds)...")
     prepped = [prepare(p, None if no_grade else tint) for p in photos]
+    spare, zoom = (0.99, 0.05) if no_grade else (0.86, 0.12)  # drawn pictures: keep the whole drawing in frame
     plain_bg = Image.new("RGB", (W, H), (8, 10, 12))
     mask, grains, vig = band_mask(), grain_tiles(), vignette()
     black = Image.new("RGB", (W, H), (0, 0, 0))
@@ -416,8 +417,8 @@ def build(story_path: Path, offline: Path | None = None, voice: str | None = Non
         if pr:
             frame = pr["bg"].copy()
             big = pr["big"]
-            z = 1.0 + 0.12 * (p if i % 2 == 0 else 1 - p)  # slow zoom in / out
-            cw = min(big.width, big.height * W / BAND_H) * 0.86 / z
+            z = 1.0 + zoom * (p if i % 2 == 0 else 1 - p)  # slow zoom in / out
+            cw = min(big.width, big.height * W / BAND_H) * spare / z
             chh = cw * BAND_H / W
             pan = (p - 0.5) * (big.width - cw) * 0.5 * (1 if i % 3 else -1)
             x0 = (big.width - cw) / 2 + pan
