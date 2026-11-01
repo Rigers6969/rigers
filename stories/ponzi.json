@@ -1,0 +1,208 @@
+{
+  "slug": "paper-trail-charles-ponzi-short",
+  "channel": "Paper Trail",
+  "brand": "PAPER TRAIL",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+6%",
+  "accent": [
+    243,
+    196,
+    72
+  ],
+  "tint": [
+    96,
+    80,
+    60
+  ],
+  "scenes": [
+    {
+      "say": "This man's scam was so famous, it's still named after him.",
+      "cap": "This man's scam was so FAMOUS, it's still NAMED after him.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "ponzi"
+        ]
+      },
+      "fx": {
+        "type": "stamp",
+        "words": [
+          "THE",
+          "PONZI",
+          "SCHEME"
+        ]
+      }
+    },
+    {
+      "say": "Boston, nineteen twenty. Charles Ponzi made a promise. Fifty percent profit, in forty-five days.",
+      "cap": "Boston, 1920. Charles Ponzi made a promise. 50% PROFIT, in 45 DAYS.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "office",
+          "school"
+        ]
+      },
+      "fx": {
+        "type": "big",
+        "text": "+50%",
+        "sub": "IN 45 DAYS",
+        "size": 280
+      }
+    },
+    {
+      "say": "His secret? Postal reply coupons. Buy them cheap in Europe, and swap them in America for more.",
+      "cap": "His secret? POSTAL REPLY COUPONS. Buy them cheap in Europe, and swap them in America for MORE.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "coupon"
+        ]
+      }
+    },
+    {
+      "say": "It sounded smart. So people lined up down the street with their savings.",
+      "cap": "It sounded SMART. So people lined up down the street with their SAVINGS.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "crowd",
+          "line"
+        ]
+      }
+    },
+    {
+      "say": "Money flooded in. He bought a mansion, and even took control of a bank.",
+      "cap": "Money FLOODED in. He bought a MANSION, and even took control of a BANK.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "house",
+          "mansion"
+        ]
+      }
+    },
+    {
+      "say": "But here's the trick. He wasn't really buying coupons. He paid old investors with new investors' money.",
+      "cap": "But here's the trick. He wasn't really buying coupons. He paid OLD investors with NEW investors' money.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "diagram"
+        ]
+      }
+    },
+    {
+      "say": "Then a journalist did the math. To cover it all, Ponzi would need a hundred and sixty million coupons.",
+      "cap": "Then a journalist did the MATH. To cover it all, Ponzi would need 160 MILLION coupons.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "newspaper"
+        ]
+      }
+    },
+    {
+      "say": "There were only about twenty-seven thousand in circulation.",
+      "cap": "There were only about 27,000 in circulation.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "coupon"
+        ]
+      },
+      "fx": {
+        "type": "big",
+        "text": "27,000",
+        "sub": "ACTUALLY EXISTED",
+        "size": 250
+      }
+    },
+    {
+      "say": "In August nineteen twenty, it all collapsed. Investors lost about twenty million dollars.",
+      "cap": "In August 1920, it all COLLAPSED. Investors lost about $20 MILLION.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "closed"
+        ]
+      },
+      "fx": {
+        "type": "big",
+        "text": "$20M",
+        "sub": "LOST",
+        "size": 300
+      }
+    },
+    {
+      "say": "Ponzi went to prison, was deported to Italy, and died poor in Brazil.",
+      "cap": "Ponzi went to PRISON, was DEPORTED to Italy, and died POOR in Brazil.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "ship"
+        ]
+      }
+    },
+    {
+      "say": "Today, every scam that pays old investors with new money carries his name.",
+      "cap": "Today, every scam that pays old investors with new money carries his NAME.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "pyramid"
+        ]
+      }
+    },
+    {
+      "say": "Follow Paper Trail, for the money stories nobody tells you.",
+      "cap": "Follow PAPER TRAIL for the money stories nobody tells you.",
+      "img": {
+        "pages": [
+          "Charles Ponzi"
+        ],
+        "want": [
+          "ponzi"
+        ]
+      }
+    }
+  ],
+  "upload": {
+    "title": "The Man Behind the Ponzi Scheme 💸 #shorts",
+    "description": "In 1920, Charles Ponzi promised 50% profit in 45 days using international postal reply coupons. In reality, he paid old investors with new investors' money. When a journalist did the math, it all collapsed - investors lost about $20 million.\n\nRead more: https://en.wikipedia.org/wiki/Charles_Ponzi\n\n#ponzi #scam #history #truecrime #papertrail",
+    "tags": [
+      "charles ponzi",
+      "ponzi scheme",
+      "scam",
+      "fraud",
+      "con man",
+      "history",
+      "true crime",
+      "money",
+      "paper trail"
+    ],
+    "pinned": "Have you ever seen a Ponzi scheme in real life? 👇"
+  }
+}

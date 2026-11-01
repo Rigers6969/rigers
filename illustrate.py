@@ -926,6 +926,240 @@ def s_medal():
     return finish(add(base, t, sharp=0.95))
 
 
+# ------------------------------------------------------------------ Paper Trail: Charles Ponzi
+
+def mustache_man(d, cx, by, s, fill):
+    man(d, cx, by, s, fill)
+
+
+def s_ponzi_portrait():
+    base = gradient((36, 26, 16), (8, 6, 4))
+    lamp = blank()
+    ImageDraw.Draw(lamp).ellipse([250, -200, 1150, 600], fill=(130, 100, 50))
+    base = add(base, lamp.filter(ImageFilter.GaussianBlur(130)), sharp=0.7)
+    sil = blank("RGBA")
+    d = ImageDraw.Draw(sil)
+    man(d, 700, 1250, 1.7, (12, 10, 9, 255))
+    base = over(base, sil)
+    base = add(base, outline_of(lambda dd: man(dd, 700, 1250, 1.7, 255), GOLD, 3), glow=0.5, radius=10)
+    g = blank()
+    gd = ImageDraw.Draw(g)  # gold watch chain + cane handle
+    gd.arc([560, 1080, 840, 1240], 20, 160, fill=GOLD, width=8)
+    gd.ellipse([550, 1110, 590, 1150], fill=GOLD)
+    return finish(add(base, g, glow=0.6, radius=10))
+
+
+def s_office():
+    base = gradient((24, 30, 40), (6, 7, 10))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([120, 260, 1280, 1260], fill=(40, 30, 24, 255))
+    d.rectangle([180, 480, 1220, 1050], fill=(200, 170, 110, 255))          # lit shop window
+    d.rectangle([180, 480, 1220, 1050], outline=(20, 16, 12, 255), width=14)
+    d.line([(700, 480), (700, 1050)], fill=(20, 16, 12, 255), width=14)
+    d.rectangle([160, 300, 1240, 440], fill=(20, 40, 30, 255))
+    d.text((700, 340), "SECURITIES EXCHANGE CO.", font=F(ARCH, 56), fill=GOLD + (255,), anchor="mm")
+    d.text((700, 405), "27 SCHOOL STREET · BOSTON", font=F(ARCH, 30), fill=(220, 210, 180, 255), anchor="mm")
+    for k in range(5):
+        man(d, 300 + k * 200, 1260, 0.55, (14, 12, 12, 255))
+    base = over(base, l)
+    glow = blank()
+    ImageDraw.Draw(glow).rectangle([180, 480, 1220, 1050], fill=(120, 90, 40))
+    return finish(add(base, glow.filter(ImageFilter.GaussianBlur(60)), sharp=0.5))
+
+
+def coupon(w=760, h=480, rot=0):
+    c = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(c)
+    d.rectangle([0, 0, w - 1, h - 1], fill=(214, 226, 236, 255), outline=(40, 70, 120, 255), width=8)
+    for x in range(0, w, 24):  # perforated edge
+        d.ellipse([x - 6, -6, x + 6, 6], fill=(0, 0, 0, 0))
+        d.ellipse([x - 6, h - 6, x + 6, h + 6], fill=(0, 0, 0, 0))
+    d.text((w // 2, h * 0.2), "INTERNATIONAL", font=F(ARCH, int(h * 0.09)), fill=(40, 70, 120, 255), anchor="mm")
+    d.text((w // 2, h * 0.36), "REPLY COUPON", font=F(ANTON, int(h * 0.17)), fill=(40, 70, 120, 255), anchor="mm")
+    d.ellipse([w * 0.08, h * 0.5, w * 0.36, h * 0.92], outline=(40, 70, 120, 255), width=6)
+    d.text((w * 0.22, h * 0.71), "UPU", font=F(ANTON, int(h * 0.11)), fill=(40, 70, 120, 255), anchor="mm")
+    for k in range(4):
+        d.line([(w * 0.45, h * (0.58 + k * 0.09)), (w * 0.9, h * (0.58 + k * 0.09))], fill=(110, 130, 160, 255), width=5)
+    return c.rotate(rot, expand=True)
+
+
+def s_coupon():
+    img = finish(parchment(3))
+    d = ImageDraw.Draw(img)
+    d.text((300, 160), "EUROPE", font=F(ANTON, 90), fill=BROWN, anchor="mm")
+    d.text((1100, 160), "USA", font=F(ANTON, 90), fill=BROWN, anchor="mm")
+    d.text((300, 260), "buy cheap", font=F(ARCH, 40), fill=(140, 40, 30), anchor="mm")
+    d.text((1100, 260), "swap for more", font=F(ARCH, 40), fill=(40, 110, 50), anchor="mm")
+    d.line([(450, 200), (950, 200)], fill=(140, 40, 30), width=10)
+    d.polygon([(950, 180), (990, 200), (950, 220)], fill=(140, 40, 30))
+    c = coupon(820, 520, -6)
+    img.paste(c, (290, 420), c)
+    return img
+
+
+def s_queue():
+    base = gradient((70, 80, 100), (20, 22, 28))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 1020, IW, IH], fill=(40, 40, 46, 255))
+    d.rectangle([1120, 300, 1400, 1020], fill=(36, 30, 26, 255))
+    d.rectangle([1170, 520, 1350, 1020], fill=(200, 170, 110, 255))
+    for k in range(9):
+        x = 1080 - k * 128
+        s = 0.44 - k * 0.015
+        man(d, x, 1040 - k * 6, s, (18 + k * 3, 18 + k * 3, 22 + k * 3, 255), hat=k % 3 != 1)
+        if k % 3 == 1:
+            woman(d, x, 1040 - k * 6, s * 0.95, (18 + k * 3, 18 + k * 3, 22 + k * 3, 255))
+    base = over(base, l)
+    t = blank()
+    ImageDraw.Draw(t).text((560, 220), "LINES DOWN THE STREET", font=F(ANTON, 96), fill=(240, 236, 220), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_mansion():
+    base = gradient((20, 26, 50), (6, 7, 12))
+    sky = blank()
+    specks(sky, 120, (0, 0, IW, 500), 2, color=(220, 220, 240), size=(1, 2.4))
+    base = add(base, sky)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    f = (16, 16, 22, 255)
+    d.rectangle([200, 560, 1200, 1100], fill=f)
+    d.polygon([(160, 560), (700, 330), (1240, 560)], fill=f)
+    for x in (330, 480, 920, 1070):  # columns
+        d.rectangle([x - 18, 640, x + 18, 1100], fill=(40, 40, 50, 255))
+    d.rectangle([0, 1100, IW, IH], fill=(10, 20, 14, 255))
+    base = over(base, l)
+    w = blank()
+    wd = ImageDraw.Draw(w)
+    for row in range(2):
+        for col in range(6):
+            x, y = 260 + col * 160, 650 + row * 220
+            wd.rectangle([x, y, x + 80, y + 130], fill=GOLD)
+    wd.rectangle([640, 900, 760, 1100], fill=(255, 220, 140))
+    base = add(base, w, glow=0.5, radius=18, sharp=0.9)
+    car = blank("RGBA")
+    cd = ImageDraw.Draw(car)
+    cd.rounded_rectangle([860, 1080, 1260, 1180], 30, fill=(8, 8, 10, 255))
+    cd.rounded_rectangle([940, 1020, 1160, 1100], 20, fill=(8, 8, 10, 255))
+    cd.ellipse([890, 1140, 970, 1220], fill=(4, 4, 6, 255))
+    cd.ellipse([1150, 1140, 1230, 1220], fill=(4, 4, 6, 255))
+    return finish(over(base, car))
+
+
+def s_pyramid():
+    base = gradient((24, 10, 10), (6, 3, 3))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    rows = [1, 2, 4, 8]
+    pos = []
+    for r, n in enumerate(rows):
+        y = 250 + r * 260
+        row = []
+        for k in range(n):
+            x = 700 + (k - (n - 1) / 2) * (1200 / max(n, 1)) * (0.95 if n > 1 else 1)
+            row.append((x, y))
+        pos.append(row)
+    for r in range(1, len(pos)):
+        for k, (x, y) in enumerate(pos[r]):
+            px, py = pos[r - 1][k // 2]
+            d.line([(x, y - 50), (px, py + 50)], fill=(240, 196, 72), width=8)
+    for r, row in enumerate(pos):
+        for x, y in row:
+            rad = 70 - r * 12
+            col = GOLD if r == 0 else (220, 70, 60) if r < 3 else (170, 170, 180)
+            d.ellipse([x - rad, y - rad, x + rad, y + rad], fill=col)
+    d.text((700, 250), "$", font=F(ANTON, 90), fill=(40, 20, 10), anchor="mm")
+    base = add(base, l, glow=0.4, radius=14)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 1170), "NEW MONEY PAYS OLD", font=F(ANTON, 96), fill=(240, 236, 220), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_newspaper():
+    img = finish(parchment(6))
+    d = ImageDraw.Draw(img)
+    d.text((IW // 2, 140), "THE MONEY MATH", font=F(ANTON, 130), fill=(30, 26, 22), anchor="mm")
+    d.line([(90, 230), (IW - 90, 230)], fill=(30, 26, 22), width=6)
+    d.text((IW // 2, 420), "NEEDED:", font=F(ARCH, 60), fill=(30, 26, 22), anchor="mm")
+    d.text((IW // 2, 560), "160,000,000", font=F(ANTON, 170), fill=(150, 30, 30), anchor="mm")
+    d.text((IW // 2, 700), "coupons", font=F(ARCH, 50), fill=(30, 26, 22), anchor="mm")
+    d.text((IW // 2, 860), "IN EXISTENCE:", font=F(ARCH, 60), fill=(30, 26, 22), anchor="mm")
+    d.text((IW // 2, 990), "about 27,000", font=F(ANTON, 140), fill=(40, 100, 50), anchor="mm")
+    return img
+
+
+def s_coupon_stack():
+    base = gradient((12, 14, 20), (3, 4, 6))
+    l = blank("RGBA")
+    for k in range(5):
+        c = coupon(560, 350, -10 + k * 5)
+        l.paste(c, (400 + k * 18, 380 + k * 40 - k * k * 6), c)
+    base = over(base, l)
+    t = blank()
+    td = ImageDraw.Draw(t)
+    td.text((700, 160), "NOT EVEN CLOSE", font=F(ANTON, 120), fill=(240, 236, 220), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_collapse():
+    base = gradient((30, 30, 34), (8, 8, 10))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([180, 260, 1220, 1260], fill=(40, 34, 30, 255))
+    d.rectangle([300, 520, 1100, 1260], fill=(14, 12, 12, 255))
+    d.rectangle([160, 300, 1240, 440], fill=(20, 40, 30, 255))
+    d.text((700, 370), "SECURITIES EXCHANGE CO.", font=F(ARCH, 56), fill=(120, 110, 90, 255), anchor="mm")
+    sign = Image.new("RGBA", (620, 200), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(sign)
+    sd.rectangle([0, 0, 619, 199], fill=(200, 30, 30, 255))
+    sd.text((310, 100), "CLOSED", font=F(ANTON, 150), fill=(255, 255, 255, 255), anchor="mm")
+    sign = sign.rotate(-8, expand=True)
+    l.paste(sign, (390, 660), sign)
+    r = random.Random(4)
+    for _ in range(14):  # papers on the ground
+        x, y = r.randint(100, 1300), r.randint(1120, 1240)
+        d.polygon([(x, y), (x + 90, y - 12), (x + 100, y + 50), (x + 6, y + 60)], fill=(220, 214, 196, 255))
+    return finish(over(base, l))
+
+
+def s_prison_ship():
+    base = gradient((30, 40, 60), (8, 10, 16))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 900, IW, IH], fill=(16, 26, 40, 255))
+    f = (10, 10, 14, 255)
+    d.polygon([(250, 900), (1150, 900), (1080, 1010), (320, 1010)], fill=f)       # steamship
+    d.rectangle([420, 760, 980, 900], fill=f)
+    for x in (560, 760):
+        d.rectangle([x, 560, x + 90, 760], fill=f)
+    base = over(base, l)
+    smoke = blank()
+    specks(smoke, 40, (480, 300, 900, 560), 7, color=(90, 90, 100), size=(20, 60))
+    base = add(base, smoke.filter(ImageFilter.GaussianBlur(24)), sharp=0.6)
+    bars = blank("RGBA")
+    bd = ImageDraw.Draw(bars)
+    for x in range(60, IW, 160):
+        bd.rectangle([x, 0, x + 34, IH], fill=(30, 30, 34, 235))
+    bd.rectangle([0, 120, IW, 160], fill=(30, 30, 34, 235))
+    base = over(base, bars)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 1150), "DEPORTED · 1934", font=F(ANTON, 100), fill=(240, 236, 220), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_pyramid_stamp():
+    img = s_pyramid()
+    st = Image.new("RGBA", (900, 230), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(st)
+    sd.rounded_rectangle([8, 8, 892, 222], 20, outline=(243, 196, 72, 255), width=14)
+    sd.text((450, 118), "PONZI SCHEME", font=F(ANTON, 140), fill=(243, 196, 72, 255), anchor="mm")
+    st = st.rotate(-10, expand=True)
+    img.paste(st, (240, 520), st)
+    return img
+
+
 STORIES = {
     "radium_girls": {1: s_glowing_women, 2: s_factory, 3: s_undark_ad, 4: s_brush_lips, 5: s_painting_dial, 6: s_glowing_smile,
                      7: s_xray_jaw, 9: s_court, 10: s_deathbed, 11: s_safety, 13: s_final},
@@ -933,6 +1167,8 @@ STORIES = {
                      8: s_cash, 9: s_train, 10: s_head_in_hands, 11: s_escape, 12: s_alcatraz, 13: s_tower_end},
     "poyais": {1: s_map(False), 2: s_general, 3: s_crown, 4: s_guidebook, 5: s_bond, 6: s_banknote, 7: s_ship, 8: s_jungle,
                9: s_graves, 10: s_france, 11: s_medal, 12: s_map(True)},
+    "ponzi": {1: s_ponzi_portrait, 2: s_office, 3: s_coupon, 4: s_queue, 5: s_mansion, 6: s_pyramid, 7: s_newspaper,
+              8: s_coupon_stack, 9: s_collapse, 10: s_prison_ship, 11: s_pyramid_stamp, 12: s_ponzi_portrait},
 }
 
 
