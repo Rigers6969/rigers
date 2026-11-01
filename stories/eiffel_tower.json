@@ -1,0 +1,210 @@
+{
+  "slug": "paper-trail-man-who-sold-eiffel-tower-short",
+  "channel": "Paper Trail",
+  "brand": "PAPER TRAIL",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+6%",
+  "accent": [
+    243,
+    196,
+    72
+  ],
+  "tint": [
+    96,
+    80,
+    60
+  ],
+  "scenes": [
+    {
+      "say": "In nineteen twenty-five, a man sold the Eiffel Tower. Then he came back, and sold it again.",
+      "cap": "In 1925, a man SOLD the Eiffel Tower. Then he came back... and sold it AGAIN.",
+      "img": {
+        "pages": [
+          "Victor Lustig",
+          "Eiffel Tower"
+        ],
+        "want": [
+          "eiffel",
+          "tower"
+        ]
+      },
+      "fx": {
+        "type": "stamp",
+        "words": [
+          "SOLD",
+          "TWICE"
+        ]
+      }
+    },
+    {
+      "say": "His name was Victor Lustig. One of the greatest con men who ever lived.",
+      "cap": "His name was VICTOR LUSTIG. One of the greatest CON MEN who ever lived.",
+      "img": {
+        "pages": [
+          "Victor Lustig"
+        ],
+        "want": [
+          "lustig",
+          "mugshot",
+          "portrait"
+        ]
+      },
+      "fx": {
+        "type": "tag",
+        "text": "VICTOR LUSTIG · CON MAN"
+      }
+    },
+    {
+      "say": "He read that the tower was rusting, and costly to repaint. That gave him an idea.",
+      "cap": "He read that the tower was RUSTING, and costly to repaint. That gave him an IDEA.",
+      "img": {
+        "pages": [
+          "Eiffel Tower"
+        ],
+        "want": [
+          "1920",
+          "old",
+          "construction",
+          "paint"
+        ]
+      }
+    },
+    {
+      "say": "He faked government papers, and invited a group of scrap metal dealers to a luxury hotel in Paris.",
+      "cap": "He FAKED government papers, and invited SCRAP METAL dealers to a luxury hotel in Paris.",
+      "img": {
+        "pages": [
+          "Hôtel de Crillon",
+          "Victor Lustig"
+        ],
+        "want": [
+          "crillon",
+          "hotel"
+        ]
+      }
+    },
+    {
+      "say": "His story? The city would sell the tower for scrap. And it was top secret.",
+      "cap": "His story? The city would sell the tower for SCRAP. And it was TOP SECRET.",
+      "img": {
+        "pages": [
+          "Hôtel de Crillon"
+        ],
+        "want": [
+          "salon",
+          "interior",
+          "room"
+        ]
+      },
+      "fx": {
+        "type": "tag",
+        "text": "FOR SALE: 7,000 TONS OF IRON"
+      }
+    },
+    {
+      "say": "One dealer, André Poisson, wanted it badly. But his wife was suspicious.",
+      "cap": "One dealer, André Poisson, wanted it BADLY. But his wife was SUSPICIOUS.",
+      "img": {
+        "pages": [
+          "André Poisson",
+          "Victor Lustig"
+        ],
+        "want": []
+      }
+    },
+    {
+      "say": "So Lustig confessed. He said he was a corrupt official, and he needed a bribe.",
+      "cap": "So Lustig CONFESSED. He said he was a corrupt official, and he needed a BRIBE.",
+      "img": {
+        "pages": [
+          "Bribery"
+        ],
+        "want": []
+      }
+    },
+    {
+      "say": "And that made it believable. Poisson paid for the tower. And the bribe.",
+      "cap": "And that made it BELIEVABLE. Poisson paid for the tower. And the BRIBE.",
+      "img": {
+        "pages": [
+          "French franc"
+        ],
+        "want": []
+      }
+    },
+    {
+      "say": "Lustig jumped on a train to Vienna with the cash.",
+      "cap": "Lustig jumped on a train to VIENNA with the CASH.",
+      "img": {
+        "pages": [
+          "Vienna"
+        ],
+        "want": []
+      }
+    },
+    {
+      "say": "And Poisson? He was too embarrassed to go to the police.",
+      "cap": "And Poisson? He was too EMBARRASSED to go to the police.",
+      "img": {
+        "pages": [
+          "Victor Lustig"
+        ],
+        "want": []
+      }
+    },
+    {
+      "say": "So Lustig came back, and tried it again. This time, a dealer called the police. And Lustig escaped.",
+      "cap": "So Lustig came back and tried it AGAIN. This time, a dealer called the POLICE. And Lustig ESCAPED.",
+      "img": {
+        "pages": [
+          "Victor Lustig"
+        ],
+        "want": []
+      }
+    },
+    {
+      "say": "Years later, he was caught in America for counterfeiting money, and sent to Alcatraz.",
+      "cap": "Years later, he was caught in America for COUNTERFEITING, and sent to ALCATRAZ.",
+      "img": {
+        "pages": [
+          "Alcatraz Federal Penitentiary",
+          "Alcatraz Island"
+        ],
+        "want": [
+          "alcatraz",
+          "island",
+          "aerial"
+        ]
+      }
+    },
+    {
+      "say": "The man who sold the Eiffel Tower. Follow Paper Trail, for the money stories nobody tells you.",
+      "cap": "The man who sold the EIFFEL TOWER. Follow PAPER TRAIL for the money stories nobody tells you.",
+      "img": {
+        "pages": [
+          "Eiffel Tower"
+        ],
+        "want": [
+          "night",
+          "eiffel"
+        ]
+      }
+    }
+  ],
+  "upload": {
+    "title": "The Man Who Sold the Eiffel Tower… Twice 🗼 #shorts",
+    "description": "In 1925, con man Victor Lustig posed as a French government official and 'sold' the Eiffel Tower to a scrap metal dealer. Then he came back and tried it again.\n\nRead more: https://en.wikipedia.org/wiki/Victor_Lustig\n\n#truecrime #scam #history #papertrail",
+    "tags": [
+      "victor lustig",
+      "eiffel tower",
+      "con man",
+      "scam",
+      "fraud",
+      "true crime",
+      "history",
+      "paper trail",
+      "money"
+    ],
+    "pinned": "Would you have fallen for it? Be honest 👇"
+  }
+}

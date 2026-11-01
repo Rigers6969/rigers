@@ -98,7 +98,8 @@ def specks(layer: Image.Image, n: int, box, seed: int, color=GREEN, size=(2, 6))
     for _ in range(n):
         x, y = r.uniform(box[0], box[2]), r.uniform(box[1], box[3])
         s = r.uniform(*size)
-        d.ellipse([x - s, y - s, x + s, y + s], fill=tuple(int(c * r.uniform(0.4, 1)) for c in color))
+        k = r.uniform(0.4, 1)
+        d.ellipse([x - s, y - s, x + s, y + s], fill=tuple(int(c * k) for c in color))
 
 
 # ------------------------------------------------------------------ scenes
@@ -338,10 +339,336 @@ def s_final():
     base = over(base, sil)
     return finish(add(base, woman_glow(700, 1560, 1.5, width=4), glow=0.6, radius=10))
 
+# ------------------------------------------------------------------ Paper Trail: the man who sold the Eiffel Tower
+
+GOLD = (243, 196, 72)
+NIGHT = ((12, 16, 30), (4, 5, 9))
+
+
+def tower(d: ImageDraw.ImageDraw, cx, base_y, h, color, width=6):
+    """Eiffel Tower line drawing: curved legs, 2 platforms, lattice, spire."""
+    top = base_y - h
+    def half(sign):
+        pts = []
+        for k in range(41):
+            t = k / 40
+            y = base_y - t * h * 0.86
+            x = cx + sign * (h * 0.36 * (1 - t) ** 2.2 + h * 0.018)
+            pts.append((x, y))
+        return pts
+    L, R = half(-1), half(1)
+    d.line(L, fill=color, width=width)
+    d.line(R, fill=color, width=width)
+    # arch between the legs
+    d.arc([cx - h * 0.2, base_y - h * 0.2, cx + h * 0.2, base_y + h * 0.1], 180, 360, fill=color, width=width)
+    for frac, wscale in ((0.2, 1.15), (0.5, 1.1)):
+        i = int(frac * 40)
+        (x1, y), (x2, _) = L[i], R[i]
+        d.rectangle([x1 - h * 0.03 * wscale, y - h * 0.025, x2 + h * 0.03 * wscale, y], outline=color, width=width)
+    for k in range(2, 39, 2):  # lattice
+        d.line([L[k], R[k + 2]], fill=color, width=max(1, width // 3))
+        d.line([R[k], L[k + 2]], fill=color, width=max(1, width // 3))
+    d.line([(cx, base_y - h * 0.86), (cx, top)], fill=color, width=width)
+    d.rectangle([cx - h * 0.02, base_y - h * 0.9, cx + h * 0.02, base_y - h * 0.86], fill=color)
+
+
+def man(d: ImageDraw.ImageDraw, cx, by, s, fill, hat=True):
+    """1920s man, head and shoulders, fedora."""
+    d.ellipse([cx - 230 * s, by - 160 * s, cx + 230 * s, by + 260 * s], fill=fill)
+    d.polygon([(cx - 60 * s, by - 150 * s), (cx, by - 20 * s), (cx + 60 * s, by - 150 * s)], fill=fill)
+    d.rectangle([cx - 50 * s, by - 250 * s, cx + 50 * s, by - 120 * s], fill=fill)
+    d.ellipse([cx - 105 * s, by - 450 * s, cx + 105 * s, by - 200 * s], fill=fill)
+    if hat:
+        d.ellipse([cx - 190 * s, by - 420 * s, cx + 190 * s, by - 370 * s], fill=fill)
+        d.rounded_rectangle([cx - 115 * s, by - 540 * s, cx + 115 * s, by - 395 * s], int(30 * s), fill=fill)
+
+
+def outline_of(draw_fn, color, width=4) -> Image.Image:
+    m = Image.new("L", (IW, IH), 0)
+    draw_fn(ImageDraw.Draw(m))
+    edge = np.asarray(m.filter(ImageFilter.MaxFilter(width * 2 + 1)), dtype=np.int16) - np.asarray(m, dtype=np.int16)
+    e = Image.fromarray(np.clip(edge, 0, 255).astype(np.uint8))
+    return Image.merge("RGB", [e.point(lambda v, c=c: v * c // 255) for c in color])
+
+
+def city(layer_draw, y, seed=1, fill=(10, 12, 18, 255)):
+    r = random.Random(seed)
+    x = 0
+    while x < IW:
+        w = r.randint(60, 150)
+        h = r.randint(60, 200)
+        layer_draw.rectangle([x, y - h, x + w, IH], fill=fill)
+        if r.random() < 0.5:
+            layer_draw.polygon([(x, y - h), (x + w / 2, y - h - 40), (x + w, y - h)], fill=fill)
+        x += w
+
+
+def s_tower_night():
+    base = gradient(*NIGHT)
+    sky = blank()
+    specks(sky, 150, (0, 0, IW, 700), 4, color=(210, 215, 235), size=(1, 2.4))
+    base = add(base, sky)
+    moon = blank()
+    ImageDraw.Draw(moon).ellipse([1060, 120, 1220, 280], fill=(230, 226, 210))
+    base = add(base, moon, glow=0.4, radius=40)
+    t = blank()
+    tower(ImageDraw.Draw(t), 700, 1130, 1040, GOLD, 7)
+    base = add(base, t, glow=0.7, radius=14)
+    c = blank("RGBA")
+    city(ImageDraw.Draw(c), 1150, 2)
+    return finish(over(base, c))
+
+
+def s_con_man():
+    base = gradient((30, 20, 14), (6, 5, 4))
+    lamp = blank()
+    ImageDraw.Draw(lamp).ellipse([300, -300, 1100, 500], fill=(120, 90, 40))
+    base = add(base, lamp.filter(ImageFilter.GaussianBlur(120)), sharp=0.7)
+    sil = blank("RGBA")
+    man(ImageDraw.Draw(sil), 700, 1180, 1.6, (10, 9, 8, 255))
+    base = over(base, sil)
+    rim = outline_of(lambda d: man(d, 700, 1180, 1.6, 255), GOLD, 3)
+    smoke = blank()
+    specks(smoke, 40, (880, 200, 1200, 600), 6, color=(90, 90, 90), size=(12, 34))
+    base = add(base, smoke.filter(ImageFilter.GaussianBlur(18)), sharp=0.5)
+    return finish(add(base, rim, glow=0.5, radius=10))
+
+
+def s_rust_tower():
+    paper = gradient((226, 214, 186), (200, 184, 150))
+    paper += np.random.default_rng(3).normal(0, 6, paper.shape[:2])[..., None]
+    img = finish(paper)
+    d = ImageDraw.Draw(img)
+    d.text((IW // 2, 120), "PARIS · 1925", font=F(ARCH, 64), fill=(40, 30, 24), anchor="mm")
+    d.line([(100, 180), (IW - 100, 180)], fill=(40, 30, 24), width=5)
+    tower(d, 520, 1180, 930, (70, 50, 36), 6)
+    for k, (x, y) in enumerate([(430, 900), (600, 760), (500, 520), (640, 1040), (380, 1080)]):
+        d.ellipse([x - 40, y - 26, x + 40, y + 26], fill=(150, 70, 30))
+    d.text((1000, 420), "RUSTING", font=F(ANTON, 120), fill=(150, 40, 30), anchor="mm")
+    d.text((1000, 560), "COSTLY TO", font=F(ANTON, 90), fill=(40, 30, 24), anchor="mm")
+    d.text((1000, 660), "REPAINT", font=F(ANTON, 90), fill=(40, 30, 24), anchor="mm")
+    d.text((1000, 800), "?", font=F(ANTON, 200), fill=(150, 40, 30), anchor="mm")
+    return img
+
+
+def s_letter():
+    base = gradient((24, 18, 14), (8, 6, 5))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.polygon([(260, 150), (1150, 120), (1180, 1180), (230, 1200)], fill=(236, 226, 200, 255))
+    d.text((705, 250), "MINISTRY OF POSTS", font=F(ARCH, 52), fill=(30, 26, 22, 255), anchor="mm")
+    d.text((705, 320), "AND TELEGRAPHS", font=F(ARCH, 40), fill=(30, 26, 22, 255), anchor="mm")
+    for k in range(9):
+        y = 450 + k * 62
+        d.line([(330, y), (1080 - (k % 3) * 90, y)], fill=(90, 84, 78, 255), width=8)
+    d.text((705, 1040), "CONFIDENTIAL", font=F(ANTON, 90), fill=(160, 30, 30, 255), anchor="mm")
+    base = over(base, l)
+    seal = blank("RGBA")
+    s = ImageDraw.Draw(seal)
+    s.ellipse([920, 860, 1120, 1060], fill=(150, 20, 24, 255))
+    s.ellipse([960, 900, 1080, 1020], outline=(200, 60, 60, 255), width=8)
+    base = over(base, seal)
+    return finish(base)
+
+
+def s_meeting():
+    base = gradient((34, 24, 16), (8, 6, 5))
+    chand = blank()
+    c = ImageDraw.Draw(chand)
+    for k in range(-3, 4):
+        c.ellipse([700 + k * 70 - 14, 210 - 14, 700 + k * 70 + 14, 210 + 14], fill=GOLD)
+    c.arc([470, 120, 930, 300], 0, 180, fill=GOLD, width=6)
+    base = add(base, chand, glow=0.9, radius=26)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    for k, x in enumerate((230, 470, 930, 1170)):
+        man(d, x, 1000, 0.75, (12, 10, 9, 255))
+    man(d, 700, 900, 0.95, (6, 5, 5, 255))
+    d.rectangle([0, 980, IW, IH], fill=(60, 38, 24, 255))
+    d.rectangle([0, 980, IW, 1000], fill=(90, 60, 36, 255))
+    d.rectangle([560, 1020, 840, 1100], fill=(236, 226, 200, 255))
+    base = over(base, l)
+    return finish(base)
+
+
+def s_dealer():
+    base = gradient((20, 24, 30), (6, 7, 9))
+    sil = blank("RGBA")
+    man(ImageDraw.Draw(sil), 520, 1260, 1.35, (12, 13, 15, 255))
+    base = over(base, sil)
+    base = add(base, outline_of(lambda d: man(d, 520, 1260, 1.35, 255), (200, 200, 210), 3), glow=0.3, radius=8)
+    wife = blank("RGBA")
+    woman(ImageDraw.Draw(wife), 1110, 1260, 1.0, (24, 20, 22, 255), turn=-0.6)
+    base = over(base, wife)
+    base = add(base, woman_glow(1110, 1260, 1.0, turn=-0.6, width=3).point(lambda v: v), sharp=0.0)
+    q = blank()
+    ImageDraw.Draw(q).text((1160, 520), "?", font=F(ANTON, 260), fill=(200, 60, 60), anchor="mm")
+    return finish(add(base, q, glow=0.5, radius=14))
+
+
+def s_bribe():
+    base = gradient((16, 12, 10), (4, 3, 3))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 0, IW, 520], fill=(58, 36, 22, 255))       # table top seen from below
+    d.rectangle([0, 500, IW, 540], fill=(30, 20, 12, 255))
+    d.rounded_rectangle([60, 740, 640, 880], 60, fill=(28, 26, 30, 255))     # sleeve left
+    d.ellipse([560, 720, 760, 900], fill=(200, 160, 130, 255))                # hand
+    d.rounded_rectangle([1340 - 580, 760, 1400, 900], 60, fill=(20, 20, 24, 255))
+    d.ellipse([660, 740, 860, 910], fill=(190, 150, 120, 255))
+    d.polygon([(600, 760), (900, 720), (930, 860), (630, 900)], fill=(236, 226, 200, 255))  # envelope
+    d.line([(600, 760), (765, 835), (900, 720)], fill=(170, 160, 140, 255), width=6)
+    base = over(base, l)
+    glow = blank()
+    ImageDraw.Draw(glow).ellipse([520, 640, 1000, 980], fill=(110, 80, 30))
+    return finish(add(base, glow.filter(ImageFilter.GaussianBlur(90)), sharp=0.8))
+
+
+def s_cash():
+    base = gradient((20, 16, 12), (5, 4, 3))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rounded_rectangle([170, 520, 1230, 1180], 40, fill=(70, 44, 26, 255))
+    d.rounded_rectangle([200, 550, 1200, 1150], 30, fill=(40, 26, 16, 255))
+    d.polygon([(170, 520), (1230, 520), (1150, 160), (250, 160)], fill=(84, 54, 32, 255))  # open lid
+    d.rounded_rectangle([600, 120, 800, 170], 20, outline=(30, 20, 12, 255), width=16)
+    r = random.Random(5)
+    for row in range(4):
+        for col in range(5):
+            x, y = 240 + col * 190, 600 + row * 130 + r.randint(-6, 6)
+            d.rounded_rectangle([x, y, x + 170, y + 110], 8, fill=(196, 170, 110, 255), outline=(120, 96, 50, 255), width=4)
+            d.rectangle([x, y + 44, x + 170, y + 66], fill=(150, 40, 40, 255))
+            d.text((x + 85, y + 26), "1000 F", font=F(ARCH, 22), fill=(80, 60, 30, 255), anchor="mm")
+    base = over(base, l)
+    glow = blank()
+    ImageDraw.Draw(glow).ellipse([300, 500, 1100, 1200], fill=(120, 96, 40))
+    return finish(add(base, glow.filter(ImageFilter.GaussianBlur(120)), sharp=0.6))
+
+
+def s_train():
+    base = gradient((40, 30, 44), (10, 8, 14))
+    sun = blank()
+    ImageDraw.Draw(sun).ellipse([540, 420, 860, 740], fill=(200, 110, 70))
+    base = add(base, sun, glow=0.6, radius=60)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 900, IW, IH], fill=(14, 12, 16, 255))
+    d.rectangle([0, 880, IW, 900], fill=(30, 26, 30, 255))
+    y = 880
+    d.rectangle([700, y - 260, 1400, y - 40], fill=(16, 14, 18, 255))      # carriages
+    d.rectangle([180, y - 220, 640, y - 40], fill=(16, 14, 18, 255))       # engine
+    d.rectangle([520, y - 330, 640, y - 220], fill=(16, 14, 18, 255))      # cab
+    d.rectangle([250, y - 320, 310, y - 220], fill=(16, 14, 18, 255))      # chimney
+    d.polygon([(140, y - 40), (180, y - 140), (180, y - 40)], fill=(16, 14, 18, 255))
+    for x in (250, 400, 560, 780, 960, 1140, 1320):
+        d.ellipse([x - 50, y - 90, x + 50, y + 10], fill=(10, 9, 12, 255))
+    base = over(base, l)
+    win = blank()
+    w = ImageDraw.Draw(win)
+    for x in range(740, 1400, 110):
+        w.rectangle([x, y - 220, x + 70, y - 160], fill=GOLD)
+    base = add(base, win, glow=0.5, radius=14)
+    smoke = blank()
+    specks(smoke, 50, (0, 120, 400, 560), 3, color=(120, 110, 120), size=(25, 70))
+    base = add(base, smoke.filter(ImageFilter.GaussianBlur(26)), sharp=0.6)
+    sign = blank()
+    ImageDraw.Draw(sign).text((1060, 200), "VIENNA →", font=F(ANTON, 110), fill=GOLD, anchor="mm")
+    return finish(add(base, sign, glow=0.4, radius=10))
+
+
+def s_head_in_hands():
+    base = gradient((18, 22, 30), (5, 6, 8))
+    rain = blank()
+    r = random.Random(11)
+    rd = ImageDraw.Draw(rain)
+    for _ in range(220):
+        x, y = r.uniform(0, IW), r.uniform(0, IH)
+        rd.line([(x, y), (x - 14, y + 60)], fill=(70, 80, 100), width=2)
+    base = add(base, rain, sharp=0.8)
+    sil = blank("RGBA")
+    man(ImageDraw.Draw(sil), 700, 1300, 1.7, (10, 11, 14, 255))
+    base = over(base, sil)
+    base = add(base, outline_of(lambda d: man(d, 700, 1300, 1.7, 255), (150, 170, 210), 3), glow=0.4, radius=10)
+    paper = blank("RGBA")
+    pd = ImageDraw.Draw(paper)
+    pd.polygon([(980, 1080), (1320, 1040), (1350, 1220), (1000, 1240)], fill=(220, 210, 186, 255))
+    pd.text((1165, 1140), "SOLD", font=F(ANTON, 80), fill=(150, 30, 30, 255), anchor="mm")
+    t = blank()
+    ImageDraw.Draw(t).text((700, 170), "TOO ASHAMED TO TELL", font=F(ANTON, 90), fill=(200, 205, 215), anchor="mm")
+    return finish(add(over(base, paper), t, sharp=0.9))
+
+
+def s_escape():
+    base = gradient((8, 10, 16), (2, 3, 5))
+    beam = blank()
+    ImageDraw.Draw(beam).polygon([(1400, 0), (1100, 0), (300, 1260), (1000, 1260)], fill=(80, 84, 90))
+    base = add(base, beam.filter(ImageFilter.GaussianBlur(30)), sharp=0.8)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    city(d, 1260, 7, fill=(6, 7, 10, 255))
+    f = (5, 5, 7, 255)  # running man with hat and coat
+    cx, cy = 640, 760
+    d.ellipse([cx - 60, cy - 250, cx + 60, cy - 130], fill=f)
+    d.ellipse([cx - 100, cy - 225, cx + 100, cy - 195], fill=f)
+    d.rounded_rectangle([cx - 60, cy - 300, cx + 60, cy - 205], 14, fill=f)
+    d.polygon([(cx - 70, cy - 130), (cx + 80, cy - 140), (cx + 130, cy + 160), (cx - 150, cy + 170)], fill=f)
+    d.line([(cx - 20, cy + 150), (cx - 210, cy + 380)], fill=f, width=50)
+    d.line([(cx + 60, cy + 150), (cx + 230, cy + 300), (cx + 200, cy + 420)], fill=f, width=50)
+    d.line([(cx + 50, cy - 90), (cx + 230, cy + 20)], fill=f, width=42)
+    d.line([(cx - 40, cy - 90), (cx - 220, cy - 10)], fill=f, width=42)
+    base = over(base, l)
+    whistle = blank()
+    ImageDraw.Draw(whistle).text((1100, 260), "POLICE!", font=F(ANTON, 120), fill=(220, 60, 60), anchor="mm")
+    return finish(add(base, whistle, glow=0.5, radius=12))
+
+
+def s_alcatraz():
+    base = gradient((14, 20, 34), (4, 6, 10))
+    beam = blank()
+    ImageDraw.Draw(beam).polygon([(960, 470), (980, 470), (1400, 60), (1400, 260)], fill=(150, 150, 130))
+    base = add(base, beam.filter(ImageFilter.GaussianBlur(16)), sharp=0.6)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.polygon([(0, 900), (200, 760), (500, 720), (900, 690), (1200, 760), (1400, 820), (1400, 1000), (0, 1000)], fill=(14, 16, 20, 255))
+    d.rectangle([380, 560, 1020, 740], fill=(20, 22, 28, 255))
+    d.rectangle([940, 440, 1000, 740], fill=(20, 22, 28, 255))
+    d.rectangle([0, 1000, IW, IH], fill=(8, 14, 24, 255))
+    base = over(base, l)
+    win = blank()
+    w = ImageDraw.Draw(win)
+    for row in range(3):
+        for col in range(14):
+            w.rectangle([400 + col * 44, 590 + row * 46, 420 + col * 44, 616 + row * 46], fill=(220, 190, 110) if (row + col) % 3 else (40, 40, 40))
+    base = add(base, win, glow=0.4, radius=8, sharp=0.8)
+    ref = blank()
+    for k in range(40):
+        y = 1020 + k * 6
+        ImageDraw.Draw(ref).line([(400 + (k * 37) % 200, y), (1000 - (k * 23) % 200, y)], fill=(60, 54, 34), width=2)
+    base = add(base, ref, sharp=0.7)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 220), "ALCATRAZ", font=F(ANTON, 130), fill=(200, 200, 210), anchor="mm")
+    return finish(add(base, t, sharp=0.9))
+
+
+def s_tower_end():
+    base = gradient((18, 10, 10), (4, 3, 3))
+    t = blank()
+    tower(ImageDraw.Draw(t), 700, 1200, 1100, GOLD, 7)
+    base = add(base, t, glow=0.6, radius=14)
+    tag = blank("RGBA")
+    d = ImageDraw.Draw(tag)
+    d.rounded_rectangle([880, 760, 1260, 900], 16, fill=(236, 226, 200, 255))
+    d.text((1070, 830), "SOLD", font=F(ANTON, 100), fill=(170, 30, 30, 255), anchor="mm")
+    d.line([(880, 830), (760, 760)], fill=(236, 226, 200, 255), width=5)
+    tag = tag.rotate(8, center=(1070, 830))
+    return finish(over(base, tag))
+
 
 STORIES = {
     "radium_girls": {1: s_glowing_women, 2: s_factory, 3: s_undark_ad, 4: s_brush_lips, 5: s_painting_dial, 6: s_glowing_smile,
                      7: s_xray_jaw, 9: s_court, 10: s_deathbed, 11: s_safety, 13: s_final},
+    "eiffel_tower": {1: s_tower_night, 2: s_con_man, 3: s_rust_tower, 4: s_letter, 5: s_meeting, 6: s_dealer, 7: s_bribe,
+                     8: s_cash, 9: s_train, 10: s_head_in_hands, 11: s_escape, 12: s_alcatraz, 13: s_tower_end},
 }
 
 
