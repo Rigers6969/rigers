@@ -1,0 +1,133 @@
+{
+  "slug": "history-qarawiyyin-short",
+  "channel": "History",
+  "brand": "HISTORY",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+12%",
+  "gap": 0.06,
+  "tail": 0.25,
+  "accent": [
+    90,
+    210,
+    190
+  ],
+  "tint": [
+    90,
+    90,
+    80
+  ],
+  "scenes": [
+    {
+      "say": "The oldest school in the world that is still open, was founded by a woman.",
+      "cap": "The oldest school in the world that is STILL OPEN... was founded by a WOMAN.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "stamp",
+        "words": [
+          "FOUNDED",
+          "BY A WOMAN"
+        ]
+      }
+    },
+    {
+      "say": "Her name was Fatima al-Fihri. She moved to Fez, in Morocco, from Tunisia.",
+      "cap": "Her name was FATIMA AL-FIHRI. She moved to Fez, in Morocco, from Tunisia.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "tag",
+        "text": "FEZ · MOROCCO"
+      }
+    },
+    {
+      "say": "When her father died, she inherited a fortune.",
+      "cap": "When her father died, she inherited a FORTUNE.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "She didn't spend it on herself. She built a mosque, and a place to learn.",
+      "cap": "She didn't spend it on herself. She built a MOSQUE, and a place to LEARN.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "In eight fifty-nine, al-Qarawiyyin opened its doors.",
+      "cap": "In 859, AL-QARAWIYYIN opened its doors.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "big",
+        "text": "859",
+        "sub": "AL-QARAWIYYIN OPENS",
+        "size": 280
+      }
+    },
+    {
+      "say": "Scholars came to study the Quran, law, astronomy, mathematics, and medicine.",
+      "cap": "Scholars came to study the QURAN, law, ASTRONOMY, mathematics, and MEDICINE.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "Its library holds manuscripts more than a thousand years old.",
+      "cap": "Its library holds manuscripts more than 1,000 YEARS old.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "Guinness World Records calls it the oldest educational institution still running.",
+      "cap": "Guinness World Records calls it the OLDEST educational institution still running.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "And students still learn there today, more than eleven hundred years later.",
+      "cap": "And students still learn there TODAY, more than 1,100 YEARS later.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "All because one woman decided to build a school.",
+      "cap": "All because ONE WOMAN decided to build a school.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    }
+  ],
+  "upload": {
+    "title": "The World’s Oldest School Was Founded by a Woman 🕌 #shorts",
+    "description": "In 859, Fatima al-Fihri used her inheritance to found al-Qarawiyyin in Fez, Morocco - a mosque and a place of learning. Guinness World Records lists it as the oldest existing, continually operating educational institution in the world.\n\nRead more: https://en.wikipedia.org/wiki/University_of_al-Qarawiyyin\n\n#islam #history #morocco #fatimaalfihri",
+    "tags": [
+      "fatima al-fihri",
+      "al-qarawiyyin",
+      "oldest university",
+      "islamic history",
+      "fez",
+      "morocco",
+      "women in history",
+      "history"
+    ],
+    "pinned": "Did you know this? Share it with someone who should 👇"
+  }
+}

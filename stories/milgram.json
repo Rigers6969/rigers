@@ -1,0 +1,126 @@
+{
+  "slug": "forgotten-lab-milgram-short",
+  "channel": "The Forgotten Lab",
+  "brand": "THE FORGOTTEN LAB",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+12%",
+  "gap": 0.06,
+  "tail": 0.25,
+  "accent": [
+    255,
+    210,
+    80
+  ],
+  "tint": [
+    90,
+    90,
+    80
+  ],
+  "scenes": [
+    {
+      "say": "Would you hurt a stranger, just because someone told you to?",
+      "cap": "Would you HURT a stranger, just because someone TOLD you to?",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "In nineteen sixty-one, Yale psychologist Stanley Milgram tested ordinary people.",
+      "cap": "In 1961, Yale psychologist STANLEY MILGRAM tested ordinary people.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "tag",
+        "text": "YALE · 1961"
+      }
+    },
+    {
+      "say": "You are the teacher. For every wrong answer, you shock the learner.",
+      "cap": "You are the TEACHER. For every wrong answer, you SHOCK the learner.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "Fifteen volts. Then thirty. Then more.",
+      "cap": "15 VOLTS. Then 30. Then MORE.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "He screams. He begs you to stop. Then he goes silent.",
+      "cap": "He SCREAMS. He begs you to STOP. Then he goes SILENT.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "A man in a grey lab coat says, please continue.",
+      "cap": "A man in a grey lab coat says: PLEASE CONTINUE.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "In the first study, how many went all the way, to four hundred and fifty volts?",
+      "cap": "In the first study, how many went ALL THE WAY, to 450 VOLTS?",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "Sixty-five percent.",
+      "cap": "65 PERCENT.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "big",
+        "text": "65%",
+        "sub": "WENT ALL THE WAY",
+        "size": 320
+      }
+    },
+    {
+      "say": "The shocks were fake. The learner was an actor.",
+      "cap": "The shocks were FAKE. The learner was an ACTOR.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "But the people pressing the buttons did not know that.",
+      "cap": "But the people pressing the buttons DID NOT KNOW that.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    }
+  ],
+  "upload": {
+    "title": "Would You Obey? 65% Did ⚡ #shorts",
+    "description": "In 1961 at Yale, psychologist Stanley Milgram asked ordinary people to give electric shocks to a 'learner' whenever he got an answer wrong. In his first study, 65% went all the way to 450 volts when a man in a lab coat told them to continue. The shocks were fake and the learner was an actor.\n\nRead more: https://en.wikipedia.org/wiki/Milgram_experiment\n\n#psychology #milgram #experiment #obedience #forgottenlab",
+    "tags": [
+      "milgram experiment",
+      "psychology",
+      "obedience",
+      "stanley milgram",
+      "experiment",
+      "human behavior",
+      "science",
+      "forgotten lab"
+    ],
+    "pinned": "Be honest: would you have stopped? 👇"
+  }
+}

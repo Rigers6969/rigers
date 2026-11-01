@@ -1160,6 +1160,652 @@ def s_pyramid_stamp():
     return img
 
 
+# ------------------------------------------------------------------ shared bits for the next stories
+
+TEAL = (90, 210, 190)
+SAND = (226, 196, 140)
+BLUE = (110, 180, 255)
+
+
+def star8(d, cx, cy, r, fill=None, outline=None, width=4):
+    pts = []
+    for k in range(16):
+        rr = r if k % 2 == 0 else r * 0.72
+        a = math.pi * 2 * k / 16
+        pts.append((cx + math.cos(a) * rr, cy + math.sin(a) * rr))
+    d.polygon(pts, fill=fill, outline=outline)
+    if outline:
+        d.line(pts + [pts[0]], fill=outline, width=width)
+
+
+def zellige(w, h, seed=0):
+    """Moroccan tile pattern."""
+    img = Image.new("RGB", (w, h), (14, 40, 44))
+    d = ImageDraw.Draw(img)
+    cols = [(30, 110, 110), (200, 170, 90), (230, 225, 210), (40, 80, 140)]
+    for y in range(0, h + 80, 80):
+        for x in range(0, w + 80, 80):
+            c = cols[(x // 80 + y // 80 + seed) % len(cols)]
+            star8(d, x, y, 34, fill=c)
+            d.rectangle([x + 34, y + 34, x + 46, y + 46], fill=cols[(x // 80) % 4])
+    return img
+
+
+def arch_mask(x0, y0, x1, y1):
+    """Horseshoe arch shape as a mask."""
+    m = Image.new("L", (IW, IH), 0)
+    d = ImageDraw.Draw(m)
+    w = x1 - x0
+    d.ellipse([x0 - w * 0.06, y0, x1 + w * 0.06, y0 + w * 1.05], fill=255)
+    d.rectangle([x0, y0 + w * 0.55, x1, y1], fill=255)
+    return m
+
+
+def minaret(d, x, base, h, fill):
+    w = h * 0.16
+    d.rectangle([x - w / 2, base - h, x + w / 2, base], fill=fill)
+    d.rectangle([x - w * 0.62, base - h - h * 0.04, x + w * 0.62, base - h], fill=fill)
+    d.rectangle([x - w * 0.3, base - h * 1.22, x + w * 0.3, base - h - h * 0.04], fill=fill)
+    d.polygon([(x - w * 0.36, base - h * 1.22), (x + w * 0.36, base - h * 1.22), (x, base - h * 1.34)], fill=fill)
+    d.line([(x, base - h * 1.34), (x, base - h * 1.44)], fill=fill, width=6)
+
+
+# ------------------------------------------------------------------ Islam: Fatima al-Fihri and al-Qarawiyyin
+
+def s_fez():
+    base = gradient((240, 150, 90), (60, 30, 50))
+    sun = blank()
+    ImageDraw.Draw(sun).ellipse([560, 520, 840, 800], fill=(255, 210, 140))
+    base = add(base, sun, glow=0.5, radius=60)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    f = (36, 20, 28, 255)
+    r = random.Random(5)
+    x = 0
+    while x < IW:  # flat-roofed old city
+        w, h = r.randint(70, 160), r.randint(120, 330)
+        d.rectangle([x, 1260 - 250 - h, x + w, IH], fill=f)
+        x += w - 6
+    minaret(d, 960, 960, 520, f)
+    d.chord([300, 760, 640, 1080], 180, 360, fill=f)
+    base = over(base, l)
+    w = blank()
+    wd = ImageDraw.Draw(w)
+    for k in range(40):
+        x, y = r.randint(20, 1380), r.randint(820, 1220)
+        wd.rectangle([x, y, x + 10, y + 14], fill=(255, 200, 110))
+    return finish(add(base, w, glow=0.5, radius=6))
+
+
+def veiled(d, cx, by, s, fill):
+    d.ellipse([cx - 220 * s, by - 170 * s, cx + 220 * s, by + 280 * s], fill=fill)   # cloak
+    d.ellipse([cx - 120 * s, by - 480 * s, cx + 120 * s, by - 200 * s], fill=fill)   # head + scarf
+    d.polygon([(cx - 125 * s, by - 330 * s), (cx + 125 * s, by - 330 * s), (cx + 200 * s, by - 60 * s), (cx - 200 * s, by - 60 * s)], fill=fill)
+
+
+def s_fatima():
+    base = gradient((24, 30, 46), (6, 7, 12))
+    lamp = blank()
+    ImageDraw.Draw(lamp).ellipse([920, 620, 1100, 800], fill=(255, 190, 90))
+    base = add(base, lamp, glow=0.9, radius=50, sharp=0.6)
+    tiles = zellige(IW, 360, 1)
+    t = Image.fromarray((np.asarray(tiles, np.float32) * 0.35).astype(np.uint8))
+    tl = blank("RGBA")
+    tl.paste(t, (0, 900))
+    base = over(base, tl)
+    sil = blank("RGBA")
+    veiled(ImageDraw.Draw(sil), 560, 1180, 1.55, (10, 10, 16, 255))
+    base = over(base, sil)
+    rim = outline_of(lambda dd: veiled(dd, 560, 1180, 1.55, 255), (255, 200, 120), 3)
+    lan = blank("RGBA")
+    ld = ImageDraw.Draw(lan)
+    ld.line([(1010, 520), (1010, 620)], fill=(60, 50, 40, 255), width=6)
+    ld.polygon([(950, 620), (1070, 620), (1050, 800), (970, 800)], outline=(200, 160, 80, 255))
+    ld.line([(950, 620), (1070, 620), (1050, 800), (970, 800), (950, 620)], fill=(200, 160, 80, 255), width=8)
+    return finish(over(add(base, rim, glow=0.5, radius=10), lan))
+
+
+def s_dinars():
+    base = gradient((30, 22, 12), (6, 5, 3))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    r = random.Random(8)
+    for k in range(60):
+        x, y = r.randint(150, 1250), r.randint(500, 1150)
+        rad = r.randint(55, 85)
+        d.ellipse([x - rad, y - rad * 0.45, x + rad, y + rad * 0.45], fill=(200, 150, 50), outline=(120, 80, 20), width=4)
+    for x, y in ((520, 430), (880, 380)):
+        d.ellipse([x - 140, y - 140, x + 140, y + 140], fill=(230, 180, 70), outline=(140, 100, 30), width=8)
+        d.ellipse([x - 100, y - 100, x + 100, y + 100], outline=(170, 120, 40), width=5)
+        star8(d, x, y, 50, outline=(150, 100, 30), width=5)
+    return finish(add(base, l, glow=0.4, radius=20))
+
+
+def s_arch():
+    tiles = zellige(IW, IH, 2)
+    base = np.asarray(tiles, np.float32) * 0.9
+    inside = gradient((255, 220, 160), (180, 120, 70))
+    m = np.asarray(arch_mask(380, 260, 1020, IH), np.float32)[..., None] / 255
+    base = base * (1 - m) + inside * m
+    l = blank()
+    d = ImageDraw.Draw(l)
+    # carved frame around the arch
+    edge = outline_of(lambda dd: dd.bitmap((0, 0), arch_mask(380, 260, 1020, IH), fill=255), (240, 230, 210), 14)
+    base = add(base, edge, sharp=0.9)
+    f = blank("RGBA")
+    fd = ImageDraw.Draw(f)
+    fd.ellipse([620, 1050, 780, 1110], fill=(70, 120, 130, 255))   # fountain
+    fd.rectangle([680, 960, 720, 1060], fill=(70, 120, 130, 255))
+    return finish(over(base, f))
+
+
+def s_astrolabe():
+    base = gradient((20, 26, 40), (5, 6, 10))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    cx, cy, r = 700, 600, 380
+    gold = (230, 180, 80)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=gold, width=18)
+    d.ellipse([cx - r * 0.8, cy - r * 0.8, cx + r * 0.8, cy + r * 0.8], outline=gold, width=6)
+    for k in range(72):
+        a = math.radians(k * 5)
+        ln = 30 if k % 6 == 0 else 14
+        d.line([(cx + math.cos(a) * (r - 10), cy + math.sin(a) * (r - 10)), (cx + math.cos(a) * (r - 10 - ln), cy + math.sin(a) * (r - 10 - ln))], fill=gold, width=4)
+    for k in range(5):
+        d.arc([cx - r * 0.7, cy - r * (0.2 + k * 0.12), cx + r * 0.7, cy + r * (0.9 - k * 0.1)], 180, 360, fill=gold, width=4)
+    star8(d, cx, cy, 120, outline=gold, width=6)
+    d.line([(cx - r, cy), (cx + r, cy)], fill=gold, width=8)
+    d.ellipse([cx - 60, cy - r - 90, cx + 60, cy - r + 10], outline=gold, width=14)
+    base = add(base, l, glow=0.5, radius=14)
+    books = blank("RGBA")
+    bd = ImageDraw.Draw(books)
+    for k, col in enumerate([(120, 40, 40), (40, 80, 60), (60, 50, 110), (140, 100, 40)]):
+        bd.rounded_rectangle([200 + k * 30, 1080 - k * 70, 1200 - k * 40, 1150 - k * 70], 10, fill=col + (255,))
+    return finish(over(base, books))
+
+
+def s_manuscript():
+    base = gradient((40, 28, 18), (10, 7, 5))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.polygon([(130, 300), (690, 340), (690, 1120), (110, 1080)], fill=(226, 206, 160, 255))
+    d.polygon([(710, 340), (1270, 300), (1290, 1080), (710, 1120)], fill=(218, 196, 150, 255))
+    for page, x0 in ((0, 200), (1, 780)):
+        d.rectangle([x0, 400, x0 + 420, 470], fill=(30, 100, 110, 255))
+        star8(d, x0 + 210, 435, 26, fill=(220, 180, 80, 255))
+        for k in range(10):
+            y = 520 + k * 52
+            xx = x0 + 20
+            rr = random.Random(k + page * 20)
+            while xx < x0 + 400:  # flowing calligraphy-like strokes
+                w = rr.randint(30, 90)
+                d.arc([xx, y - 14, xx + w, y + 14], 0, 180, fill=(40, 30, 24, 255), width=5)
+                xx += w + rr.randint(6, 18)
+    d.line([(700, 340), (700, 1120)], fill=(140, 110, 80, 255), width=6)
+    base = over(base, l)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 190), "1,000+ YEARS OLD", font=F(ANTON, 110), fill=(240, 230, 210), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_record():
+    base = np.asarray(zellige(IW, IH, 3), np.float32) * 0.35
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rounded_rectangle([170, 230, 1230, 1030], 30, fill=(240, 232, 214, 255), outline=(200, 160, 70, 255), width=14)
+    d.text((700, 360), "OLDEST", font=F(ANTON, 200), fill=(30, 90, 90, 255), anchor="mm")
+    d.text((700, 560), "EDUCATIONAL INSTITUTION", font=F(ARCH, 56), fill=(40, 34, 28, 255), anchor="mm")
+    d.text((700, 660), "STILL OPERATING", font=F(ARCH, 56), fill=(40, 34, 28, 255), anchor="mm")
+    d.text((700, 860), "AL-QARAWIYYIN · FEZ", font=F(ANTON, 84), fill=(160, 110, 30, 255), anchor="mm")
+    return finish(over(base, l))
+
+
+def s_students():
+    base = np.asarray(zellige(IW, IH, 0), np.float32) * 0.28
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 900, IW, IH], fill=(30, 26, 22, 255))
+    light = blank()
+    ImageDraw.Draw(light).ellipse([300, 100, 1100, 800], fill=(140, 110, 60))
+    base = add(base, light.filter(ImageFilter.GaussianBlur(120)), sharp=0.8)
+    for k, x in enumerate((220, 470, 720, 970, 1220)):  # a circle of students
+        if k % 2:
+            veiled(d, x, 1130, 0.75, (14, 12, 12, 255))
+        else:
+            man(d, x, 1130, 0.75, (14, 12, 12, 255), hat=False)
+    base = over(base, l)
+    books = blank()
+    for x in (330, 600, 840, 1100):
+        ImageDraw.Draw(books).rectangle([x, 1150, x + 90, 1180], fill=(230, 220, 190))
+    return finish(add(base, books, glow=0.3, radius=8))
+
+
+# ------------------------------------------------------------------ Science: tardigrades
+
+def tardigrade(d, cx, cy, s, body=(214, 196, 170), line=(120, 96, 80)):
+    for k in range(4):  # legs (stubby, with claws)
+        x = cx - 210 * s + k * 140 * s
+        d.rounded_rectangle([x - 34 * s, cy + 60 * s, x + 34 * s, cy + 190 * s], int(30 * s), fill=body, outline=line, width=max(2, int(5 * s)))
+        for c in (-14, 0, 14):
+            d.line([(x + c * s, cy + 186 * s), (x + c * s - 6 * s, cy + 214 * s)], fill=(60, 40, 30), width=max(2, int(5 * s)))
+    d.ellipse([cx - 320 * s, cy - 150 * s, cx + 300 * s, cy + 170 * s], fill=body, outline=line, width=max(2, int(6 * s)))
+    for k in range(1, 5):  # body segments
+        x = cx - 320 * s + k * 124 * s
+        d.arc([x - 60 * s, cy - 150 * s, x + 60 * s, cy + 170 * s], 250, 290, fill=line, width=max(2, int(5 * s)))
+    d.ellipse([cx + 230 * s, cy - 60 * s, cx + 380 * s, cy + 90 * s], fill=body, outline=line, width=max(2, int(6 * s)))  # head
+    d.ellipse([cx + 330 * s, cy - 10 * s, cx + 370 * s, cy + 30 * s], fill=(80, 50, 40))  # mouth
+    d.ellipse([cx + 280 * s, cy - 40 * s, cx + 300 * s, cy - 20 * s], fill=(30, 20, 20))  # eye spot
+
+
+def s_tardi_space():
+    base = gradient((4, 6, 16), (0, 0, 2))
+    sky = blank()
+    specks(sky, 400, (0, 0, IW, IH), 12, color=(230, 230, 255), size=(1, 3))
+    base = add(base, sky)
+    planet = blank()
+    ImageDraw.Draw(planet).ellipse([-300, 900, 1700, 2600], fill=(40, 90, 170))
+    base = add(base, planet, glow=0.5, radius=40)
+    l = blank("RGBA")
+    tardigrade(ImageDraw.Draw(l), 700, 560, 1.4)
+    base = over(base, l)
+    return finish(base)
+
+
+def s_tardi_micro():
+    base = gradient((30, 60, 50), (8, 18, 14))
+    lens = Image.new("L", (IW, IH), 0)
+    ImageDraw.Draw(lens).ellipse([100, 60, 1300, 1200], fill=255)
+    inside = gradient((170, 210, 190), (90, 140, 120))
+    m = np.asarray(lens, np.float32)[..., None] / 255
+    base = base * (1 - m) + inside * m
+    l = blank("RGBA")
+    tardigrade(ImageDraw.Draw(l), 680, 640, 1.3)
+    base = over(base, l)
+    t = blank("RGBA")
+    td = ImageDraw.Draw(t)
+    td.line([(300, 1090), (600, 1090)], fill=(20, 30, 26, 255), width=10)
+    td.text((450, 1050), "0.5 mm", font=F(ARCH, 44), fill=(20, 30, 26, 255), anchor="mm")
+    return finish(over(base, t))
+
+
+def s_moss():
+    base = gradient((60, 120, 160), (20, 40, 30))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.polygon([(0, 700), (300, 300), (520, 560), (760, 200), (1100, 600), (1400, 380), (1400, 900), (0, 900)], fill=(90, 100, 120, 255))
+    d.polygon([(700, 240), (760, 200), (820, 260)], fill=(240, 240, 250, 255))
+    d.rectangle([0, 880, IW, IH], fill=(24, 60, 30, 255))
+    r = random.Random(3)
+    for _ in range(500):
+        x, y = r.randint(0, IW), r.randint(860, IH)
+        d.line([(x, y), (x + r.randint(-8, 8), y - r.randint(20, 60))], fill=(40 + r.randint(0, 60), 120 + r.randint(0, 80), 40, 255), width=4)
+    d.rectangle([0, 1180, IW, IH], fill=(20, 50, 90, 255))
+    base = over(base, l)
+    t = blank("RGBA")
+    tardigrade(ImageDraw.Draw(t), 1050, 1030, 0.35)
+    return finish(over(base, t))
+
+
+def s_tun():
+    base = gradient((50, 40, 30), (12, 10, 8))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.ellipse([440, 380, 960, 820], fill=(190, 170, 140, 255), outline=(110, 90, 70, 255), width=8)
+    for k in range(5):
+        d.arc([440 + k * 40, 380, 960 - k * 40, 820], 200, 340, fill=(130, 110, 85, 255), width=6)
+    base = over(base, l)
+    t = blank()
+    td = ImageDraw.Draw(t)
+    td.text((700, 1000), "\"TUN\"", font=F(ANTON, 170), fill=(240, 230, 210), anchor="mm")
+    td.text((700, 1130), "dried out · almost no life signs", font=F(ARCH, 44), fill=(200, 190, 170), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_ice():
+    base = gradient((180, 220, 255), (60, 110, 170))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    r = random.Random(6)
+    for _ in range(14):
+        cx, cy, s = r.randint(0, IW), r.randint(0, IH), r.randint(40, 120)
+        for a in range(0, 180, 30):
+            dx, dy = math.cos(math.radians(a)) * s, math.sin(math.radians(a)) * s
+            d.line([(cx - dx, cy - dy), (cx + dx, cy + dy)], fill=(255, 255, 255), width=6)
+    base = add(base, l, sharp=0.5)
+    t = blank("RGBA")
+    ImageDraw.Draw(t).ellipse([560, 900, 840, 1140], fill=(190, 170, 140, 255), outline=(110, 90, 70, 255), width=6)
+    return finish(over(base, t))
+
+
+def s_heat():
+    base = gradient((90, 20, 10), (250, 120, 30))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    for k in range(9):  # flames
+        x = 80 + k * 160
+        d.polygon([(x - 80, IH), (x, IH - 420 - (k % 3) * 120), (x + 80, IH)], fill=(255, 190, 60))
+    base = add(base, l.filter(ImageFilter.GaussianBlur(10)), glow=0.4, radius=30, sharp=0.8)
+    t = blank("RGBA")
+    ImageDraw.Draw(t).ellipse([560, 420, 840, 660], fill=(190, 170, 140, 255), outline=(110, 90, 70, 255), width=6)
+    return finish(over(base, t))
+
+
+def s_rad():
+    base = gradient((20, 30, 10), (4, 6, 2))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    trefoil(d, 700, 600, 420, (180, 255, 60), (0, 0, 0))
+    base = add(base, l, glow=0.6, radius=24)
+    t = blank()
+    td = ImageDraw.Draw(t)
+    td.text((700, 1150), "HUNDREDS OF TIMES A HUMAN'S LETHAL DOSE", font=F(ARCH, 40), fill=(230, 240, 210), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_satellite():
+    base = gradient((4, 6, 16), (0, 0, 2))
+    sky = blank()
+    specks(sky, 300, (0, 0, IW, IH), 21, color=(230, 230, 255), size=(1, 2.5))
+    base = add(base, sky)
+    earth = blank()
+    ImageDraw.Draw(earth).ellipse([-500, 860, 1900, 3200], fill=(30, 80, 160))
+    base = add(base, earth, glow=0.6, radius=50)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.ellipse([560, 380, 840, 660], fill=(200, 200, 210, 255))          # capsule
+    d.rectangle([140, 470, 520, 570], fill=(40, 60, 140, 255))         # solar panels
+    d.rectangle([880, 470, 1260, 570], fill=(40, 60, 140, 255))
+    for x in range(160, 520, 60):
+        d.line([(x, 470), (x, 570)], fill=(120, 150, 220, 255), width=3)
+    for x in range(900, 1260, 60):
+        d.line([(x, 470), (x, 570)], fill=(120, 150, 220, 255), width=3)
+    d.line([(520, 520), (560, 520)], fill=(200, 200, 210, 255), width=10)
+    d.line([(840, 520), (880, 520)], fill=(200, 200, 210, 255), width=10)
+    base = over(base, l)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 220), "2007 · 10 DAYS IN SPACE", font=F(ANTON, 96), fill=(240, 240, 250), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_eggs():
+    base = gradient((60, 110, 100), (14, 30, 26))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    tardigrade(d, 560, 640, 1.0)
+    for k in range(6):
+        x, y = 980 + (k % 3) * 90, 900 + (k // 3) * 90
+        d.ellipse([x - 38, y - 30, x + 38, y + 30], fill=(240, 236, 210, 255), outline=(150, 140, 110, 255), width=4)
+    return finish(over(base, l))
+
+
+def s_water():
+    base = gradient((20, 70, 120), (6, 20, 40))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    d.polygon([(700, 120), (520, 520), (880, 520)], fill=(150, 210, 255))
+    d.ellipse([500, 380, 900, 780], fill=(150, 210, 255))
+    base = add(base, l, glow=0.4, radius=30, sharp=0.6)
+    t = blank("RGBA")
+    tardigrade(ImageDraw.Draw(t), 700, 1000, 0.7)
+    return finish(over(base, t))
+
+
+# ------------------------------------------------------------------ History: the Great Emu War
+
+def emu(d, x, y, s, fill, flip=False):
+    sx = -1 if flip else 1
+    d.ellipse([x - 150 * s, y - 100 * s, x + 150 * s, y + 90 * s], fill=fill)             # body
+    d.line([(x + sx * 90 * s, y - 40 * s), (x + sx * 130 * s, y - 280 * s)], fill=fill, width=int(34 * s))  # neck
+    d.ellipse([x + sx * 105 * s - 34 * s, y - 320 * s, x + sx * 105 * s + 44 * s, y - 252 * s], fill=fill)  # head
+    d.polygon([(x + sx * 150 * s, y - 300 * s), (x + sx * 200 * s, y - 284 * s), (x + sx * 150 * s, y - 272 * s)], fill=fill)
+    d.line([(x - 40 * s, y + 60 * s), (x - 60 * s, y + 260 * s)], fill=fill, width=int(16 * s))  # legs
+    d.line([(x + 40 * s, y + 60 * s), (x + 70 * s, y + 260 * s)], fill=fill, width=int(16 * s))
+
+
+def outback(top=(250, 180, 100), bottom=(150, 80, 40)):
+    base = gradient(top, (240, 200, 140))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 860, IW, IH], fill=bottom + (255,))
+    r = random.Random(2)
+    for _ in range(200):  # wheat
+        x, y = r.randint(0, IW), r.randint(870, IH)
+        d.line([(x, y), (x + 4, y - 40)], fill=(230, 190, 90, 255), width=3)
+    return over(base, l)
+
+
+def s_emu_war():
+    base = outback()
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    for k, (x, y, s) in enumerate(((300, 900, 0.9), (650, 940, 1.1), (1050, 900, 0.95))):
+        emu(d, x, y, s, (30, 22, 18, 255), flip=k == 2)
+    return finish(over(base, l))
+
+
+def s_emu_herd():
+    base = outback()
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    r = random.Random(9)
+    for k in range(40):
+        x, y = r.randint(40, 1360), r.randint(820, 1200)
+        s = 0.18 + (y - 820) / 380 * 0.35
+        emu(d, x, y, s, (40, 28, 22, 255), flip=r.random() < 0.5)
+    base = over(base, l)
+    tl = Image.new("RGBA", (IW, IH), (0, 0, 0, 0))
+    ImageDraw.Draw(tl).text((700, 240), "~20,000 EMUS", font=F(ANTON, 150), fill=(60, 30, 20, 255), anchor="mm")
+    return finish(over(base, tl))
+
+
+def s_gun():
+    base = outback((200, 150, 100), (120, 70, 40))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    f = (34, 34, 30, 255)
+    d.rectangle([300, 640, 1150, 720], fill=f)               # barrel jacket
+    d.rectangle([1150, 665, 1330, 695], fill=f)
+    d.ellipse([560, 520, 760, 600], fill=f)                  # pan magazine
+    d.rectangle([180, 660, 320, 760], fill=f)
+    d.polygon([(180, 700), (60, 760), (80, 820), (200, 760)], fill=f)   # stock
+    d.line([(980, 720), (900, 960)], fill=f, width=18)       # bipod
+    d.line([(1020, 720), (1100, 960)], fill=f, width=18)
+    for x in range(330, 1140, 30):
+        d.line([(x, 640), (x, 720)], fill=(60, 60, 54, 255), width=6)
+    base = over(base, l)
+    t = blank("RGBA")
+    ImageDraw.Draw(t).text((700, 230), "2 MACHINE GUNS", font=F(ANTON, 140), fill=(40, 30, 24, 255), anchor="mm")
+    return finish(over(base, t))
+
+
+def s_emu_face():
+    base = gradient((120, 170, 220), (240, 200, 140))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    f = (50, 40, 34, 255)
+    d.line([(700, 1300), (720, 700)], fill=f, width=150)
+    d.ellipse([480, 280, 940, 760], fill=f)
+    d.polygon([(900, 520), (1180, 580), (900, 640)], fill=(70, 60, 50, 255))
+    d.ellipse([720, 420, 820, 520], fill=(250, 160, 60, 255))
+    d.ellipse([752, 452, 790, 490], fill=(10, 8, 6, 255))
+    base = over(base, l)
+    return finish(base)
+
+
+def s_emu_run():
+    base = outback()
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    for k, (x, y, s) in enumerate(((260, 860, 0.6), (560, 960, 0.75), (900, 880, 0.6), (1200, 980, 0.7))):
+        emu(d, x, y, s, (34, 24, 20, 255))
+        for j in range(4):  # speed lines
+            d.line([(x - 300 * s - j * 30, y - 60 * s + j * 30 * s), (x - 180 * s - j * 30, y - 60 * s + j * 30 * s)], fill=(140, 90, 50, 200), width=6)
+    dust = blank()
+    specks(dust, 120, (0, 1000, IW, IH), 3, color=(200, 160, 110), size=(10, 30))
+    base = add(over(base, l), dust.filter(ImageFilter.GaussianBlur(10)), sharp=0.4)
+    return finish(base)
+
+
+def s_emu_tank():
+    base = outback((180, 150, 120), (110, 70, 40))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    emu(d, 620, 760, 1.2, (40, 30, 26, 255))
+    d.rounded_rectangle([380, 640, 860, 780], 40, outline=(110, 120, 90, 255), width=14)
+    base = over(base, l)
+    t = blank("RGBA")
+    td = ImageDraw.Draw(t)
+    td.text((700, 160), "\"LIKE TANKS\"", font=F(ANTON, 150), fill=(50, 30, 20, 255), anchor="mm")
+    td.text((700, 270), "- the army's commander", font=F(ARCH, 40), fill=(60, 40, 30, 255), anchor="mm")
+    return finish(over(base, t))
+
+
+def s_bullets():
+    base = gradient((40, 34, 26), (10, 8, 6))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    r = random.Random(4)
+    for _ in range(140):
+        x, y, a = r.randint(60, 1340), r.randint(300, 1220), r.uniform(-0.6, 0.6)
+        dx, dy = math.cos(a) * 40, math.sin(a) * 40
+        d.line([(x - dx, y - dy), (x + dx, y + dy)], fill=(200, 160, 70), width=14)
+    return finish(add(base, l, glow=0.3, radius=8))
+
+
+def s_emu_win():
+    base = gradient((250, 190, 110), (240, 140, 80))
+    sun = blank()
+    ImageDraw.Draw(sun).ellipse([520, 520, 880, 880], fill=(255, 230, 160))
+    base = add(base, sun, glow=0.4, radius=60)
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([0, 900, IW, IH], fill=(130, 70, 40, 255))
+    emu(d, 700, 760, 1.25, (24, 16, 14, 255))
+    d.line([(820, 520), (900, 300)], fill=(24, 16, 14, 255), width=10)   # tiny flag
+    d.polygon([(900, 300), (1060, 340), (900, 380)], fill=(200, 40, 40, 255))
+    base = over(base, l)
+    return finish(base)
+
+
+# ------------------------------------------------------------------ Psychology: Milgram
+
+def shock_panel(d, cx, cy, w, lit=30, labels=True):
+    x0 = cx - w / 2
+    d.rounded_rectangle([x0 - 30, cy - 160, x0 + w + 30, cy + 170], 20, fill=(70, 74, 80), outline=(30, 32, 36), width=8)
+    n = 30
+    for k in range(n):
+        x = x0 + k * w / n + w / n / 2
+        on = k < lit
+        d.rectangle([x - 9, cy - 20, x + 9, cy + 50], fill=(240, 240, 240) if not on else (255, 200, 60))
+        d.ellipse([x - 7, cy - 60, x + 7, cy - 46], fill=(255, 70, 50) if on else (90, 30, 30))
+    if labels:
+        for k, (v, txt) in enumerate(((15, "SLIGHT"), (135, "STRONG"), (255, "INTENSE"), (375, "DANGER"), (450, "XXX"))):
+            x = x0 + (v / 450) * (w - w / n) + w / n / 2
+            d.text((x, cy + 100), f"{v}V", font=F(ARCH, 22), fill=(230, 230, 230), anchor="mm")
+            d.text((x, cy - 110), txt, font=F(ARCH, 22), fill=(255, 210, 120) if txt != "XXX" else (255, 90, 80), anchor="mm")
+
+
+def s_panel_hook():
+    base = gradient((20, 24, 32), (5, 6, 8))
+    l = blank()
+    shock_panel(ImageDraw.Draw(l), 700, 640, 1100, lit=30)
+    base = add(base, l, glow=0.3, radius=10)
+    hand = blank("RGBA")
+    hd = ImageDraw.Draw(hand)
+    hd.ellipse([1080, 640, 1240, 760], fill=(200, 160, 130, 255))
+    hd.rounded_rectangle([1150, 700, 1450, 820], 50, fill=(30, 34, 40, 255))
+    hd.rounded_rectangle([1092, 600, 1124, 690], 14, fill=(200, 160, 130, 255))
+    return finish(over(base, hand))
+
+
+def s_yale():
+    base = gradient((60, 70, 90), (14, 16, 22))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    f = (30, 30, 36, 255)
+    d.rectangle([200, 420, 1200, 1260], fill=f)
+    d.rectangle([600, 200, 800, 420], fill=f)
+    d.polygon([(560, 200), (840, 200), (700, 80)], fill=f)
+    for row in range(3):
+        for col in range(6):
+            x, y = 260 + col * 160, 500 + row * 220
+            d.chord([x, y - 40, x + 90, y + 40], 180, 360, fill=(230, 200, 120, 255))
+            d.rectangle([x, y, x + 90, y + 120], fill=(230, 200, 120, 255))
+    base = over(base, l)
+    return finish(base)
+
+
+def s_two_rooms():
+    base = gradient((40, 44, 52), (10, 11, 14))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    d.rectangle([680, 0, 720, IH], fill=(90, 90, 96, 255))     # wall
+    man(d, 350, 1220, 0.9, (20, 22, 26, 255), hat=False)       # teacher
+    shock_panel(d, 360, 720, 420, lit=6, labels=False)
+    man(d, 1050, 1220, 0.9, (20, 22, 26, 255), hat=False)      # learner in the chair
+    d.rectangle([880, 1000, 1220, 1260], fill=(70, 50, 34, 255))
+    for x in (930, 1170):
+        d.rectangle([x - 20, 900, x + 20, 1000], fill=(110, 110, 120, 255))
+    d.line([(560, 720), (680, 600), (720, 600), (1000, 760)], fill=(200, 60, 50, 255), width=8)  # wire
+    base = over(base, l)
+    t = blank()
+    td = ImageDraw.Draw(t)
+    td.text((350, 200), "TEACHER", font=F(ANTON, 100), fill=(240, 240, 240), anchor="mm")
+    td.text((1050, 200), "LEARNER", font=F(ANTON, 100), fill=(255, 120, 100), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
+def s_panel_rising(lit):
+    def fn():
+        base = gradient((26, 20, 20), (6, 5, 5))
+        l = blank()
+        shock_panel(ImageDraw.Draw(l), 700, 640, 1180, lit=lit)
+        return finish(add(base, l, glow=0.4, radius=12))
+    return fn
+
+
+def s_scream():
+    base = gradient((60, 10, 10), (10, 2, 2))
+    l = blank()
+    d = ImageDraw.Draw(l)
+    d.rectangle([600, 0, 800, IH], fill=(50, 40, 40))
+    for k, (txt, y, size) in enumerate((("STOP!", 300, 160), ("LET ME OUT!", 620, 120), ("...", 920, 200))):
+        d.text((700 + (k - 1) * 120, y), txt, font=F(ANTON, size), fill=(255, 220, 210), anchor="mm")
+    return finish(add(base, l, glow=0.3, radius=14))
+
+
+def s_labcoat():
+    base = gradient((200, 205, 210), (110, 115, 124))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    man(d, 700, 1250, 1.7, (150, 152, 158, 255), hat=False)
+    d.polygon([(700, 1110), (600, 900), (800, 900)], fill=(250, 250, 250, 255))
+    d.rectangle([530, 1150, 600, 1180], fill=(40, 40, 50, 255))
+    d.ellipse([595, 500, 805, 750], fill=(20, 22, 26, 255))      # head in shadow
+    base = over(base, l)
+    t = blank("RGBA")
+    ImageDraw.Draw(t).text((700, 190), "\"PLEASE CONTINUE.\"", font=F(ANTON, 130), fill=(20, 22, 26, 255), anchor="mm")
+    return finish(over(base, t))
+
+
+def s_actor():
+    base = gradient((24, 28, 40), (6, 7, 10))
+    l = blank("RGBA")
+    d = ImageDraw.Draw(l)
+    man(d, 700, 1260, 1.6, (18, 20, 26, 255), hat=False)
+    base = over(base, l)
+    mask = blank()
+    md = ImageDraw.Draw(mask)
+    md.ellipse([560, 300, 840, 640], outline=(250, 220, 120), width=10)       # theatre mask
+    md.arc([620, 480, 780, 580], 200, 340, fill=(250, 220, 120), width=10)
+    md.ellipse([620, 400, 670, 440], fill=(250, 220, 120))
+    md.ellipse([730, 400, 780, 440], fill=(250, 220, 120))
+    base = add(base, mask, glow=0.5, radius=12)
+    t = blank()
+    ImageDraw.Draw(t).text((700, 1120), "AN ACTOR", font=F(ANTON, 140), fill=(250, 220, 120), anchor="mm")
+    return finish(add(base, t, sharp=0.95))
+
+
 STORIES = {
     "radium_girls": {1: s_glowing_women, 2: s_factory, 3: s_undark_ad, 4: s_brush_lips, 5: s_painting_dial, 6: s_glowing_smile,
                      7: s_xray_jaw, 9: s_court, 10: s_deathbed, 11: s_safety, 13: s_final},
@@ -1169,6 +1815,14 @@ STORIES = {
                9: s_graves, 10: s_france, 11: s_medal, 12: s_map(True)},
     "ponzi": {1: s_ponzi_portrait, 2: s_office, 3: s_coupon, 4: s_queue, 5: s_mansion, 6: s_pyramid, 7: s_newspaper,
               8: s_coupon_stack, 9: s_collapse, 10: s_prison_ship, 11: s_pyramid_stamp, 12: s_ponzi_portrait},
+    "qarawiyyin": {1: s_fez, 2: s_fatima, 3: s_dinars, 4: s_arch, 5: s_arch, 6: s_astrolabe, 7: s_manuscript, 8: s_record,
+                   9: s_students, 10: s_fatima},
+    "tardigrades": {1: s_tardi_space, 2: s_tardi_micro, 3: s_moss, 4: s_tun, 5: s_ice, 6: s_heat, 7: s_rad, 8: s_satellite,
+                    9: s_eggs, 10: s_water},
+    "emu_war": {1: s_emu_war, 2: s_emu_herd, 3: s_gun, 4: s_emu_face, 5: s_emu_run, 6: s_emu_tank, 7: s_bullets, 8: s_bullets,
+                9: s_emu_win},
+    "milgram": {1: s_panel_hook, 2: s_yale, 3: s_two_rooms, 4: s_panel_rising(8), 5: s_scream, 6: s_labcoat, 7: s_panel_rising(30),
+                8: s_panel_rising(30), 9: s_actor, 10: s_panel_hook},
 }
 
 

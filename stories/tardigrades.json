@@ -1,0 +1,133 @@
+{
+  "slug": "forgotten-lab-tardigrades-short",
+  "channel": "The Forgotten Lab",
+  "brand": "THE FORGOTTEN LAB",
+  "voice": "en-US-AndrewNeural",
+  "rate": "+12%",
+  "gap": 0.06,
+  "tail": 0.25,
+  "accent": [
+    150,
+    255,
+    110
+  ],
+  "tint": [
+    90,
+    90,
+    80
+  ],
+  "scenes": [
+    {
+      "say": "This tiny animal survived open space.",
+      "cap": "This tiny animal SURVIVED open SPACE.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "stamp",
+        "words": [
+          "SURVIVED",
+          "SPACE"
+        ]
+      }
+    },
+    {
+      "say": "It's a tardigrade. A water bear. About half a millimeter long.",
+      "cap": "It's a TARDIGRADE. A water bear. About HALF A MILLIMETER long.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "It lives almost everywhere. In moss, on mountains, in the deep sea.",
+      "cap": "It lives almost EVERYWHERE. In moss, on mountains, in the deep sea.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "When life gets hard, it dries out, and curls into a ball called a tun.",
+      "cap": "When life gets hard, it DRIES OUT, and curls into a ball called a TUN.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "Like this, it has survived cold close to absolute zero.",
+      "cap": "Like this, it has survived cold close to ABSOLUTE ZERO.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "big",
+        "text": "-272°C",
+        "size": 250
+      }
+    },
+    {
+      "say": "And heat hotter than boiling water, for a few minutes.",
+      "cap": "And heat HOTTER than boiling water, for a few minutes.",
+      "img": {
+        "pages": [],
+        "want": []
+      },
+      "fx": {
+        "type": "big",
+        "text": "+150°C",
+        "size": 250
+      }
+    },
+    {
+      "say": "And radiation hundreds of times stronger than a deadly human dose.",
+      "cap": "And RADIATION hundreds of times stronger than a deadly human dose.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "In two thousand seven, scientists sent them to space, outside the spacecraft, for ten days.",
+      "cap": "In 2007, scientists sent them to SPACE, outside the spacecraft, for 10 DAYS.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "Many survived. Some even laid eggs that hatched.",
+      "cap": "Many SURVIVED. Some even laid EGGS that hatched.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    },
+    {
+      "say": "Just add water, and it wakes back up.",
+      "cap": "Just add WATER... and it WAKES back up.",
+      "img": {
+        "pages": [],
+        "want": []
+      }
+    }
+  ],
+  "upload": {
+    "title": "This Animal Survived Space 🐻 #shorts",
+    "description": "Tardigrades (water bears) are about half a millimetre long. Dried out into a 'tun', they can survive extreme cold, heat and radiation. In 2007, on the FOTON-M3 mission, tardigrades spent 10 days exposed to open space - and many survived.\n\nRead more: https://en.wikipedia.org/wiki/Tardigrade\n\n#science #tardigrade #space #biology #forgottenlab",
+    "tags": [
+      "tardigrade",
+      "water bear",
+      "space",
+      "biology",
+      "science",
+      "animals",
+      "extreme survival",
+      "forgotten lab"
+    ],
+    "pinned": "Which is crazier: the cold, the heat or space? 👇 Follow for more"
+  }
+}
