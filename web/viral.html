@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Viral Analyzer &mdash; The Wayne Factory</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+<style>
+  .hidden{display:none}
+  .v-row{display:flex;gap:10px;flex-wrap:wrap}
+  .v-row input,.v-row select{flex:1;min-width:220px;background:var(--bg);color:var(--text);border:1px solid var(--border);padding:12px 14px;font:inherit;border-radius:10px}
+  .v-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+  .v-stat{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:rgba(255,255,255,.02)}
+  .v-stat b{display:block;font-size:22px;color:var(--gold);font-weight:600}
+  .v-stat span{font-size:12px;color:var(--text-dim)}
+  .v-hook{font-family:'Playfair Display',serif;font-size:20px;line-height:1.4;border-left:3px solid var(--gold);padding:6px 0 6px 14px;margin:10px 0}
+  .v-list{margin:6px 0 0 18px;line-height:1.6}
+  .v-tag{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);border-radius:999px;padding:3px 10px;margin-right:6px}
+  .v-hist{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:14px}
+  .v-hist:hover{color:var(--gold)}
+  .v-prog{height:6px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-top:10px}
+  .v-prog i{display:block;height:100%;width:30%;background:var(--gold);animation:vp 1.6s ease-in-out infinite}
+  @keyframes vp{0%{margin-left:-30%}100%{margin-left:100%}}
+  .v-trans{max-height:260px;overflow:auto;font-size:13px;color:var(--text-dim);line-height:1.6}
+  .v-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+  @media(max-width:900px){.v-grid{grid-template-columns:1fr}}
+  .v-warn{font-size:13px;color:var(--text-dim);border:1px dashed var(--border);border-radius:10px;padding:10px 12px;margin-top:12px}
+</style>
+<link rel="stylesheet" href="gotham.css">
+</head>
+<body>
+<link rel="stylesheet" href="gotham.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">THE WAYNE <b>FACTORY</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/videos.html">Videos</a>
+        <a href="/studio.html">Studio</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/autopilot.html">Autopilot</a>
+        <a href="/research.html">Research</a>
+        <a href="/viral.html">Viral</a>
+        <a href="/books.html">Books</a>
+        <a href="/news.html">News</a>
+        <a href="/english.html">English</a>
+        <a href="/thumbnails.html">Thumbnails</a>
+      </div>
+      <div class="nav-right"></div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">Viral Analyzer</span>
+      <h1>Learn why it went viral</h1>
+      <p>Paste a viral video. Wayne Factory watches it, writes down every word, measures the speed, and explains the formula: the hook, the structure, the tricks and the ending. Then it makes <b>your own original video</b> with the same formula.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="panel">
+      <h3>1. Paste a viral video</h3>
+      <div class="v-row">
+        <input id="v-url" placeholder="https://youtube.com/shorts/...  or  https://youtu.be/..." inputmode="url">
+        <button id="v-go" class="btn-primary">Analyze</button>
+      </div>
+      <div id="v-job" class="hidden"><p id="v-msg" class="hint"></p><div class="v-prog"><i></i></div></div>
+      <div id="v-done"></div>
+      <div id="v-error" class="error-line hidden"></div>
+      <div class="v-warn">We copy the <b>formula</b>, never the words or clips. Copying someone's script gets a channel demonetized ("reused content") and can bring a copyright strike. Your version always gets a new topic and new words.</div>
+    </div>
+
+    <div class="v-grid">
+      <div id="v-result" class="panel hidden"></div>
+      <aside class="panel">
+        <h3>Analyzed before</h3>
+        <div id="v-history"><p class="hint">Nothing yet.</p></div>
+      </aside>
+    </div>
+  </section>
+  <script src="viral.js"></script>
+  <script src="gotham.js"></script>
+</body>
+</html>
