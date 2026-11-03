@@ -28,6 +28,7 @@ autopilot_state.json
 tokens/
 phone.json
 .installed-wf2
+.installed-wf3
 
 # Viral Analyzer: your analyses and the stories it writes
 viral/
