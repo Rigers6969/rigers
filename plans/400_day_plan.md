@@ -1,10 +1,10 @@
-# The 400-Day Plan (version 2: learn animation + school)
+# The 400-Day Plan (version 3: learn animation + school + your real hours)
 
 **Day 1: Monday 2 November 2026. Day 400: Monday 6 December 2027.**
 
 **Goals:**
 - Learn to make **great animations yourself** in Premiere Pro and After Effects.
-- Do **1 hour of school work every day**.
+- Do your **homework every school night** (30 min) plus **1 hour on Sunday**.
 - Keep your channels growing while you learn.
 
 ---
@@ -12,7 +12,8 @@
 ## 1. The honest truth (read this once)
 
 - **The videos the app makes are a start, not the finish.** The drawings I make in code are simple. Channels like Kurzgesagt, MagnatesMedia or Johnny Harris look great because a person animated them by hand. **That person can be you.** It takes months, not days. After 400 days of practice, you can be really good.
-- **Your time is small,** with school 8:00–13:30 and work until 22:00. So every minute in this plan has one job. If your work hours change, tell me and I will change the plan.
+- **Your time is small:** school 8:00–13:30, work until 22:00, home at 22:10. So every minute in this plan has one job. If your hours change, tell me and I will change the plan.
+- **Late nights, the smart way:** 2 am on two school nights a week is something you can keep doing. 2 am *every* night usually ends with getting sick or quitting within a month. So the plan swaps long nights and recovery nights.
 - **School is not optional.** If your grades drop, the plan has failed, even if a video goes viral. The school hour comes **first** every day.
 - **Keep posting while you learn.** Wayne Factory keeps making Shorts. Your animations replace them step by step.
 - **The software costs money.** Adobe Premiere Pro + After Effects need a Creative Cloud plan. Ask Adobe for the **student price**, which is much cheaper. Free option: **DaVinci Resolve** (free, with Fusion for animation) and **Blender** (free, 2D and 3D). The plan works with both; the tutorials below are for Adobe.
@@ -22,32 +23,50 @@
 
 ## 2. Your day
 
-### Monday – Friday
+### Every school day (Monday – Friday)
 | Time | What |
 |---|---|
-| 07:00 – 07:20 | Wake up, water, shower. |
-| 07:20 – 07:30 | Check yesterday's numbers in YouTube Studio (views, **average % viewed**). Max 10 minutes. |
-| 07:30 – 08:00 | Breakfast, go to school. **Audiobook** on the way. |
-| School breaks | 10 min: look at one great animation on YouTube and ask yourself "how was this made?" |
-| 13:30 – 14:00 | Lunch, travel. Audiobook. |
-| Work | Audiobook or podcast if your job allows it. |
-| **22:15 – 23:15** | **SCHOOL HOUR** (see section 4). Phone in another room. |
-| **23:15 – 00:00** | **ANIMATION (45 min)**: one tutorial step, then copy it yourself. |
-| 00:00 – 00:15 | Save your project, write tomorrow's plan in 2 lines, sleep. |
+| 07:00 | Wake up, water, shower. **Same time every school day, no snooze.** |
+| 07:20 | Check YouTube numbers (max 5 min), breakfast |
+| 07:40 | Go to school, **audiobook** on the way |
+| 08:00 – 13:30 | School. In breaks: 10 min looking at one great animation ("how was this made?") |
+| 13:30 → 22:00 | Lunch, then work (audiobook in one ear if your job allows it) |
+| 22:10 | Home, eat something, water |
+| **22:20 – 22:50** | **HOMEWORK (30 min)**, phone in another room (section 4) |
+| **22:50 → end of night** | **EDITING / LEARNING**: until the time in the table below |
 
-**Sleep: 00:15 to 07:00 = 6 h 45 min.** Do not cut this. Tired = bad grades + bad animation.
-
-### Saturday and Sunday
-| Day | School | Animation / videos | Free |
+### How late each night
+| Night | Work until | Sleep | Why |
 |---|---|---|---|
-| **Saturday** | 1 hour (morning, first thing) | **4 hours**: the week's project + one video | the rest of the day |
-| **Sunday** | 1 hour (homework for Monday) | **2 hours**: finish, export, schedule; **30 min weekly review** | the rest of the day |
+| **Monday** | **02:00** | 5 h | long night |
+| **Tuesday** | **00:30** | 6.5 h | recovery night |
+| **Wednesday** | **02:00** | 5 h | long night |
+| **Thursday** | **00:30** | 6.5 h | recovery night |
+| **Friday** | **02:30** | sleep in | no school tomorrow |
+| **Saturday** | **02:30** | sleep in | no school tomorrow |
+| **Sunday** | **23:00** | early | school tomorrow |
 
-**Every week: 7 hours school work + about 9 hours animation.**
+**Never two short nights in a row.** That is what keeps you going for 400 days.
+
+### Sunday
+| Time | What |
+|---|---|
+| 10:00 – 11:00 | **School hour** for the week ahead (tests, projects) |
+| 11:00 – 13:00 | Finish and export videos, **schedule the week's Shorts** in YouTube Studio |
+| 13:00 – 13:30 | **Weekly review** (section 7): screenshot of YouTube Studio, send it to Claude |
+| Rest of the day | **Free.** Friends, family, rest. |
+
+**Every week: about 3.5 hours homework + about 20 hours editing/learning.**
+
+### Late-night rules
+1. **No coffee or energy drinks after 20:00.**
+2. **Learn new things before 01:00**, while your brain still works. After 01:00 only do easy work: exporting, captions, sorting files.
+3. **Night mode / dim screen** after 23:00.
+4. **Stop signs: go back to 00:30 every night for one week** if you fall asleep in class, a grade drops, you get sick often, or you are editing slower than before.
 
 ### Exam weeks
-- School: **2 hours a day**. Animation: **0–20 minutes** (only watch, don't build).
-- Videos: post the Shorts Wayne Factory already made (keep 5 ready in **My videos** before every exam period).
+- Homework: **2 hours a night**. Editing: **0–20 minutes**, and lights off by **00:30**.
+- Videos: post Shorts that are already made (keep **5 ready** before every exam period).
 
 ---
 
@@ -103,16 +122,14 @@
 
 ---
 
-## 4. The school hour (every day, before anything else)
+## 4. Homework (every school night, before anything else)
 
-1. **Homework first** (whatever is due tomorrow).
-2. **No homework?** Then:
-   - 10 min: read today's notes once
-   - 40 min: exercises in your **weakest subject**
-   - 10 min: English (it helps school *and* your YouTube scripts)
-3. **Before a test:** the whole hour goes to that subject, plus the exam-week rules in section 2.
-4. **Phone in another room.** One hour of real focus beats three hours with the phone.
-5. **Every month:** look at your grades. If one subject drops, the school hour goes to that subject until it's back up.
+1. **22:20 – 22:50: homework first**, whatever is due tomorrow.
+2. **No homework?** 10 min read today's notes, 20 min exercises in your **weakest subject**.
+3. **Sunday hour:** plan the week. Tests, projects, anything big gets started on Sunday, not the night before.
+4. **Before a test:** the exam-week rules in section 2.
+5. **Phone in another room.** 30 minutes of real focus beats 2 hours with the phone.
+6. **Every month:** look at your grades. If one drops, homework time goes up to 1 hour a night until it's back.
 
 ---
 
@@ -120,36 +137,39 @@
 
 | Channel | What happens | Who makes the videos |
 |---|---|---|
-| **Paper Trail** (main) | 1 Short a day, about 30 s, famous true money/scam stories | Wayne Factory now → **your animations from day 101** |
+| **Paper Trail** (main) | 1 Short a day at 19:00, about 30 s, famous true money/scam stories | Claude makes them now (animated, like the Apple $800 Short) → **your animations from day 101** |
 | **The Forgotten Lab** | 3 Shorts a week (science + psychology) | Wayne Factory now → your animations from day 150 |
 | **History** | 3 Shorts a week | Wayne Factory |
 | Hot Mic Moments, Chat Lost It | Only if Clip Factory runs by itself; check 10 min a day | Clip Factory |
 | Albanian channel | Start on day 200 with your best animated videos in Albanian | you |
 
+**First: the 30-day test (5 Nov – 5 Dec 2026).** Post **1 Paper Trail Short every day at 19:00**, scheduled each Sunday. Don't judge the channel before day 30. On day 30 we look at the numbers together and decide: keep going, change the style, or stop. The other channels wait until the test is over.
+
 **What we learned from your numbers:** the Eiffel Tower Short (famous true story, strong first line) got 1.1k views in 3 hours. The Binance crypto-news Short got 1 view. **Famous true stories + about 30 seconds + a loop ending** is your formula until the numbers say otherwise.
 
 ---
 
-## 6. The weekly plan
+## 6. The weekly plan (after homework)
 
-| Day | 23:15 – 00:00 (after the school hour) |
-|---|---|
-| Monday | Watch this week's tutorial (part 1) and copy it |
-| Tuesday | Tutorial part 2 and copy it |
-| Wednesday | Use the new skill in this week's project |
-| Thursday | Project: animation |
-| Friday | Light: sound + check the week's Shorts in **My videos** (10 min), then rest |
-| Saturday (4 h) | Finish the project / the animated Short |
-| Sunday (2 h) | Export, title, schedule, **weekly review** |
+| Night | Until | What |
+|---|---|---|
+| Monday | 02:00 | **Learn:** this week's tutorial, copy it step by step (new things before 01:00) |
+| Tuesday | 00:30 | Practise the new skill in a small test |
+| Wednesday | 02:00 | **Make:** use the skill in this week's project / Short |
+| Thursday | 00:30 | Sound, captions, small fixes |
+| Friday | 02:30 | **Big block:** finish the week's project |
+| Saturday | 02:30 | **Big block:** next week's video, extra practice, portfolio |
+| Sunday | — | Export, schedule the Shorts, weekly review (section 2) |
 
 ---
 
 ## 7. Weekly review (Sunday, 30 min)
 
 1. **Animation:** what did I learn this week? Put the project in a folder called "Portfolio" if it's good.
-2. **School:** did I do all 7 school hours? Any test coming? Then switch to exam rules.
-3. **YouTube:** which Short had the highest **average % viewed**? Where did people swipe away? Use that in the next video.
-4. Write **3 lessons** in one note. Read last week's lessons first.
+2. **School:** did I do homework every night + the Sunday hour? Any test coming? Then switch to exam rules.
+3. **Sleep:** any stop signs (section 2)? Then one week of 00:30 nights.
+4. **YouTube:** which Short had the highest **average % viewed**? Where did people swipe away? Use that in the next video.
+5. Write **3 lessons** in one note. Read last week's lessons first.
 
 ---
 
@@ -157,7 +177,7 @@
 
 | Day | Date | Animation | School | Channels |
 |---|---|---|---|---|
-| 30 | 1 Dec 2026 | Eiffel Short remade in Premiere by you | 30/30 school hours | Paper Trail posting daily |
+| 30 | 5 Dec 2026 | Eiffel Short remade in Premiere by you | homework every night, no grade drops | **30-day test done:** 30 Shorts posted, decision made together |
 | 100 | 9 Feb 2027 | AE basics: counter, stamp, map line, logo done | grades same or better | best Short over 10k views |
 | 200 | 20 May 2027 | 15+ Shorts animated by you | end-of-year exams passed well | Paper Trail growing from your animations |
 | 300 | 28 Aug 2027 | character rig + template pack + first animated long video | summer homework done | 1 channel near monetization |
@@ -302,12 +322,13 @@ A realistic minimum is **1 book a week (57 books)**. The other 43 are a bonus.
 
 ## 10. Rules for 400 days
 
-1. **School hour first, sleep second, animation third.**
+1. **Homework first, sleep second, animation third.**
 2. **Watch 1, make 1.** Every tutorial gets used the same week.
 3. **Post on schedule, even if it isn't perfect.** Animation 50 will be much better than animation 1.
 4. **Never upload someone else's work or a copy.** Copy only to practise, privately.
 5. **Look at the numbers on Sunday, not every hour.**
 6. **Missed a day? Don't miss two.**
+8. **Never two short nights in a row.** Watch the stop signs.
 7. **Exam weeks are school weeks.** Keep 5 Shorts ready before each one.
 
 You don't become a great animator in one month. You get there by being a little better every week for 400 days, and this plan is built for that.
