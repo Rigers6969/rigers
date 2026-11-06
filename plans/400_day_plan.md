@@ -1,6 +1,6 @@
 # The 400-Day Plan (version 3: learn animation + school + your real hours)
 
-**Day 1: Monday 2 November 2026. Day 400: Monday 6 December 2027.**
+**Day 1: Saturday 7 November 2026. Day 400: Saturday 11 December 2027.**
 
 **Goals:**
 - Learn to make **great animations yourself** in Premiere Pro and After Effects.
@@ -74,13 +74,13 @@
 
 **The rule: watch 1 thing, make 1 thing.** Never only watch. Every tutorial gets copied in your own project the same week.
 
-### Phase 1 — Days 1–30 (2 Nov – 1 Dec 2026): Premiere Pro basics
+### Phase 1 — Days 1–30 (7 Nov – 6 Dec 2026): Premiere Pro basics
 - **Learn:** cutting, the timeline, audio levels, **keyframes** (position, scale, opacity), captions, export settings for Shorts.
 - **Watch:** Gavin Herman's beginner Premiere course (one chapter a night), then Kyler Holland's videos on the newest Premiere features.
 - **Project of the month:** remake our **Eiffel Tower Short** in Premiere yourself. Use real photos with slow zooms (Ken Burns), and captions that pop.
 - **Done when:** you can make a 30-second Short from photos + voice in under 2 hours.
 
-### Phase 2 — Days 31–100 (2 Dec 2026 – 9 Feb 2027): After Effects foundations
+### Phase 2 — Days 31–100 (7 Dec 2026 – 14 Feb 2027): After Effects foundations
 - **Learn, one per week:**
   1. Interface, layers, keyframes
   2. **Easing and the Graph Editor** — the secret of smooth animation
@@ -96,7 +96,7 @@
 - **Weekly mini projects:** the Paper Trail logo animation · a money counter · a map line from London to Paris · a "SOLD" stamp slam · a newspaper headline zoom · a bar chart that grows.
 - **Done when:** your stamp slam and counter look **smoother** than the ones in our Shorts.
 
-### Phase 3 — Days 101–200 (10 Feb – 20 May 2027): 2D motion graphics for your channels
+### Phase 3 — Days 101–200 (15 Feb – 25 May 2027): 2D motion graphics for your channels
 - **Learn:**
   - flat-design scenes made from shapes (SonduckFilm's Kurzgesagt-style tutorials)
   - 2.5D camera and parallax (photos with depth)
@@ -106,7 +106,7 @@
 - **Project:** **one fully animated 30-second Short every week**, made by you. Post it on Paper Trail or The Forgotten Lab.
 - **Done when:** your own animated Shorts get the same or a better **average % viewed** than the app's Shorts.
 
-### Phase 4 — Days 201–300 (21 May – 28 Aug 2027): characters, maps and speed
+### Phase 4 — Days 201–300 (26 May – 2 Sep 2027): characters, maps and speed
 - **Learn:**
   - **Duik Angela** (free character rigging): a simple character that walks, points and talks
   - 3D layers + camera for maps and "flying" over a scene
@@ -114,7 +114,7 @@
 - **Summer = more time:** do 2 animated Shorts a week, plus your first **animated long video** (5–8 minutes) for Paper Trail.
 - **Project:** a channel **mascot / host character** for Paper Trail or The Forgotten Lab.
 
-### Phase 5 — Days 301–400 (29 Aug – 6 Dec 2027): your own style
+### Phase 5 — Days 301–400 (3 Sep – 11 Dec 2027): your own style
 - **Each month:** pick 30 seconds from a great animated channel and **copy it exactly** in your project. This is practice only; **never upload a copy**. Then use what you learned in your own video.
 - **Make:** 2–3 animated Shorts a week + 1 animated long video a month.
 - **Build a portfolio:** your 10 best animations in one reel. With this you can also **earn money as a freelance animator** (Fiverr, Upwork, local businesses). This can pay faster than YouTube.
@@ -143,7 +143,7 @@
 | Hot Mic Moments, Chat Lost It | Only if Clip Factory runs by itself; check 10 min a day | Clip Factory |
 | Albanian channel | Start on day 200 with your best animated videos in Albanian | you |
 
-**First: the 30-day test (5 Nov – 5 Dec 2026).** Post **1 Paper Trail Short every day at 19:00**, scheduled each Sunday. Don't judge the channel before day 30. On day 30 we look at the numbers together and decide: keep going, change the style, or stop. The other channels wait until the test is over.
+**First: the 30-day test (7 Nov – 6 Dec 2026).** Post **1 Paper Trail Short every day at 19:00**, scheduled each Sunday. Don't judge the channel before day 30. On day 30 we look at the numbers together and decide: keep going, change the style, or stop. The other channels wait until the test is over.
 
 **What we learned from your numbers:** the Eiffel Tower Short (famous true story, strong first line) got 1.1k views in 3 hours. The Binance crypto-news Short got 1 view. **Famous true stories + about 30 seconds + a loop ending** is your formula until the numbers say otherwise.
 
@@ -177,11 +177,11 @@
 
 | Day | Date | Animation | School | Channels |
 |---|---|---|---|---|
-| 30 | 5 Dec 2026 | Eiffel Short remade in Premiere by you | homework every night, no grade drops | **30-day test done:** 30 Shorts posted, decision made together |
-| 100 | 9 Feb 2027 | AE basics: counter, stamp, map line, logo done | grades same or better | best Short over 10k views |
-| 200 | 20 May 2027 | 15+ Shorts animated by you | end-of-year exams passed well | Paper Trail growing from your animations |
-| 300 | 28 Aug 2027 | character rig + template pack + first animated long video | summer homework done | 1 channel near monetization |
-| 400 | 6 Dec 2027 | own style, portfolio reel, first freelance client | strong grades | 1–2 channels monetized if the videos hit |
+| 30 | 6 Dec 2026 | Eiffel Short remade in Premiere by you | homework every night, no grade drops | **30-day test done:** 30 Shorts posted, decision made together |
+| 100 | 14 Feb 2027 | AE basics: counter, stamp, map line, logo done | grades same or better | best Short over 10k views |
+| 200 | 25 May 2027 | 15+ Shorts animated by you | end-of-year exams passed well | Paper Trail growing from your animations |
+| 300 | 2 Sep 2027 | character rig + template pack + first animated long video | summer homework done | 1 channel near monetization |
+| 400 | 11 Dec 2027 | own style, portfolio reel, first freelance client | strong grades | 1–2 channels monetized if the videos hit |
 
 ---
 
