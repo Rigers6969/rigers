@@ -195,6 +195,6 @@ def add_graphics(video_in: Path, words: list[dict], video_out: Path, width: int,
         cur = f"o{k}"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video_in), *inputs,
                     "-filter_complex", ";".join(chain), "-map", f"[{cur}]", "-map", "0:a?",
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", "-c:a", "copy",
+                    "-c:v", "libx264", "-preset", "faster", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "copy",
                     str(video_out)], check=True, timeout=max(600, len(moments) * 120))
     return len(moments)

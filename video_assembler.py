@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import math
+import os
 import shutil
 import subprocess
 import tempfile
@@ -132,7 +133,8 @@ def _make_ken_burns_segment(
     )
     _run_ffmpeg(
         ["ffmpeg", "-y", "-loop", "1", "-i", str(image_path), "-t", f"{duration:.3f}",
-         "-vf", vf, "-r", str(FPS), "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)],
+         "-vf", vf, "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-threads", "2",
+         "-pix_fmt", "yuv420p", str(out_path)],
         timeout=120, error_prefix=f"ffmpeg failed rendering {image_path.name}",
     )
 
@@ -231,11 +233,18 @@ def assemble_video(
         tmp_dir = Path(tmp)
         segment_paths: list[Path] = []
 
-        for i, (image_path, duration, reverse) in enumerate(segments, start=1):
-            report(f"Rendering segment {i}/{len(segments)}...")
-            seg_path = tmp_dir / f"seg_{i:03d}.mp4"
-            _make_ken_burns_segment(image_path, duration, seg_path, reverse=reverse, width=width, height=height)
-            segment_paths.append(seg_path)
+        # Shots are independent, so render several at once (one ffmpeg per 2 CPU threads) instead of one by one.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        segment_paths = [tmp_dir / f"seg_{i:03d}.mp4" for i in range(1, len(segments) + 1)]
+        workers = max(1, min(6, (os.cpu_count() or 2) // 2))
+        report(f"Rendering {len(segments)} shots, {workers} at a time...")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            jobs = [pool.submit(_make_ken_burns_segment, image_path, duration, seg_path, reverse=reverse, width=width, height=height)
+                    for (image_path, duration, reverse), seg_path in zip(segments, segment_paths)]
+            for done, job in enumerate(as_completed(jobs), start=1):
+                job.result()
+                report(f"Rendered shot {done}/{len(segments)}...")
 
         report("Combining shots...")
         concat_list = tmp_dir / "concat.txt"

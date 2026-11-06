@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Callable, Optional
@@ -92,12 +93,12 @@ def transcribe_words(audio_path: Path, model_size: str = "base", progress: Optio
 
     if progress:
         progress(f"Loading Whisper model '{model_size}'...")
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    model = WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
 
     if progress:
         progress("Transcribing voiceover for captions...")
     segments_iter, _info = model.transcribe(
-        str(audio_path), beam_size=5, vad_filter=True, word_timestamps=True
+        str(audio_path), beam_size=1, vad_filter=True, word_timestamps=True  # greedy: ~2-3x faster, same words for clear narration
     )
 
     words: list[dict] = []
@@ -326,7 +327,8 @@ def apply_edits(
                 captioned_path = work_dir / "captioned.mp4"
                 _run_ffmpeg(
                     ["ffmpeg", "-y", "-i", str(current_input), "-filter_complex", chain,
-                     "-map", "[v]", "-map", "0:a?", "-c:a", "copy", str(captioned_path)],
+                     "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-preset", "faster", "-crf", "20",
+                     "-pix_fmt", "yuv420p", "-c:a", "copy", str(captioned_path)],
                     timeout=max(300, duration * 4), error_prefix="ffmpeg failed burning in captions",
                 )
                 current_input = captioned_path

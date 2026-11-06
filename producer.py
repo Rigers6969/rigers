@@ -14,6 +14,7 @@ shared between videos except the on-disk media cache.
 from __future__ import annotations
 
 import json
+import time
 import re
 import tempfile
 from pathlib import Path
@@ -250,9 +251,12 @@ def produce_video(
         if style_path.exists():
             style = json.loads(style_path.read_text(encoding="utf-8"))
 
+    t_start = time.time()
+
     def report(msg: str) -> None:
         if progress:
-            progress(msg)
+            m, sec = divmod(int(time.time() - t_start), 60)
+            progress(f"[{m:02d}:{sec:02d}] {msg}")  # time since start, so the slow step is easy to spot
 
     CONTENT_ROOT.mkdir(exist_ok=True)
     slug = unique_slug(slugify(f"{topic}"))
