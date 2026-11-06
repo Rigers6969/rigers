@@ -165,8 +165,9 @@ def voice_lines(texts: list[str], voice: str, rate: str) -> list[np.ndarray]:
                     asyncio.run(edge_tts.Communicate(t, voice, rate=rate).save(str(p)))
                     break
                 except Exception:
-                    if attempt == 2:
-                        raise
+                    if attempt == 2:  # Microsoft refused 3 times: use the offline voice
+                        from studio import _offline_chunk
+                        _offline_chunk(t, p)
             out.append(_decode(p))
             say(f"  voice {i + 1}/{len(texts)}")
     return out

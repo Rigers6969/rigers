@@ -271,6 +271,44 @@ async def _synthesize_chunk(text: str, voice: str, out_path: Path) -> None:
     await communicate.save(str(out_path))
 
 
+KOKORO_DIR = APP_DIR / "models"
+KOKORO_FILES = {
+    "kokoro.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx",
+    "voices.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+}
+
+
+def _offline_chunk(text: str, out_path: Path, voice: str = "am_michael") -> None:
+    """Offline voice (Kokoro, runs on this PC). Installs itself and downloads its model (~120 MB) the first time."""
+    try:
+        from kokoro_onnx import Kokoro
+    except ImportError:
+        subprocess.run([os.sys.executable, "-m", "pip", "install", "-q", "kokoro-onnx"], check=True, timeout=900)
+        from kokoro_onnx import Kokoro
+    import urllib.request
+    import wave
+
+    import numpy as np
+
+    KOKORO_DIR.mkdir(exist_ok=True)
+    for name, url in KOKORO_FILES.items():
+        target = KOKORO_DIR / name
+        if not target.exists():
+            tmp = target.with_suffix(".part")
+            urllib.request.urlretrieve(url, tmp)
+            tmp.replace(target)
+    samples, sr = Kokoro(str(KOKORO_DIR / "kokoro.onnx"), str(KOKORO_DIR / "voices.bin")).create(
+        text, voice=voice, speed=1.05, lang="en-us")
+    wav_path = Path(out_path).with_suffix(".wav")
+    with wave.open(str(wav_path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes((np.clip(samples, -1, 1) * 32767).astype(np.int16).tobytes())
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_path), str(out_path)], check=True)
+    wav_path.unlink(missing_ok=True)
+
+
 def synthesize_speech(
     text: str, voice: str, output_path: Path, progress: Optional[ProgressCB] = None
 ) -> Path:
@@ -293,7 +331,17 @@ def synthesize_speech(
             try:
                 asyncio.run(_synthesize_chunk(chunk, voice, part_path))
             except Exception as exc:
-                raise VoiceSynthesisError(f"edge-tts failed on part {i}/{len(chunks)}: {exc}") from exc
+                # Microsoft's free service sometimes refuses (403: old edge-tts or a wrong PC clock).
+                # Fall back to the offline voice that runs on this PC, if it can be set up.
+                if progress:
+                    progress(f"Microsoft's voice refused ({type(exc).__name__}) - using the offline voice instead...")
+                try:
+                    _offline_chunk(chunk, part_path)
+                except Exception as exc2:
+                    raise VoiceSynthesisError(
+                        f"The voice failed on part {i}/{len(chunks)}: {exc}. Fix: close Wayne Factory, run "
+                        "'python -m pip install -U edge-tts', turn on 'Set time automatically' in Windows date & time "
+                        f"settings, then start again. (Offline voice also failed: {exc2})") from exc
             part_paths.append(part_path)
 
         if len(part_paths) == 1:

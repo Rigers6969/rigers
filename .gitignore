@@ -33,3 +33,6 @@ phone.json
 # Viral Analyzer: your analyses and the stories it writes
 viral/
 stories/viral-*.json
+
+# offline voice model (downloaded on first use)
+models/

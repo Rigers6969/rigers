@@ -7,6 +7,8 @@ if not exist ".installed-wf3" (
   python -m pip install -r requirements.txt || (echo Install failed - check your internet and run start.bat again. & pause & exit /b)
   echo ok> .installed-wf3
 )
+rem Keep Microsoft's voice tool current - old versions get refused (error 403).
+python -m pip install -q -U edge-tts >nul 2>&1
 rem Ollama: the free AI on this PC - installed once, started if it isn't running, and a small fast model fetched once.
 rem To never use it, create an empty file called no-ollama.txt in this folder.
 if exist "no-ollama.txt" goto ollamadone
