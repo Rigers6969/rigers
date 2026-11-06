@@ -23,6 +23,16 @@ def api_autopilot_settings():
         return jsonify({"error": str(exc)}), 400
 
 
+@bp.route("/api/autopilot/media-keys", methods=["GET", "POST"])
+def api_autopilot_media_keys():
+    if request.method == "GET":
+        return jsonify(autopilot.media_keys())
+    try:
+        return jsonify(autopilot.save_media_keys(request.get_json(silent=True) or {}))
+    except autopilot.AutopilotError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @bp.route("/api/autopilot/run", methods=["POST"])
 def api_autopilot_run():
     data = request.get_json(silent=True) or {}

@@ -88,9 +88,13 @@ class CachedSession:
     """What source modules actually call: get_json() for API search/lookup
     calls, get_binary() to download (or reuse a cached copy of) an image."""
 
-    def __init__(self, cache: DiskCache, rate_limiter: RateLimiter, user_agent: str, timeout: float):
+    def __init__(self, cache: DiskCache, rate_limiter: RateLimiter, user_agent: str, timeout: float,
+                 limit_downloads: bool = False):
         self.cache = cache
         self.rate_limiter = rate_limiter
+        # API searches are rate-limited; image files come from CDNs that don't need it (except LOC's,
+        # which shares the API's strict limit) - limiting downloads too made every image wait 3-5 s.
+        self.limit_downloads = limit_downloads
         self.session = requests.Session()
         self.session.headers["User-Agent"] = user_agent
         self.timeout = timeout
@@ -112,7 +116,8 @@ class CachedSession:
         path = self.cache.image_path_for(url)
         if path.exists() and path.stat().st_size > 0:
             return path
-        self.rate_limiter.wait()
+        if self.limit_downloads:
+            self.rate_limiter.wait()
         resp = self.session.get(url, timeout=self.timeout, stream=True)
         resp.raise_for_status()
         tmp_path = path.with_suffix(path.suffix + ".part")

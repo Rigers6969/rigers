@@ -564,3 +564,33 @@ def reject(slug: str) -> None:
         _log(st, item["channel"], f"Skipped (not uploaded): {item['title']}", True, slug=slug)
     else:
         _save_state(st)
+
+
+# ---------- stock media keys (Pexels / Pixabay) ----------
+
+ENV_FILE = APP_DIR / ".env"
+MEDIA_KEYS = {"pexels": "PEXELS_API_KEY", "pixabay": "PIXABAY_API_KEY"}
+
+
+def media_keys() -> dict:
+    """Which keys are set - never the keys themselves."""
+    import os
+
+    return {name: bool(os.environ.get(env)) for name, env in MEDIA_KEYS.items()}
+
+
+def save_media_keys(data: dict) -> dict:
+    """Writes the given keys into .env (kept on this PC only) and uses them right away. Empty = unchanged."""
+    import os
+
+    lines = ENV_FILE.read_text(encoding="utf-8").splitlines() if ENV_FILE.exists() else []
+    for name, env in MEDIA_KEYS.items():
+        val = str(data.get(name) or "").strip()
+        if not val:
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9_\-]{10,120}", val):
+            raise AutopilotError(f"That {name.capitalize()} key doesn't look right - copy it again from the website.")
+        lines = [ln for ln in lines if not ln.startswith(env + "=")] + [f"{env}={val}"]
+        os.environ[env] = val
+    ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return media_keys()

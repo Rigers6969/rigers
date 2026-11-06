@@ -198,6 +198,19 @@
     </div>
 
     <div class="panel">
+      <h3>Stock video &amp; photos (free keys)</h3>
+      <p class="hint">With these two free keys, videos get <b>real video clips</b> instead of only zooming photos, and photos come faster.
+        Get them at <b>pexels.com/api</b> ("Your API key") and <b>pixabay.com/api/docs</b> (shown on the page after you sign up).
+        They are saved only on this PC (in the .env file) and never shown again.</p>
+      <div class="ap-engine">
+        <input id="mk-pexels" type="password" placeholder="Pexels API key" autocomplete="off">
+        <input id="mk-pixabay" type="password" placeholder="Pixabay API key" autocomplete="off">
+        <button id="mk-save" class="btn-primary">Save keys</button>
+        <span id="mk-state" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="panel">
       <h3>What it did</h3>
       <div id="ap-log" class="ap-log"><p class="hint">Nothing yet.</p></div>
     </div>

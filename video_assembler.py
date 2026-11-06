@@ -139,6 +139,29 @@ def _make_ken_burns_segment(
     )
 
 
+VIDEO_EXTS = (".mp4", ".mov", ".webm", ".mkv")
+
+
+def _make_clip_segment(clip_path: Path, duration: float, out_path: Path, offset: float = 0.0,
+                       width: int = WIDTH, height: int = HEIGHT) -> None:
+    """A stock video clip cut to `duration`, filling the frame (looped if the clip is shorter), no sound."""
+    vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps={FPS},format=yuv420p"
+    _run_ffmpeg(
+        ["ffmpeg", "-y", "-stream_loop", "-1", "-ss", f"{offset:.2f}", "-i", str(clip_path), "-t", f"{duration:.3f}",
+         "-vf", vf, "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-threads", "2",
+         "-pix_fmt", "yuv420p", str(out_path)],
+        timeout=180, error_prefix=f"ffmpeg failed cutting clip {clip_path.name}",
+    )
+
+
+def _make_segment(path: Path, duration: float, out_path: Path, reverse: bool = False,
+                  width: int = WIDTH, height: int = HEIGHT) -> None:
+    if Path(path).suffix.lower() in VIDEO_EXTS:
+        _make_clip_segment(path, duration, out_path, offset=1.5 if reverse else 0.0, width=width, height=height)
+    else:
+        _make_ken_burns_segment(path, duration, out_path, reverse=reverse, width=width, height=height)
+
+
 def _dynamic_durations(n: int, avg_seconds: float, short_range: tuple[float, float]) -> list[float]:
     """Varies segment length around avg_seconds instead of a flat identical
     duration per segment - a repeating short/long/medium pattern that
@@ -240,7 +263,7 @@ def assemble_video(
         workers = max(1, min(6, (os.cpu_count() or 2) // 2))
         report(f"Rendering {len(segments)} shots, {workers} at a time...")
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            jobs = [pool.submit(_make_ken_burns_segment, image_path, duration, seg_path, reverse=reverse, width=width, height=height)
+            jobs = [pool.submit(_make_segment, image_path, duration, seg_path, reverse=reverse, width=width, height=height)
                     for (image_path, duration, reverse), seg_path in zip(segments, segment_paths)]
             for done, job in enumerate(as_completed(jobs), start=1):
                 job.result()

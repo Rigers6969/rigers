@@ -32,6 +32,7 @@ class WikimediaSource(BaseSource):
             "gsrlimit": limit,
             "prop": "imageinfo",
             "iiprop": "url|size|extmetadata",
+            "iiurlwidth": 2560,  # a 2560 px copy instead of originals that can be 20-50 MB
         })
         pages = ((data.get("query") or {}).get("pages") or {}).values()
         candidates = []
@@ -40,7 +41,7 @@ class WikimediaSource(BaseSource):
             if not infos:
                 continue
             info = infos[0]
-            direct_url = info.get("url", "")
+            direct_url = info.get("thumburl") or info.get("url", "")
             if not direct_url:
                 continue
             meta = info.get("extmetadata") or {}

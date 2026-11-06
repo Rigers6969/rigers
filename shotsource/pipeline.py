@@ -11,6 +11,7 @@ import logging
 import re
 import shutil
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Dict, List, Optional
 
 from .cache import CachedSession, DiskCache, RateLimiter
@@ -84,7 +85,8 @@ def build_sources(config: Config, cache: DiskCache) -> Dict[str, BaseSource]:
         if src_config is None or not src_config.enabled:
             continue
         rate_limiter = RateLimiter(src_config.requests_per_minute)
-        http = CachedSession(cache, rate_limiter, config.http.user_agent, config.http.timeout_seconds)
+        http = CachedSession(cache, rate_limiter, config.http.user_agent, config.http.timeout_seconds,
+                             limit_downloads=name == "loc")
         default_env = _DEFAULT_API_KEY_ENV.get(name)
         kwargs = {"api_key_env": src_config.api_key_env or default_env} if default_env else {}
         sources[name] = cls(http, src_config.max_results_per_shot, **kwargs)
@@ -98,16 +100,30 @@ def _slugify(text: str, max_len: int = 60) -> str:
 
 
 def _collect_candidates(shot: Shot, sources: Dict[str, BaseSource]) -> List[RawCandidate]:
-    candidates: List[RawCandidate] = []
-    for name, source in sources.items():
+    """Asks every source at the same time (each still keeps its own rate limit)."""
+    def ask(item):
+        name, source = item
         try:
             found = source.search(shot.description)
         except Exception as exc:
             logger.warning("source %s failed for shot %r: %s", name, shot.description, exc)
-            continue
+            return []
         logger.debug("source %s returned %d candidates for shot %r", name, len(found), shot.description)
-        candidates.extend(found)
+        return found
+
+    candidates: List[RawCandidate] = []
+    if not sources:
+        return candidates
+    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
+        for found in pool.map(ask, sources.items()):  # map keeps the source order
+            candidates.extend(found)
     return candidates
+
+
+def _caption_scores(similarity, description: str, titles: List[str]) -> List[float]:
+    if hasattr(similarity, "score_many"):
+        return similarity.score_many(description, titles)
+    return [similarity.score(description, t) for t in titles]
 
 
 def _score_candidates(
@@ -123,16 +139,47 @@ def _score_candidates(
     seen_hashes = []
     scored: List[ScoredCandidate] = []
 
+    # 1. Free checks first (licence, title relevance) - no download needed for those.
+    licensed = []
     for candidate in candidates:
         if not candidate.license.strip() or candidate.license.strip().upper() == "UNKNOWN":
             reject_log.reject(shot.id, shot.description, candidate, "license missing or unclear")
             continue
+        licensed.append(candidate)
+    caption_of = dict(zip(map(id, licensed), _caption_scores(similarity, shot.description, [c.title for c in licensed])))
+    relevant = []
+    for candidate in licensed:
+        cs = caption_of[id(candidate)]
+        if cs < scoring_cfg.min_caption_similarity:
+            reject_log.reject(
+                shot.id, shot.description, candidate,
+                f"not relevant to shot ({cs:.2f} similarity below {scoring_cfg.min_caption_similarity} minimum)",
+            )
+        else:
+            relevant.append(candidate)
+    # 2. Download only the most relevant few, several at once.
+    relevant.sort(key=lambda c: caption_of[id(c)], reverse=True)
+    keep = max(config.top_n_per_shot * 3, 12)
+    for candidate in relevant[keep:]:
+        reject_log.reject(shot.id, shot.description, candidate, "not downloaded: weaker title match than the best ones")
+    relevant = relevant[:keep]
 
-        source = sources.get(candidate.source)
+    def fetch(candidate):
         try:
-            local_path = source.http.get_binary(candidate.direct_url)
+            return sources.get(candidate.source).http.get_binary(candidate.direct_url), None
         except Exception as exc:
-            reject_log.reject(shot.id, shot.description, candidate, f"download failed: {exc}")
+            return None, exc
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        fetched = list(pool.map(fetch, relevant))
+
+    # 3. Quality checks in relevance order; stop once there are plenty of good ones.
+    for candidate, (local_path, error) in zip(relevant, fetched):
+        if len(scored) >= config.top_n_per_shot * 2:
+            reject_log.reject(shot.id, shot.description, candidate, "skipped: enough good images already")
+            continue
+        if error is not None:
+            reject_log.reject(shot.id, shot.description, candidate, f"download failed: {error}")
             continue
 
         try:
@@ -147,13 +194,7 @@ def _score_candidates(
             continue
         seen_hashes.append(info.phash)
 
-        caption_score = similarity.score(shot.description, candidate.title)
-        if caption_score < scoring_cfg.min_caption_similarity:
-            reject_log.reject(
-                shot.id, shot.description, candidate,
-                f"not relevant to shot ({caption_score:.2f} similarity below {scoring_cfg.min_caption_similarity} minimum)",
-            )
-            continue
+        caption_score = caption_of[id(candidate)]
 
         variance = sharpness_variance(info.gray)
         res_score = resolution_score(info.width, scoring_cfg.resolution_reference_width_px)
@@ -174,6 +215,17 @@ def _score_candidates(
     return scored
 
 
+def _clip_row(shot: Shot, clip: dict, path: Path) -> dict:
+    return {
+        "shot_id": shot.id, "shot_description": shot.description, "rank": 1, "source": clip["source"],
+        "media_id": clip["id"], "title": clip["title"], "source_url": clip["page"], "direct_url": clip["url"],
+        "license": clip["license"], "license_url": clip["license_url"], "attribution": clip["credit"],
+        "width": clip.get("width") or "", "height": clip.get("height") or "", "resolution_score": "", "sharpness_score": "",
+        "caption_similarity_score": round(clip.get("similarity", 0), 4), "final_score": round(clip.get("similarity", 0), 4),
+        "local_path": str(path),
+    }
+
+
 def run_shot(
     shot: Shot,
     sources: Dict[str, BaseSource],
@@ -181,7 +233,24 @@ def run_shot(
     config: Config,
     output_dir: Path,
     reject_log: RejectionLog,
+    clips: Optional[dict] = None,
 ) -> List[dict]:
+    if clips is not None:
+        # A real video clip first (modern topics only); if one fits, the slow photo search is skipped.
+        from . import video_clips
+
+        try:
+            clip = video_clips.best_clip(shot.description, similarity, clips["used"], portrait=clips["portrait"])
+            if clip:
+                src = video_clips.download(clip, Path(config.cache_dir) / "clips")
+                shot_dir = output_dir / _slugify(f"{shot.id}-{shot.description}")
+                shot_dir.mkdir(parents=True, exist_ok=True)
+                dest = shot_dir / f"01_{clip['source']}_{_slugify(clip['id'], 20)}.mp4"
+                shutil.copyfile(src, dest)
+                clips["used"].add(clip["id"])
+                return [_clip_row(shot, clip, dest)]
+        except Exception as exc:
+            logger.warning("video clip search failed for %r: %s", shot.description, exc)
     candidates = _collect_candidates(shot, sources)
     scored = _score_candidates(shot, candidates, sources, similarity, config, reject_log)
 
@@ -221,6 +290,8 @@ def run_pipeline(
     config_path: Optional[str] = None,
     output_dir_override: Optional[str] = None,
     progress: Optional[Callable[[str], None]] = None,
+    video_clips: bool = True,
+    portrait: bool = False,
 ) -> Path:
     """progress, if given, is called once per shot (not per source/candidate -
     that would be too chatty) so a caller running this as a long background
@@ -243,15 +314,21 @@ def run_pipeline(
     if not shots:
         raise ValueError(f"No shots found in {shots_path}")
 
+    from . import video_clips as _vc
+
+    clips = {"used": set(), "portrait": portrait} if video_clips and _vc.have_keys() else None
+    if clips is not None:
+        report("Video clips: on (Pexels/Pixabay) - photos are used for old-history shots and when no clip fits.")
     all_rows: List[dict] = []
     with RejectionLog(output_dir / "rejections.csv") as reject_log:
         for i, shot in enumerate(shots, start=1):
             report(f"Shot {i}/{len(shots)}: searching for \"{shot.description[:60]}\"...")
             logger.info("Processing shot %s: %s", shot.id, shot.description)
-            rows = run_shot(shot, sources, similarity, config, output_dir, reject_log)
+            rows = run_shot(shot, sources, similarity, config, output_dir, reject_log, clips=clips)
             all_rows.extend(rows)
             logger.info("  -> kept %d (of up to %d) for %s", len(rows), config.top_n_per_shot, shot.id)
-            report(f"Shot {i}/{len(shots)}: kept {len(rows)} of up to {config.top_n_per_shot}.")
+            kind = "video clip" if rows and rows[0]["local_path"].endswith(".mp4") else f"{len(rows)} photo(s)"
+            report(f"Shot {i}/{len(shots)}: kept {kind}.")
 
     manifest_path = output_dir / "manifest.csv"
     write_manifest(manifest_path, all_rows)

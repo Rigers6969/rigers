@@ -33,6 +33,7 @@ class PexelsSource(BaseSource):
             direct_url = (photo.get("src") or {}).get("original", "")
             if not direct_url:
                 continue
+            direct_url += ("&" if "?" in direct_url else "?") + "auto=compress&cs=tinysrgb&w=2560"  # 2560 px, not the full original
             photographer = photo.get("photographer") or "Unknown photographer"
             landing_url = photo.get("url", "")
             candidates.append(RawCandidate(

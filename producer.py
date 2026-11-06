@@ -299,7 +299,8 @@ def produce_video(
         shots_path = f.name
     try:
         manifest_path = run_pipeline(
-            shots_path, output_dir_override=str(media_dir), progress=lambda m: report(f"Media: {m}")
+            shots_path, output_dir_override=str(media_dir), progress=lambda m: report(f"Media: {m}"),
+            portrait=is_short,
         )
     finally:
         Path(shots_path).unlink(missing_ok=True)

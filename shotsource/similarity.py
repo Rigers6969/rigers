@@ -41,3 +41,15 @@ class CaptionSimilarityScorer:
         embeddings = model.encode([shot_description, caption], normalize_embeddings=True)
         similarity = float(embeddings[0] @ embeddings[1])
         return max(0.0, min(1.0, similarity))
+
+    def score_many(self, shot_description: str, captions: list) -> list:
+        """score() for many captions in one model call (much faster than one call each)."""
+        out = [0.0] * len(captions)
+        idx = [i for i, c in enumerate(captions) if c and c.strip()]
+        if not idx:
+            return out
+        model = self._model_instance()
+        emb = model.encode([shot_description] + [captions[i] for i in idx], normalize_embeddings=True)
+        for k, i in enumerate(idx, start=1):
+            out[i] = max(0.0, min(1.0, float(emb[0] @ emb[k])))
+        return out

@@ -163,6 +163,22 @@
   }
   $("vg-close").onclick = () => { $("vg-player").pause(); $("vg-player").removeAttribute("src"); $("vg-modal").classList.add("hidden"); };
 
+  async function loadMediaKeys(d) {
+    try {
+      d = d || await api("/api/autopilot/media-keys");
+      const tick = (on) => on ? "✅ saved" : "❌ not set";
+      $("mk-state").textContent = `Pexels ${tick(d.pexels)} · Pixabay ${tick(d.pixabay)}`;
+    } catch (e) { $("mk-state").textContent = ""; }
+  }
+  $("mk-save").onclick = async () => {
+    try {
+      const d = await api("/api/autopilot/media-keys", { pexels: $("mk-pexels").value, pixabay: $("mk-pixabay").value });
+      $("mk-pexels").value = ""; $("mk-pixabay").value = ""; err("");
+      loadMediaKeys(d);
+    } catch (e) { err(e.message); }
+  };
+  loadMediaKeys();
+
   async function loadReview() {
     try {
       const d = await api("/api/autopilot/review");
