@@ -140,7 +140,7 @@ def check_pin(addr: str, pin: str) -> bool:
 
 
 LOGIN_PAGE = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Wayne Factory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>TOP G</title>
 <style>
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 30%,#2a2210,#05070b 60%);
 font-family:system-ui,sans-serif;color:#eee}
@@ -158,6 +158,6 @@ background:linear-gradient(135deg,#f3d488,#c4943c);box-shadow:0 8px 28px rgba(21
 .err{color:#f0a39a;min-height:20px;margin-top:12px;font-size:14px}
 </style></head><body><form method="post" action="/phone-login">
 <div class="sig"><svg viewBox="0 0 100 46"><path d="M50 8c-1.6 3.2-3.4 3.6-5.2 1.2L43 4.5 41.2 13C35 8.6 24.8 6.8 12 9.5c8.4 3.4 10.6 9 8.6 16 7-4.2 14.6-2.6 18.8 4 1.4-3.6 3.6-5.6 5.6-6.2 1.6 3.8 3.2 7.6 5 12.2 1.8-4.6 3.4-8.4 5-12.2 2 .6 4.2 2.6 5.6 6.2 4.2-6.6 11.8-8.2 18.8-4-2-7 .2-12.6 8.6-16C75.2 6.8 65 8.6 58.8 13L57 4.5l-1.8 4.7C53.4 11.6 51.6 11.2 50 8z"/></svg></div>
-<h1>The Wayne Factory</h1><p>Type the 6-digit PIN shown on your PC.</p>
+<h1>TOP G</h1><p>Type the 6-digit PIN shown on your PC.</p>
 <input name="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="6" autofocus>
 <button type="submit">Enter</button><div class="err">%ERROR%</div></form></body></html>"""

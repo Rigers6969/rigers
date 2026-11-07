@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>War Room &mdash; TOP G</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%87%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="videos.css">
+<style>
+  .hidden{display:none}
+  .wr-top{display:grid;grid-template-columns:1.1fr 1fr;gap:18px}
+  @media(max-width:900px){.wr-top{grid-template-columns:1fr}}
+  .wr-photo{position:relative;min-height:420px;border-radius:18px;overflow:hidden;background:#0b0905;border:1px solid rgba(232,193,92,.25)}
+  .wr-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s}
+  .wr-photo img.on{opacity:1}
+  .wr-photo .wr-shade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.85))}
+  .wr-photo .wr-line{position:absolute;left:24px;right:24px;bottom:22px;font-family:'Anton','Impact',sans-serif;font-size:clamp(28px,4vw,46px);line-height:1.05;color:#f5d27a;text-transform:uppercase;text-shadow:0 4px 30px #000}
+  .wr-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;color:var(--text-dim)}
+  .wr-streak{display:flex;gap:14px;align-items:baseline;margin-bottom:10px}
+  .wr-streak b{font-size:64px;color:#f5d27a;font-family:'Anton','Impact',sans-serif;line-height:1}
+  .wr-bar{height:10px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin:6px 0 16px}
+  .wr-bar i{display:block;height:100%;background:linear-gradient(90deg,#c4943c,#f5d27a);transition:width .4s}
+  .wr-task{display:flex;gap:14px;align-items:center;padding:13px 14px;border-radius:12px;cursor:pointer;border:1px solid rgba(255,255,255,.06);margin-bottom:8px;background:rgba(0,0,0,.25);user-select:none}
+  .wr-task:hover{border-color:rgba(232,193,92,.4)}
+  .wr-box{width:26px;height:26px;border-radius:8px;border:2px solid #c4943c;display:flex;align-items:center;justify-content:center;flex:none}
+  .wr-task.done{opacity:.55}.wr-task.done .wr-box{background:#e8c15c}.wr-task.done .wr-box::after{content:'✓';color:#111;font-weight:800}
+  .wr-task.done span{text-decoration:line-through}
+  .wr-edit textarea{width:100%;min-height:200px;background:rgba(0,0,0,.35);color:var(--text);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px;font:inherit}
+  .wr-rules{columns:2;gap:24px;line-height:1.9}@media(max-width:700px){.wr-rules{columns:1}}
+  .wr-rules li::marker{color:#e8c15c}
+</style>
+<link rel="stylesheet" href="gotham.css">
+</head>
+<body>
+<link rel="stylesheet" href="gotham.css">
+</head>
+<body>
+<link rel="stylesheet" href="gotham.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">
+        <svg viewBox="0 0 40 40" fill="none">
+          <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" stroke="#c9a24b" stroke-width="1.4"/>
+          <text x="20" y="27" text-anchor="middle" font-size="15" fill="#c9a24b">&#129415;</text>
+        </svg>
+        <span class="logo-text">TOP <b>G</b></span>
+      </div>
+      <div class="navlinks">
+        <a href="/">Dashboard</a>
+        <a href="/warroom.html">War Room</a>
+        <a href="/videos.html">Videos</a>
+        <a href="/studio.html">Studio</a>
+        <a href="/produce.html">Produce</a>
+        <a href="/autopilot.html">Autopilot</a>
+        <a href="/research.html">Research</a>
+        <a href="/viral.html">Viral</a>
+        <a href="/books.html">Books</a>
+        <a href="/news.html">News</a>
+        <a href="/english.html">English</a>
+        <a href="/thumbnails.html">Thumbnails</a>
+      </div>
+      <div class="nav-right"></div>
+    </nav>
+  </header>
+
+  <section class="videos-hero">
+    <div class="wrap">
+      <span class="section-label">War Room</span>
+      <h1>No excuses. Every day.</h1>
+      <p id="wr-quote">Nobody is coming to save you. Do the work.</p>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="wr-top">
+      <div class="wr-photo" id="wr-photo">
+        <div class="wr-empty" id="wr-empty">Put your photos in the <b>&nbsp;topg_photos&nbsp;</b> folder (inside Documents\rigers) and refresh. They stay on your PC.</div>
+        <div class="wr-shade"></div>
+        <div class="wr-line" id="wr-line">Discipline beats motivation.</div>
+      </div>
+      <div class="panel">
+        <div class="wr-streak"><b id="wr-streak">0</b><span>days in a row with everything done</span></div>
+        <div class="hint" id="wr-count"></div>
+        <div class="wr-bar"><i id="wr-bar" style="width:0"></i></div>
+        <div id="wr-tasks"></div>
+        <button class="btn-ghost" id="wr-edit-btn">Change my list</button>
+        <div class="wr-edit hidden" id="wr-edit"><p class="hint">One task per line.</p><textarea id="wr-text"></textarea>
+          <button class="btn-primary" id="wr-save">Save</button></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>The rules</h3>
+      <ul class="wr-rules">
+        <li>Nobody is coming to save you.</li>
+        <li>Discipline when you don't feel like it - that's the only kind that counts.</li>
+        <li>Your competition is working right now.</li>
+        <li>Comfort is the enemy.</li>
+        <li>Excuses don't pay. Results do.</li>
+        <li>Train the body. Train the mind. Train the skill.</li>
+        <li>School first - a Top G is never stupid.</li>
+        <li>Missed a day? Never miss two.</li>
+        <li>Talk less. Post more.</li>
+        <li>Sleep is a weapon, not a weakness.</li>
+      </ul>
+    </div>
+  </section>
+  <script src="warroom.js"></script>
+  <script src="gotham.js"></script>
+</body>
+</html>

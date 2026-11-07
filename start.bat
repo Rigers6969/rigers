@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-title Wayne Factory
+title TOP G
 where python >nul 2>&1 || (echo Python is not installed - get it from python.org and tick "Add python.exe to PATH". & pause & exit /b)
 if not exist ".installed-wf3" (
   echo Installing what Wayne Factory needs, this takes a minute...

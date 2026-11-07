@@ -11,7 +11,7 @@
   function render() {
     $("ph-switch").classList.toggle("on", st.enabled);
     $("ph-state").textContent = st.enabled ? "Phone mode is on" : "Phone mode is off";
-    $("ph-sub").textContent = st.enabled ? "Your phone can open Wayne Factory with the PIN." : "Only this PC can open Wayne Factory.";
+    $("ph-sub").textContent = st.enabled ? "Your phone can open TOP G with the PIN." : "Only this PC can open TOP G.";
     $("ph-restart").classList.toggle("hidden", st.enabled === st.running_open);
     $("ph-connect").style.opacity = st.enabled ? 1 : 0.35;
     $("ph-url").textContent = st.url;

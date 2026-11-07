@@ -36,3 +36,7 @@ stories/viral-*.json
 
 # offline voice model (downloaded on first use)
 models/
+
+# TOP G: your own photos + routine checklist (stay on your PC)
+topg_photos/
+topg.json

@@ -48,6 +48,7 @@ from research_api import bp as research_bp
 from books_api import bp as books_bp
 from autopilot_api import bp as autopilot_bp
 from viral_api import bp as viral_bp
+from topg_api import bp as topg_bp
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -66,6 +67,7 @@ app.register_blueprint(research_bp)
 app.register_blueprint(books_bp)
 app.register_blueprint(autopilot_bp)
 app.register_blueprint(viral_bp)
+app.register_blueprint(topg_bp)
 
 
 def load_config() -> dict:
