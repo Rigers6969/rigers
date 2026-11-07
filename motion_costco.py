@@ -17,25 +17,27 @@ BRAND = "PAPER TRAIL"
 ACCENT = GOLD
 W_ = 1080
 
+TITLE = "WHY COSTCO WON'T RAISE THIS PRICE"
+
 LINES = [
-    ("This hot dog has cost a dollar fifty since nineteen eighty-five.", "This hot dog has cost $1.50 since 1985."),
+    ("This hot dog has cost a dollar fifty for forty years.", "This hot dog has cost $1.50 for 40 YEARS."),
     ("With inflation, it should cost over four dollars.", "With inflation, it should cost over $4."),
-    ("So why hasn't Costco raised the price?", "So why hasn't COSTCO raised the price?"),
-    ("When the boss wanted to raise it, the founder reportedly told him: if you raise the hot dog, I will kill you.",
-     "When the boss wanted to raise it, the founder reportedly said: \"If you raise the HOT DOG, I will KILL you.\""),
+    ("So why won't Costco raise it?", "So why won't COSTCO raise it?"),
+    ("The founder reportedly told the boss: raise the hot dog, and I'll kill you.",
+     "The founder reportedly told the boss: \"Raise the HOT DOG, and I'll KILL you.\""),
     ("So Costco built its own hot dog factories.", "So Costco built its own hot dog FACTORIES."),
-    ("It even switched from Pepsi to Coke, to keep the price.", "It even switched from PEPSI to COKE, to keep the price."),
+    ("It even switched from Pepsi to Coke, to keep it cheap.", "It even switched from PEPSI to COKE, to keep it cheap."),
     ("Because the hot dog isn't the product. You are.", "Because the hot dog isn't the product. YOU ARE."),
-    ("About half of Costco's profit comes from membership fees.", "About HALF of Costco's profit comes from MEMBERSHIP FEES."),
-    ("The cheap hot dog keeps you coming back, and paying every year.", "The cheap hot dog keeps you coming back, and PAYING every year."),
-    ("And that's why, today, it still costs...", "And that's why, today, it still costs..."),
+    ("About half of Costco's profit is membership fees.", "About HALF of Costco's profit is MEMBERSHIP FEES."),
+    ("And the cheap hot dog keeps you renewing.", "And the cheap hot dog keeps you RENEWING."),
+    ("That's why it still costs...", "That's why it still costs..."),
 ]
 
 SFX = {
     0: [(0.6, "pop")],
     1: [(0.1, "pop")] + [(0.3 + 0.1 * i, "tick") for i in range(8)] + [(1.2, "stamp")],
     2: [(0.05, "boom")],
-    3: [(0.1, "pop"), (0.35, "pop"), (2.6, "stamp"), (3.0, "boom")],
+    3: [(0.1, "pop"), (0.35, "pop"), (1.4, "stamp"), (1.8, "boom")],
     4: [(0.1, "pop"), (0.6, "whoosh")],
     5: [(0.2, "whoosh"), (1.0, "whoosh"), (1.5, "pop")],
     6: [(0.4, "whoosh"), (1.4, "boom")],
@@ -108,18 +110,18 @@ def price_tag(c, x, y, s, label, rot=0.0, colr=GOLD, txt=INK):
 
 def opening(c, t):
     """Scene 1 and the last scene look the same, so the Short loops without a cut."""
-    hot_dog(c, 470, 820, 1.0, wiggle=1.5 * math.sin(t * 2.4))
-    soda(c, 860, 760, 0.95)
-    price_tag(c, 760, 470, 1.25, "$1.50", rot=8 * math.sin(t * 2.8))
+    hot_dog(c, 470, 930, 1.0, wiggle=1.5 * math.sin(t * 2.4))
+    soda(c, 860, 870, 0.95)
+    price_tag(c, 760, 600, 1.25, "$1.50", rot=8 * math.sin(t * 2.8))
 
 
 # ---------------------------------------------------------------- scenes
 
 def s1(c, t, d, k):
     opening(c, t)
-    pop(c, 470, 1080, prog(t, 0.6, 0.4), lambda: (rrect(c, 470 - 210, 1040, 420, 84, 18, paint(INK, 0.9)),
-                                                  rrect(c, 470 - 210, 1040, 420, 84, 18, paint(GOLD, 1, stroke=4)),
-                                                  text(c, "SINCE 1985", 470, 1082, 58, WHITE, face="archivo")))
+    pop(c, 470, 1180, prog(t, 0.6, 0.4), lambda: (rrect(c, 470 - 210, 1140, 420, 84, 18, paint(INK, 0.9)),
+                                                  rrect(c, 470 - 210, 1140, 420, 84, 18, paint(GOLD, 1, stroke=4)),
+                                                  text(c, "SINCE 1985", 470, 1182, 58, WHITE, face="archivo")))
 
 
 def s2(c, t, d, k):
@@ -175,11 +177,11 @@ def s4(c, t, d, k):
     pop(c, 830, 1250, prog(t, 0.3, 0.4), lambda: person(c, 830, 1250, 1.05, rgb=(30, 36, 52), rim=GOLD, hair=(210, 210, 215)))
     pop(c, 250, 1300, prog(t, 0.2, 0.3), lambda: text(c, "THE BOSS", 250, 1300, 40, GREY, face="archivo"))
     pop(c, 830, 1300, prog(t, 0.5, 0.3), lambda: text(c, "THE FOUNDER", 830, 1300, 40, GOLD, face="archivo"))
-    b = prog(t, 2.0, 0.35)
-    pop(c, 560, 560, b, lambda: bubble(c, 560, 560, 860, 330, [("IF YOU RAISE THE", INK), ("HOT DOG,", RED),
-                                                                ("I WILL KILL YOU.", INK)], 1))
+    b = prog(t, 1.4, 0.35)
+    pop(c, 560, 560, b, lambda: bubble(c, 560, 560, 860, 330, [("RAISE THE", INK), ("HOT DOG,", RED),
+                                                                ("AND I'LL KILL YOU.", INK)], 1))
     text(c, "- reportedly said by co-founder Jim Sinegal", 400, 790, 30, GREY, face="archivo",
-         a=out_cubic(prog(t, 2.6, 0.4)))
+         a=out_cubic(prog(t, 1.9, 0.4)))
 
 
 def s5(c, t, d, k):

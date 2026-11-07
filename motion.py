@@ -350,6 +350,12 @@ def render_frame(story, fno, starts, blocks, dur):
     rrect(c, 56, 118, bw + 48, 62, 14, paint(INK, 0.85))
     rrect(c, 56, 118, bw + 48, 62, 14, paint(story.ACCENT, 1, stroke=3))
     c.drawString(story.BRAND, 80, 160, bf, paint(story.ACCENT))
+    title = getattr(story, "TITLE", "")
+    if title:  # what the video is about, on screen from the very first frame (viewers decide in ~1 second)
+        tf = font("anton", 54)
+        tw = tf.measureText(title)
+        rrect(c, (W - tw) / 2 - 28, 206, tw + 56, 84, 18, paint(story.ACCENT))
+        text(c, title, W / 2, 248, 54, INK, shadow=False)
     draw_captions(c, t, blocks, story.ACCENT)
     c.drawRect(skia.Rect.MakeXYWH(0, H - 12, W * t / dur, 12), paint(story.ACCENT))
     img = surface.makeImageSnapshot()
@@ -441,7 +447,7 @@ def soundtrack(n, starts, sfx, seed=5):
 
 # ---------------------------------------------------------------- build
 
-def build(module: str, voice: str = "en-US-AndrewNeural", rate: str = "+10%", workers: int = 4) -> Path:
+def build(module: str, voice: str = "en-US-AndrewNeural", rate: str = "+14%", workers: int = 4) -> Path:
     sys.path.insert(0, str(APP))
     story = importlib.import_module(module)
     from photo_short import trim, voice_lines
@@ -450,13 +456,13 @@ def build(module: str, voice: str = "en-US-AndrewNeural", rate: str = "+10%", wo
     out_dir.mkdir(parents=True, exist_ok=True)
     print("1/4  Recording the voice...", flush=True)
     lines = [trim(v) for v in voice_lines([s for s, _ in story.LINES], voice, rate)]
-    gap, lead = 0.10, 0.25
+    gap, lead = 0.05, 0.05  # the first word starts right away - no silent start
     parts, starts, t = [np.zeros(int(SR * lead), np.float32)], [], lead
     for v in lines:
         starts.append((t, t + len(v) / SR))
         parts += [v, np.zeros(int(SR * gap), np.float32)]
         t += len(v) / SR + gap
-    parts.append(np.zeros(int(SR * 0.35), np.float32))
+    parts.append(np.zeros(int(SR * 0.15), np.float32))
     vo = np.concatenate(parts)
     vo = vo / (np.abs(vo).max() + 1e-9) * 0.9
     n = len(vo)
@@ -504,6 +510,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("module")
     ap.add_argument("--voice", default="en-US-AndrewNeural")
-    ap.add_argument("--rate", default="+10%")
+    ap.add_argument("--rate", default="+14%")
     a = ap.parse_args()
     build(a.module, a.voice, a.rate)

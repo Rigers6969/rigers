@@ -12,6 +12,8 @@ CHANNEL = "Paper Trail"
 BRAND = "PAPER TRAIL"
 ACCENT = GOLD
 
+TITLE = "THE WORST $800 DEAL IN HISTORY"
+
 LINES = [
     ("In nineteen seventy-six, this man owned ten percent of Apple.", "In 1976, this man owned 10% of APPLE."),
     ("Twelve days later, he sold it. For eight hundred dollars.", "12 DAYS later, he SOLD it. For $800."),
@@ -29,10 +31,10 @@ LINES = [
 ]
 
 SFX = {
-    0: [(0.05, "pop"), (0.55, "stamp"), (0.95, "pop")],
+    0: [(0.2, "pop")],
     1: [(0.05, "pop")] + [(0.08 * i + 0.1, "tick") for i in range(11)] + [(1.55, "ching"), (1.9, "stamp")],
     2: [(0.05, "pop"), (0.35, "pop"), (1.9, "whoosh"), (2.25, "pop"), (2.6, "pop")],
-    3: [(0.05, "whoosh"), (1.6, "whoosh"), (3.0, "pop")],
+    3: [(0.05, "whoosh"), (1.2, "whoosh"), (2.4, "pop")],
     4: [(0.1, "pop"), (2.0, "boom"), (2.4, "stamp")],
     5: [(0.2, "whoosh")],
     6: [(0.2, "pop"), (0.6, "pop"), (1.0, "pop"), (1.4, "pop"), (1.8, "pop"), (2.4, "riser"), (3.3, "ching")],
@@ -64,6 +66,7 @@ def pie(c, cx, cy, r, t, slice_t, k):
 
 
 def s1(c, t, d, k):
+    t = t + 0.75  # the hook frame must already show the picture: start this scene mid-animation
     pie(c, 690, 700, 250, t, 0.55, k)
     pop(c, 300, 1270, prog(t, 0.0, 0.45), lambda: person(c, 300, 1270, 1.15, rim=GOLD))
     tag = prog(t, 0.95, 0.35)
@@ -166,7 +169,7 @@ def s4(c, t, d, k):
     if ap > 0:
         c.drawCircle(60, lerp(-60, 120, out_cubic(ap)), 18, paint(RED))
     c.restore()
-    b = out_cubic(prog(t, 1.6, 0.5))
+    b = out_cubic(prog(t, 1.2, 0.5))
     text(c, "THE FIRST LOGO", lx, 1080, 52, GOLD, a=a * (1 - b), face="archivo")
     if b > 0:
         rx = lerp(W_ + 400, 790, b)
@@ -180,12 +183,12 @@ def s4(c, t, d, k):
             y = -130 + i * 34
             lines.moveTo(-150, y)
             lines.lineTo(150 - (i % 3) * 40, y)
-        draw_on(c, lines, prog(t, 1.8, 1.0), paint((110, 100, 90), 1, stroke=6))
+        draw_on(c, lines, prog(t, 1.4, 0.9), paint((110, 100, 90), 1, stroke=6))
         sig = skia.Path()
         sig.moveTo(-120, 200)
         sig.cubicTo(-80, 130, -40, 260, 0, 190)
         sig.cubicTo(40, 130, 60, 250, 130, 180)
-        draw_on(c, sig, prog(t, 2.9, 0.5), paint((30, 60, 160), 1, stroke=7))
+        draw_on(c, sig, prog(t, 2.35, 0.45), paint((30, 60, 160), 1, stroke=7))
         c.restore()
         text(c, "THE CONTRACT", rx, 1080, 52, GOLD, a=b, face="archivo")
 
