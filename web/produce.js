@@ -437,7 +437,8 @@ loadReady();
 // ---------------------------------------------------------------------
 async function loadLook() {
   try {
-    const [stylesResp, lookResp] = await Promise.all([fetch("/api/editor/caption-styles"), fetch("/api/editor/look")]);
+    const [stylesResp, lookResp, gradesResp] = await Promise.all([fetch("/api/editor/caption-styles"), fetch("/api/editor/look"),
+                                                                  fetch("/api/editor/grades")]);
     const styles = (await stylesResp.json()).styles || [];
     const look = await lookResp.json();
     const sel = document.getElementById("look-style");
@@ -447,6 +448,10 @@ async function loadLook() {
     document.getElementById("look-size").value = look.caption_size;
     document.getElementById("look-zooms").checked = !!look.zooms;
     document.getElementById("look-long").checked = !!look.long_captions;
+    const grades = (await gradesResp.json()).grades || [];
+    const g = document.getElementById("look-grade");
+    g.innerHTML = grades.map((x) => `<option value="${escapeHtml(x.id)}">Colour: ${escapeHtml(x.label)}</option>`).join("");
+    g.value = look.grade || "none";
   } catch (e) { /* the look row just keeps its defaults */ }
 }
 async function saveLook() {
@@ -457,10 +462,11 @@ async function saveLook() {
       caption_size: document.getElementById("look-size").value,
       zooms: document.getElementById("look-zooms").checked,
       long_captions: document.getElementById("look-long").checked,
+      grade: document.getElementById("look-grade").value,
     }),
   });
 }
-for (const id of ["look-style", "look-size", "look-zooms", "look-long"]) {
+for (const id of ["look-style", "look-size", "look-zooms", "look-long", "look-grade"]) {
   document.getElementById(id).addEventListener("change", saveLook);
 }
 loadLook();

@@ -40,3 +40,6 @@ models/
 # TOP G: your own photos + routine checklist (stay on your PC)
 topg_photos/
 topg.json
+
+# your LUT files (the README stays)
+luts/*.cube

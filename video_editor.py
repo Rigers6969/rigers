@@ -215,7 +215,36 @@ def resolve_look(caption_style: str, caption_size: str = "m", zooms: bool = Fals
 
 
 LOOK_FILE = APP_DIR / "video_look.json"
-LOOK_DEFAULTS = {"caption_style": "short-center", "caption_size": "m", "zooms": False, "long_captions": False}
+LOOK_DEFAULTS = {"caption_style": "short-center", "caption_size": "m", "zooms": False, "long_captions": False,
+                 "grade": "doc_warm"}
+
+# Colour grades: one ffmpeg filter each. "lut:<file>" uses a .cube LUT from the luts/ folder instead.
+LUT_DIR = APP_DIR / "luts"
+GRADES = {
+    "none": ("No grade", ""),
+    "doc_warm": ("Documentary warm", "eq=contrast=1.07:saturation=1.05,colorbalance=rs=0.03:bs=-0.03:rh=0.03:bh=-0.03,vignette=PI/5"),
+    "money_gold": ("Money gold", "eq=contrast=1.12:saturation=0.92,colorbalance=rm=0.05:gm=0.02:bm=-0.07:rh=0.05:bh=-0.05,vignette=PI/4"),
+    "teal_orange": ("Teal & orange (movie)", "colorbalance=rs=-0.06:bs=0.07:rh=0.07:bh=-0.07,eq=contrast=1.1:saturation=1.12"),
+    "cold_thriller": ("Cold thriller", "eq=contrast=1.15:saturation=0.8:brightness=-0.02,colorbalance=rs=-0.03:bs=0.07:bm=0.04,vignette=PI/4"),
+    "vintage_film": ("Vintage film", "curves=preset=vintage,eq=saturation=0.85,noise=alls=7:allf=t,vignette=PI/4"),
+    "clean_bright": ("Clean & bright", "eq=contrast=1.05:brightness=0.02:saturation=1.1,unsharp=5:5:0.4"),
+    "black_white": ("Black & white drama", "hue=s=0,eq=contrast=1.25,vignette=PI/4"),
+}
+
+
+def grade_options() -> list[dict]:
+    """The colour grades to pick from, plus any .cube LUT files in the luts/ folder."""
+    opts = [{"id": k, "label": v[0]} for k, v in GRADES.items()]
+    if LUT_DIR.exists():
+        opts += [{"id": "lut:" + p.name, "label": f"LUT: {p.stem}"} for p in sorted(LUT_DIR.glob("*.cube"))]
+    return opts
+
+
+def grade_filter(grade: str) -> str:
+    if (grade or "").startswith("lut:"):
+        lut = LUT_DIR / Path(grade[4:]).name
+        return f"lut3d=file='{_ffmpeg_subtitle_path_arg(lut)}'" if lut.exists() else ""
+    return GRADES.get(grade or "none", GRADES["none"])[1]
 
 
 def load_look() -> dict:
@@ -236,6 +265,8 @@ def save_look(changes: dict) -> dict:
     for k in ("zooms", "long_captions"):
         if k in changes:
             look[k] = bool(changes[k])
+    if isinstance(changes.get("grade"), str) and (changes["grade"] in GRADES or changes["grade"].startswith("lut:")):
+        look["grade"] = changes["grade"][:120]
     LOOK_FILE.write_text(json.dumps(look, indent=1), encoding="utf-8")
     return look
 
@@ -261,6 +292,7 @@ def apply_edits(
     caption_size: str = "m",
     zooms: bool = False,
     graphics: bool = True,
+    grade: str = "none",
 ) -> Path:
     """Always starts fresh from video_dir/final.mp4 and writes
     video_dir/final_edited.mp4 - never edits final.mp4 itself, so it
@@ -281,7 +313,8 @@ def apply_edits(
     if caption_style in ("none", ""):
         add_captions = False
     zooms = bool(zooms and cf)
-    if not add_captions and not music_path and not zooms and not graphics:
+    grade_vf = grade_filter(grade)
+    if not add_captions and not music_path and not zooms and not graphics and not grade_vf:
         shutil.copyfile(base_path, out_path)
         report("Done.")
         return out_path
@@ -291,6 +324,13 @@ def apply_edits(
     current_input = base_path
 
     try:
+        if grade_vf:  # colour grade first, so captions and graphics keep their own colours
+            report("Colour grading...")
+            graded_path = work_dir / "graded.mp4"
+            _run_ffmpeg(["ffmpeg", "-y", "-i", str(current_input), "-vf", grade_vf + ",format=yuv420p",
+                         "-c:v", "libx264", "-preset", "faster", "-crf", "20", "-c:a", "copy", str(graded_path)],
+                        timeout=600, error_prefix="ffmpeg failed colour grading")
+            current_input = graded_path
         words = []
         if add_captions or zooms or graphics:
             voiceover_path = video_dir / "voiceover.mp3"

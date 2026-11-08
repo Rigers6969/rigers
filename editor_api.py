@@ -45,6 +45,13 @@ def caption_styles():
     return jsonify({"styles": caption_options(), "default": DEFAULT_CAPTION_STYLE})
 
 
+@bp.route("/api/editor/grades")
+def color_grades():
+    from video_editor import grade_options
+
+    return jsonify({"grades": grade_options()})
+
+
 @bp.route("/api/editor/look", methods=["GET", "POST"])
 def video_look():
     """How produced videos look: caption style (incl. Clip Factory's styles and presets), size, zooms, and

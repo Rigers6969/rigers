@@ -337,6 +337,7 @@ def produce_video(
                     caption_style=look["caption_style"],
                     caption_size=look["caption_size"],
                     zooms=look["zooms"],
+                    grade=look.get("grade", "none"),
                     music_path=music_path,
                     progress=lambda m: report(f"Auto-edit: {m}"),
                 )
