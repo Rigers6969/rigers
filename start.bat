@@ -2,10 +2,10 @@
 cd /d "%~dp0"
 title TOP G
 where python >nul 2>&1 || (echo Python is not installed - get it from python.org and tick "Add python.exe to PATH". & pause & exit /b)
-if not exist ".installed-wf3" (
+if not exist ".installed-wf4" (
   echo Installing what Wayne Factory needs, this takes a minute...
   python -m pip install -r requirements.txt || (echo Install failed - check your internet and run start.bat again. & pause & exit /b)
-  echo ok> .installed-wf3
+  echo ok> .installed-wf4
 )
 rem Keep Microsoft's voice tool current - old versions get refused (error 403).
 python -m pip install -q -U edge-tts >nul 2>&1

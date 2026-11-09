@@ -12,3 +12,4 @@ edge-tts
 python-dotenv
 feedparser
 skia-python
+opencv-python-headless

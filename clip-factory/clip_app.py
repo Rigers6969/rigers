@@ -237,6 +237,10 @@ def run_pipeline(run: dict) -> None:
         elif brain and brain.problems:
             run["warning"] = " ".join(filter(None, [run["warning"], "; ".join(brain.problems)]))
         run["engines"]["moments"] = ", ".join(f"{name} ({n})" for name, n in stats["by"].items()) or "built-in scorer"
+        try:  # loud, lively, fast-talking parts are where the best moments usually are
+            moments.add_energy(candidates, moments.audio_energy(source), words)
+        except Exception:
+            pass
         run["stats"] = dict(stats, candidates=len(candidates))
         # YouTube rules: check every moment; clips that would break the rules are never picked
         blocked = 0
@@ -254,7 +258,7 @@ def run_pipeline(run: dict) -> None:
         done_spans = [(c["start"], c["end"]) for c in run["clips"]]  # moments clipped before from this video
         if done_spans:
             allowed = [c for c in allowed if not any(c["start"] < b and c["end"] > a for a, b in done_spans)]
-        picks = moments.pick_best(allowed, s["count"])
+        picks = [moments.tighten_start(c, sentences, s["min_len"]) for c in moments.pick_best(allowed, s["count"])]
         base = max((c["n"] for c in run["clips"]), default=0)  # new clips are numbered after the old ones
         for c in picks:  # campaign: every title names who it must, and never who it mustn't
             c["title"] = campaign.fix_title(c["title"], s.get("c_must") or [], s.get("c_ban") or [])
@@ -921,8 +925,8 @@ class _GameplayPicker:
 
 
 def parse_settings(data: dict) -> dict:
-    min_len = _int(data, "min_len", 20, 5, 170)
-    max_len = _int(data, "max_len", 60, 10, 180)
+    min_len = _int(data, "min_len", 15, 5, 170)   # viral clips are usually 15-35 s
+    max_len = _int(data, "max_len", 35, 10, 180)
     if max_len < min_len + 5:
         raise StartError("The longest clip length must be at least 5 seconds more than the shortest.")
     host = str(data.get("host") or DEFAULT_HOST).strip()
@@ -2293,8 +2297,8 @@ PAGE = r"""<!DOCTYPE html>
     </div>
     <div class="grid">
       <div><label>How many clips (1-100)</label><input type="number" id="count" min="1" max="100" value="10"></div>
-      <div><label>Shortest clip (seconds)</label><input type="number" id="minLen" min="5" max="170" value="20"></div>
-      <div><label>Longest clip (seconds)</label><input type="number" id="maxLen" min="10" max="180" value="60"></div>
+      <div><label>Shortest clip (seconds)</label><input type="number" id="minLen" min="5" max="170" value="15"></div>
+      <div><label>Longest clip (seconds)</label><input type="number" id="maxLen" min="10" max="180" value="35"></div>
       <div><label>Layout</label>
         <select id="layout">
           <option value="crop">Fill screen (one person talking)</option>
@@ -2483,6 +2487,10 @@ function loadSettings() {
     if ($(id).tagName === "SELECT" && $(id).selectedIndex < 0) $(id).selectedIndex = 0;  // a choice that no longer exists
   }
   if (store.get("cf_capv") !== "2") { $("captions").value = "hormozi"; store.set("cf_captions", "hormozi"); store.set("cf_capv", "2"); }  // the new captions, once
+  if (store.get("cf_lenv") !== "2") {  // the new 15-35 s default, once (only if the old 20-60 s default was still set)
+    if (+$("minLen").value === 20 && +$("maxLen").value === 60) { $("minLen").value = 15; $("maxLen").value = 35; store.set("cf_minLen", "15"); store.set("cf_maxLen", "35"); }
+    store.set("cf_lenv", "2");
+  }
 }
 function saveSettings() {
   for (const id of SETTINGS) store.set("cf_" + id, $(id).type === "checkbox" ? ($(id).checked ? "1" : "0") : $(id).value);

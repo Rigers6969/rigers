@@ -340,3 +340,56 @@ def pick_best(candidates: list[dict], count: int, gap: float = 0.5) -> list[dict
             if len(picked) >= count:
                 break
     return picked
+
+
+# ---------- energy: the loud, lively parts (laughing, shouting, fast talk) ----------
+
+def audio_energy(source, step: float = 0.5) -> list[float]:
+    """Loudness every `step` seconds for the whole video (one quick ffmpeg pass)."""
+    import subprocess
+
+    import numpy as np
+
+    sr = 8000
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(source), "-vn", "-ac", "1", "-ar", str(sr), "-f", "s16le", "-"],
+                         capture_output=True, timeout=1800).stdout
+    a = np.frombuffer(raw, np.int16).astype(np.float32) / 32768
+    n = int(sr * step)
+    if len(a) < n:
+        return []
+    a = a[: len(a) // n * n].reshape(-1, n)
+    return [float(v) for v in np.sqrt((a ** 2).mean(axis=1))]
+
+
+def add_energy(candidates: list[dict], energy: list[float], words: list[dict], step: float = 0.5) -> None:
+    """Raises the score of clips that are louder/livelier and faster-talking than the video's normal (max +2)."""
+    if not energy:
+        return
+    import numpy as np
+
+    e = np.array(energy)
+    voiced = e[e > 0.1 * e.max()]  # leave out silence, so "normal" means normal talking
+    normal = float(np.median(voiced)) if len(voiced) else 1e-6
+    for c in candidates:
+        part = e[int(c["start"] / step): max(int(c["start"] / step) + 1, int(c["end"] / step))]
+        if not len(part):
+            continue
+        peak = float(np.percentile(part, 90)) / normal          # 1.0 = as loud as usual
+        n_words = sum(1 for w in words if c["start"] <= w["start"] < c["end"])
+        pace = n_words / max(1.0, c["end"] - c["start"])         # words per second
+        boost = min(1.4, max(0.0, (peak - 1.1) * 1.6)) + min(0.6, max(0.0, (pace - 2.6) * 0.6))
+        c["energy"] = round(peak, 2)
+        c["score"] = round(c["score"] + boost, 2)
+
+
+def tighten_start(clip: dict, sentences: list[dict], min_len: float) -> dict:
+    """Start the clip at its strongest line (if that line is in its first ~40% and the clip stays long enough)."""
+    inside = [s for s in sentences if clip["start"] - 0.05 <= s["start"] < clip["start"] + (clip["end"] - clip["start"]) * 0.4]
+    if len(inside) < 2:
+        return clip
+    scores = [_hook_score(s["text"], i) for i, s in enumerate(inside)]
+    best = max(range(len(inside)), key=lambda i: scores[i])
+    if best and scores[best] >= scores[0] + 2.0 and clip["end"] - inside[best]["start"] >= min_len:
+        clip = dict(clip, start=inside[best]["start"], text=" ".join(s["text"] for s in sentences
+                                                                    if inside[best]["start"] <= s["start"] < clip["end"]))
+    return clip

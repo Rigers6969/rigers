@@ -177,11 +177,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_input: int = 1,
                   pops: list | None = None, fonts: str = "", W: int = OUT_W, H: int = OUT_H, video_h: int = 0,
-                  zooms: list | None = None, intro: float = 0.0) -> str:
+                  zooms: list | None = None, intro: float = 0.0, track: str | None = None) -> str:
     """wm: {"size": share of the width, "opacity": 0-1, "y": centre as share of the height} - input wm_input is the logo.
     pops: [(input, start, end, x, y)] emoji pictures. The gameplay layout's second video is input 1."""
     subs = (f",subtitles={ass_name}" + (f":fontsdir={fonts}" if fonts else "")) if ass_name else ""
-    base = _base_filter(layout, W, H, video_h)
+    base = _base_filter(layout, W, H, video_h, track)
     if intro:  # the clip's first picture stands still while the narrator speaks, then it plays
         n = base.count("[0:v]")
         labels = [f"[iv{i}]" for i in range(n)]
@@ -211,7 +211,7 @@ def _video_filter(layout: str, ass_name: str | None, wm: dict | None = None, wm_
     return chain + f";[{cur}]format=yuv420p{subs}[v]"
 
 
-def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H, video_h: int = 0) -> str:
+def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H, video_h: int = 0, track: str | None = None) -> str:
     subs = ""
     if layout == "post":
         # black page, the video across the top (video_h tall at 1080 wide), the text goes underneath
@@ -244,6 +244,11 @@ def _base_filter(layout: str, W: int = OUT_W, H: int = OUT_H, video_h: int = 0) 
             f"scale={W}:{H},setsar=1[bg];"
             f"[0:v]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p{subs}[v]"
+        )
+    if track:  # follow the speaker (facecrop.py): a 9:16 window that moves with them
+        return (
+            f"[0:v]crop=w='ih*9/16':h=ih:x='{track}':y=0,scale={W}:{H}:flags=lanczos,"
+            f"setsar=1,format=yuv420p{subs}[v]"
         )
     return (
         f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,"
@@ -410,13 +415,21 @@ def render_clip(
         n_in += 1
     audio = _audio_filter(mute if has_audio else [], music_input, music.get("volume", 0.18) if music else 0.18, duration,
                           lead, nar_input, has_audio)
+    track = None
+    if layout == "crop":  # follow whoever is talking instead of always cutting the middle
+        try:
+            import facecrop
+
+            track = facecrop.track_expr(source, start, clip_len, offset=lead)
+        except Exception:
+            track = None
     zoom_list = styles.zoom_moments(clip_words, duration) if zooms and layout != "post" else []
     if intro and layout != "post":  # the frozen picture zooms in while the narrator talks
         zoom_list = [(0.0, round(lead - 0.05, 2))] + [z for z in zoom_list if z[0] >= lead]
     cmd += [
         "-filter_complex", _video_filter(layout, ass_name, watermark, wm_input, pops, styles.fonts_dir_for(out_dir) if ass_name else "",
                                          *OUT_SIZES.get(size, OUT_SIZES["1080"]), video_h,
-                                         zoom_list or None, lead)
+                                         zoom_list or None, lead, track)
         + audio, "-map", "[v]", "-t", f"{duration:.3f}",
     ]
     if has_audio or audio:

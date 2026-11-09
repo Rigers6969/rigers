@@ -7,3 +7,5 @@ google-auth-oauthlib>=1.2
 google-auth-httplib2>=0.2
 pillow>=10.1
 edge-tts>=7.0
+numpy
+opencv-python-headless

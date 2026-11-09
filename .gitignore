@@ -29,6 +29,7 @@ tokens/
 phone.json
 .installed-wf2
 .installed-wf3
+.installed-wf4
 
 # Viral Analyzer: your analyses and the stories it writes
 viral/
@@ -43,3 +44,6 @@ topg.json
 
 # your LUT files (the README stays)
 luts/*.cube
+
+# face detector model (downloaded on first use)
+clip-factory/models/
