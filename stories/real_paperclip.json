@@ -1,0 +1,89 @@
+{
+  "slug": "paper-trail-red-paperclip-real",
+  "channel": "Paper Trail",
+  "title": "1 PAPERCLIP → 1 HOUSE",
+  "scenes": [
+    {
+      "say": "This guy traded one red paperclip for a house.",
+      "cap": "This guy traded ONE RED PAPERCLIP for a HOUSE.",
+      "clips": [
+        "red paperclip",
+        "house keys"
+      ]
+    },
+    {
+      "say": "Kyle MacDonald wanted to see how far one paperclip could go.",
+      "cap": "KYLE MacDONALD wanted to see how far one paperclip could go.",
+      "clips": [
+        "young man laptop",
+        "paperclip desk"
+      ]
+    },
+    {
+      "say": "He traded it for a pen shaped like a fish. Then a doorknob.",
+      "cap": "He traded it for a FISH PEN. Then a DOORKNOB.",
+      "clips": [
+        "pen writing",
+        "door knob"
+      ]
+    },
+    {
+      "say": "A camping stove. A generator. A party kit.",
+      "cap": "A camping STOVE. A GENERATOR. A PARTY KIT.",
+      "clips": [
+        "camping stove",
+        "generator",
+        "party friends"
+      ]
+    },
+    {
+      "say": "A snowmobile. A van. A recording contract.",
+      "cap": "A SNOWMOBILE. A VAN. A RECORDING CONTRACT.",
+      "clips": [
+        "snowmobile",
+        "van road trip",
+        "recording studio"
+      ]
+    },
+    {
+      "say": "A year of free rent. An afternoon with Alice Cooper. A movie role.",
+      "cap": "A YEAR of free rent. An afternoon with ALICE COOPER. A MOVIE ROLE.",
+      "clips": [
+        "apartment keys",
+        "rock concert",
+        "film set camera"
+      ]
+    },
+    {
+      "say": "And finally, a real house, in a small town in Canada.",
+      "cap": "And finally, a REAL HOUSE, in a small town in CANADA.",
+      "clips": [
+        "small house prairie",
+        "canada small town"
+      ]
+    },
+    {
+      "say": "Fourteen trades. And it all started with...",
+      "cap": "14 TRADES. And it all started with...",
+      "clips": [
+        "handshake deal",
+        "red paperclip"
+      ]
+    }
+  ],
+  "upload": {
+    "title": "He Traded a Red Paperclip for a House 📎 #shorts",
+    "description": "In 2005-2006, Kyle MacDonald started with one red paperclip and kept trading up - a fish-shaped pen, a doorknob, a camping stove, a generator, a snowmobile, a recording contract, a year of free rent, an afternoon with Alice Cooper, a movie role - until, 14 trades later, he got a house in Kipling, Saskatchewan.\n\n#redpaperclip #tradingup #money #truestory #papertrail",
+    "tags": [
+      "red paperclip",
+      "kyle macdonald",
+      "trading up",
+      "one red paperclip",
+      "house",
+      "money",
+      "true story",
+      "paper trail"
+    ],
+    "pinned": "What would YOU trade the paperclip for first? 👇"
+  }
+}

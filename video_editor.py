@@ -293,6 +293,7 @@ def apply_edits(
     zooms: bool = False,
     graphics: bool = True,
     grade: str = "none",
+    known_words: Optional[list] = None,
 ) -> Path:
     """Always starts fresh from video_dir/final.mp4 and writes
     video_dir/final_edited.mp4 - never edits final.mp4 itself, so it
@@ -334,9 +335,12 @@ def apply_edits(
         words = []
         if add_captions or zooms or graphics:
             voiceover_path = video_dir / "voiceover.mp3"
-            if not voiceover_path.exists():
+            if known_words is not None:  # the caller already knows when each word is said - no Whisper needed
+                words = known_words
+            elif not voiceover_path.exists():
                 raise AssemblyError("No voiceover.mp3 to transcribe for captions.")
-            words = transcribe_words(voiceover_path, whisper_model, progress)
+            else:
+                words = transcribe_words(voiceover_path, whisper_model, progress)
             if not words:
                 report("No speech detected for captions - skipping captions.")
             elif add_captions or zooms:
